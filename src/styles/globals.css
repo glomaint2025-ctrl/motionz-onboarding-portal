@@ -1,0 +1,112 @@
+@import "./tokens.css";
+@import "./components.css";
+@import "./layout.css";
+
+/* CSS Reset & Base Defaults */
+*, *::before, *::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+html {
+  font-size: 16px;
+  background-color: var(--color-bg-base);
+  color: var(--color-text-primary);
+  font-family: var(--font-family-base);
+  line-height: var(--line-height-normal);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+body {
+  min-height: 100vh;
+  background-color: var(--color-bg-base);
+  color: var(--color-text-primary);
+  overflow-x: hidden;
+}
+
+/* Typography Defaults */
+h1, h2, h3, h4, h5, h6 {
+  color: var(--color-text-primary);
+  font-weight: var(--font-weight-semibold);
+  line-height: var(--line-height-tight);
+}
+
+h1 { font-size: var(--font-size-2xl); }
+h2 { font-size: var(--font-size-xl); }
+h3 { font-size: var(--font-size-lg); }
+h4 { font-size: var(--font-size-base); }
+
+p {
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-sm);
+  line-height: var(--line-height-relaxed);
+}
+
+a {
+  color: var(--color-primary);
+  text-decoration: none;
+  transition: color var(--transition-fast);
+}
+
+a:hover {
+  color: var(--color-primary-hover);
+  text-decoration: underline;
+}
+
+/* Accessible Focus Styles */
+:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 2px var(--color-primary);
+}
+
+/* Form Primitives */
+input, select, textarea, button {
+  font-family: inherit;
+  font-size: var(--font-size-sm);
+}
+
+/* Scrollbar Styling - Cross Browser */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--color-border-subtle) var(--color-bg-base);
+}
+
+::-webkit-scrollbar {
+  width: 5px;
+  height: 5px;
+}
+
+::-webkit-scrollbar-track {
+  background: var(--color-bg-base);
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--color-border-subtle);
+  border-radius: 3px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--color-border-strong);
+}
+
+/* App Shell Utilities */
+.portal-container {
+  max-width: var(--max-content-width);
+  margin: 0 auto;
+  padding: var(--space-4);
+  width: 100%;
+}
+
+@media (min-width: 768px) {
+  .portal-container {
+    padding: var(--space-6);
+  }
+}
+
+@media (min-width: 1024px) {
+  .portal-container {
+    padding: var(--space-8);
+  }
+}

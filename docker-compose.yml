@@ -1,0 +1,22 @@
+version: '3.8'
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: motionz-portal-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgrespassword
+      POSTGRES_DB: motionz_portal
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      - ./supabase/migrations/20260922000001_core_schema.sql:/docker-entrypoint-initdb.d/01_core_schema.sql:ro
+      - ./supabase/migrations/20260922000002_rls_policies.sql:/docker-entrypoint-initdb.d/02_rls_policies.sql:ro
+      - ./supabase/migrations/20260922000003_seed_demo_data.sql:/docker-entrypoint-initdb.d/03_seed_demo_data.sql:ro
+
+volumes:
+  pgdata:
+    driver: local

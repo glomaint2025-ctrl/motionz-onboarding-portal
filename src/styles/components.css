@@ -1,0 +1,340 @@
+/* Base UI Component Styles */
+
+/* 1. Button */
+.ui-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: var(--font-weight-medium);
+  font-size: var(--font-size-sm);
+  padding: var(--space-2) var(--space-4);
+  border-radius: var(--radius-md);
+  border: 1px solid transparent;
+  cursor: pointer;
+  transition: background-color var(--transition-fast), border-color var(--transition-fast), color var(--transition-fast);
+  text-decoration: none;
+  line-height: 1.25;
+  white-space: nowrap;
+}
+
+.ui-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.ui-btn-primary {
+  background-color: var(--color-primary);
+  color: var(--color-text-inverse);
+}
+
+.ui-btn-primary:hover:not(:disabled) {
+  background-color: var(--color-primary-hover);
+  text-decoration: none;
+}
+
+.ui-btn-secondary {
+  background-color: var(--color-bg-card);
+  color: var(--color-text-primary);
+  border-color: var(--color-border-subtle);
+}
+
+.ui-btn-secondary:hover:not(:disabled) {
+  background-color: var(--color-bg-card-hover);
+  border-color: var(--color-border-strong);
+  text-decoration: none;
+}
+
+.ui-btn-outline {
+  background-color: transparent;
+  color: var(--color-primary);
+  border-color: var(--color-primary-border);
+}
+
+.ui-btn-outline:hover:not(:disabled) {
+  background-color: var(--color-primary-muted);
+  text-decoration: none;
+}
+
+.ui-btn-danger {
+  background-color: var(--color-status-danger-bg);
+  color: var(--color-status-danger-text);
+  border-color: var(--color-status-danger-border);
+}
+
+.ui-btn-danger:hover:not(:disabled) {
+  background-color: rgba(239, 68, 68, 0.2);
+  text-decoration: none;
+}
+
+.ui-btn-sm {
+  padding: var(--space-1) var(--space-2);
+  font-size: var(--font-size-xs);
+}
+
+.ui-btn-lg {
+  padding: var(--space-3) var(--space-6);
+  font-size: var(--font-size-base);
+}
+
+.ui-btn-full {
+  width: 100%;
+}
+
+/* 2. Card */
+.ui-card {
+  background-color: var(--color-bg-card);
+  border: 1px solid var(--color-border-subtle);
+  border-radius: var(--radius-lg);
+  padding: var(--space-5);
+  box-shadow: var(--shadow-sm);
+  transition: border-color var(--transition-fast), box-shadow var(--transition-fast);
+}
+
+.ui-card-interactive:hover {
+  border-color: var(--color-border-strong);
+  box-shadow: var(--shadow-md);
+}
+
+.ui-card-header {
+  margin-bottom: var(--space-4);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.ui-card-title {
+  font-size: var(--font-size-base);
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-text-primary);
+}
+
+.ui-card-subtitle {
+  font-size: var(--font-size-xs);
+  color: var(--color-text-muted);
+  margin-top: var(--space-1);
+}
+
+/* 3. Input & Select */
+.ui-form-group {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  margin-bottom: var(--space-4);
+}
+
+.ui-label {
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-medium);
+  color: var(--color-text-secondary);
+}
+
+.ui-input, .ui-select, .ui-textarea {
+  background-color: var(--color-bg-input);
+  border: 1px solid var(--color-border-subtle);
+  border-radius: var(--radius-md);
+  color: var(--color-text-primary);
+  padding: var(--space-2) var(--space-3);
+  font-size: var(--font-size-sm);
+  transition: border-color var(--transition-fast), box-shadow var(--transition-fast);
+  width: 100%;
+}
+
+.ui-select {
+  appearance: none;
+  -webkit-appearance: none;
+  -moz-appearance: none;
+  padding-right: var(--space-8);
+  cursor: pointer;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%2394a3b8' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'%3E%3C/polyline%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right var(--space-3) center;
+}
+
+.ui-select option {
+  background-color: var(--color-bg-card);
+  color: var(--color-text-primary);
+  padding: var(--space-2);
+}
+
+.ui-input:focus, .ui-select:focus, .ui-textarea:focus {
+  outline: none;
+  border-color: var(--color-primary);
+  box-shadow: 0 0 0 1px var(--color-primary);
+}
+
+.ui-input:disabled, .ui-select:disabled, .ui-textarea:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.ui-input-error {
+  border-color: var(--color-status-danger-text);
+}
+
+.ui-error-text {
+  font-size: var(--font-size-xs);
+  color: var(--color-status-danger-text);
+}
+
+.ui-helper-text {
+  font-size: var(--font-size-xs);
+  color: var(--color-text-muted);
+}
+
+/* 4. Status Badge */
+.ui-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: var(--space-1) var(--space-2);
+  border-radius: var(--radius-sm);
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-medium);
+  border: 1px solid transparent;
+  line-height: 1;
+}
+
+.ui-badge-done {
+  background-color: var(--color-status-done-bg);
+  color: var(--color-status-done-text);
+  border-color: var(--color-status-done-border);
+}
+
+.ui-badge-progress {
+  background-color: var(--color-status-progress-bg);
+  color: var(--color-status-progress-text);
+  border-color: var(--color-status-progress-border);
+}
+
+.ui-badge-pending {
+  background-color: var(--color-status-pending-bg);
+  color: var(--color-status-pending-text);
+  border-color: var(--color-status-pending-border);
+}
+
+.ui-badge-warning {
+  background-color: var(--color-status-warning-bg);
+  color: var(--color-status-warning-text);
+  border-color: var(--color-status-warning-border);
+}
+
+.ui-badge-danger {
+  background-color: var(--color-status-danger-bg);
+  color: var(--color-status-danger-text);
+  border-color: var(--color-status-danger-border);
+}
+
+/* 5. Modal */
+.ui-modal-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-color: var(--color-bg-overlay);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+  padding: var(--space-4);
+}
+
+.ui-modal-dialog {
+  background-color: var(--color-bg-card);
+  border: 1px solid var(--color-border-strong);
+  border-radius: var(--radius-lg);
+  width: 100%;
+  max-width: 540px;
+  box-shadow: var(--shadow-lg);
+  overflow: hidden;
+}
+
+.ui-modal-header {
+  padding: var(--space-4) var(--space-5);
+  border-bottom: 1px solid var(--color-border-subtle);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.ui-modal-title {
+  font-size: var(--font-size-base);
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-text-primary);
+}
+
+.ui-modal-body {
+  padding: var(--space-5);
+  max-height: calc(100vh - 200px);
+  overflow-y: auto;
+}
+
+.ui-modal-footer {
+  padding: var(--space-4) var(--space-5);
+  border-top: 1px solid var(--color-border-subtle);
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--space-3);
+  background-color: var(--color-bg-surface);
+}
+
+/* 6. Skeleton */
+.ui-skeleton {
+  background: linear-gradient(
+    90deg,
+    var(--color-bg-card) 25%,
+    var(--color-bg-card-hover) 50%,
+    var(--color-bg-card) 75%
+  );
+  background-size: 200% 100%;
+  animation: ui-skeleton-shimmer 1.5s infinite;
+  border-radius: var(--radius-sm);
+}
+
+@keyframes ui-skeleton-shimmer {
+  0% {
+    background-position: 200% 0;
+  }
+  100% {
+    background-position: -200% 0;
+  }
+}
+
+/* 7. Table */
+.ui-table-container {
+  width: 100%;
+  overflow-x: auto;
+  border: 1px solid var(--color-border-subtle);
+  border-radius: var(--radius-md);
+  background-color: var(--color-bg-surface);
+}
+
+.ui-table {
+  width: 100%;
+  border-collapse: collapse;
+  text-align: left;
+  font-size: var(--font-size-sm);
+}
+
+.ui-table th {
+  background-color: var(--color-bg-card);
+  color: var(--color-text-secondary);
+  font-weight: var(--font-weight-medium);
+  font-size: var(--font-size-xs);
+  padding: var(--space-3) var(--space-4);
+  border-bottom: 1px solid var(--color-border-subtle);
+  white-space: nowrap;
+}
+
+.ui-table td {
+  padding: var(--space-3) var(--space-4);
+  border-bottom: 1px solid var(--color-border-subtle);
+  color: var(--color-text-primary);
+}
+
+.ui-table tr:last-child td {
+  border-bottom: none;
+}
+
+.ui-table tr:hover td {
+  background-color: var(--color-bg-card);
+}
