@@ -6,6 +6,7 @@ import Link from 'next/link';
 import { Card, CardHeader, Input, Select, Button, StatusBadge, Modal, Skeleton } from '@/components/ui';
 import { PORTAL_MODULES } from '@/lib/portal-modules';
 import { OnboardingAnswers, OnboardingSubmissionView } from '@/components/onboarding/OnboardingAnswers';
+import { ClientRecords } from '@/components/admin/ClientRecords';
 
 
 export default function ClientDetailPage() {
@@ -29,7 +30,8 @@ export default function ClientDetailPage() {
   const [sheetBusy, setSheetBusy] = useState(false);
   const [sheetError, setSheetError] = useState('');
   const [submissions, setSubmissions] = useState<OnboardingSubmissionView[]>([]);
-  const [csmUserId, setCsmUserId] = useState('e0000000-0000-0000-0000-000000000002');
+  const [csmUserId, setCsmUserId] = useState('');
+  const [availableCsms, setAvailableCsms] = useState<{ id: string; name?: string; email: string }[]>([]);
 
   const [saveSuccess, setSaveSuccess] = useState(false);
   const [isArchiveModalOpen, setIsArchiveModalOpen] = useState(false);
@@ -190,7 +192,8 @@ export default function ClientDetailPage() {
         if (data.tenant.primary_email && !generateEmail) {
           setGenerateEmail(data.tenant.primary_email);
         }
-        if (data.csm) setCsmUserId(data.csm.id);
+        setCsmUserId(data.csm?.id || '');
+        setAvailableCsms(data.availableCsms || []);
       }
     } catch (err) {
       console.error('Failed to load client details:', err);
@@ -833,8 +836,12 @@ export default function ClientDetailPage() {
             value={csmUserId}
             onChange={(e) => setCsmUserId(e.target.value)}
           >
-            <option value="e0000000-0000-0000-0000-000000000002">Motionz CSM (csm@motionz.ai)</option>
-            <option value="user-csm-1">Motionz CSM (Primary)</option>
+            <option value="">No CSM assigned</option>
+            {availableCsms.map((c) => (
+              <option key={c.id} value={c.id}>
+                {c.name ? `${c.name} (${c.email})` : c.email}
+              </option>
+            ))}
           </Select>
         </Card>
 
@@ -874,6 +881,8 @@ export default function ClientDetailPage() {
         </Card>
 
         <OnboardingAnswers submissions={submissions} />
+
+        <ClientRecords clientId={clientId} />
 
         {/* Client Team Members & Admin Roster Oversight */}
         <Card style={{ marginBottom: 'var(--space-6)' }}>

@@ -46,6 +46,34 @@ export function validateEmail(email: string): string {
   return normalized;
 }
 
+/**
+ * Accepts common phone formats (+1 (555) 234-5678, 555.234.5678, +94771234567).
+ * Requires 7-15 digits and only phone punctuation, so passwords or notes cannot be saved as phones.
+ */
+export function validatePhone(phone: unknown, options: { required?: boolean } = {}): string | undefined {
+  const value = typeof phone === 'string' ? phone.trim() : phone == null ? '' : String(phone).trim();
+  if (!value) {
+    if (options.required) throw new ValidationError('A phone number is required.');
+    return undefined;
+  }
+  const digits = value.replace(/\D/g, '');
+  if (!/^\+?[\d\s().-]+$/.test(value) || digits.length < 7 || digits.length > 15) {
+    throw new ValidationError('Enter a valid phone number, for example +1 555 234 5678.');
+  }
+  return value;
+}
+
+/** Trims a free-text field and enforces a length limit. */
+export function validateText(value: unknown, field: string, options: { required?: boolean; max?: number } = {}): string | undefined {
+  const text = typeof value === 'string' ? value.trim() : '';
+  if (!text) {
+    if (options.required) throw new ValidationError(`${field} is required.`);
+    return undefined;
+  }
+  if (text.length > (options.max ?? 255)) throw new ValidationError(`${field} is too long.`);
+  return text;
+}
+
 export function validateTenantPayload(data: {
   name?: string;
   slug?: string;

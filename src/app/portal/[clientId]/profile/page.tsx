@@ -10,7 +10,7 @@ export default function ClientProfilePage() {
 
   const [name, setName] = useState('');
   const [primaryContact, setPrimaryContact] = useState('');
-  const [email, setEmail] = useState('john@abcroofing.com');
+  const [email, setEmail] = useState('');
   const [phone, setPhone] = useState('(555) 234-5678');
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
@@ -27,7 +27,7 @@ export default function ClientProfilePage() {
           if (isMounted && data.tenant) {
             setName(data.tenant.name || '');
             setPrimaryContact(data.tenant.primary_contact_name || '');
-            setEmail(data.tenant.primary_email || 'john@abcroofing.com');
+            setEmail(data.tenant.primary_email || '');
             setPhone(data.tenant.phone || '(555) 234-5678');
           }
         }
@@ -56,7 +56,6 @@ export default function ClientProfilePage() {
         body: JSON.stringify({
           name,
           primary_contact_name: primaryContact,
-          primary_email: email,
           phone,
         }),
       });
@@ -141,8 +140,8 @@ export default function ClientProfilePage() {
                 label="Primary Business Email"
                 type="email"
                 value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                required
+                disabled
+                helperText="Your login email. Contact your CSM to change it."
               />
               <Input
                 label="Business Phone Number"

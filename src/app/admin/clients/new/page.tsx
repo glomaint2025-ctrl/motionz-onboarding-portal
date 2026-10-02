@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { Input, Select, Button, Modal } from '@/components/ui';
@@ -12,7 +12,20 @@ export default function AddClientPage() {
   const [contactName, setContactName] = useState('');
   const [email, setEmail] = useState('');
   const [phone, setPhone] = useState('');
-  const [csmUserId, setCsmUserId] = useState('e0000000-0000-0000-0000-000000000002');
+  const [csmUserId, setCsmUserId] = useState('');
+  const [csms, setCsms] = useState<{ id: string; name?: string; email: string }[]>([]);
+
+  useEffect(() => {
+    fetch('/api/admin/csms')
+      .then((res) => res.json())
+      .then((data) => {
+        if (data.success) {
+          setCsms(data.csms);
+          if (data.csms.length === 1) setCsmUserId(data.csms[0].id);
+        }
+      })
+      .catch(() => {});
+  }, []);
   const [features, setFeatures] = useState<Record<string, boolean>>({
     onboarding: true,
     leads: true,
@@ -51,7 +64,7 @@ export default function AddClientPage() {
           primary_contact_name: contactName,
           primary_email: email,
           phone,
-          csm_user_id: csmUserId,
+          csm_user_id: csmUserId || undefined,
           feature_overrides: features,
         }),
       });
@@ -209,7 +222,12 @@ export default function AddClientPage() {
               onChange={(e) => setCsmUserId(e.target.value)}
               helperText="CSM will receive setup update capabilities for this portal."
             >
-              <option value="e0000000-0000-0000-0000-000000000002">Motionz CSM (csm@motionz.ai)</option>
+              <option value="">Assign later</option>
+              {csms.map((c) => (
+                <option key={c.id} value={c.id}>
+                  {c.name ? `${c.name} (${c.email})` : c.email}
+                </option>
+              ))}
             </Select>
           </div>
         </div>

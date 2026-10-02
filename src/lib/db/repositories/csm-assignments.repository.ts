@@ -69,6 +69,22 @@ export class CsmAssignmentRepository {
     return record;
   }
 
+  /**
+   * Makes csmUserId the only CSM assigned to the client (a client has exactly one CSM),
+   * or removes the assignment when csmUserId is null.
+   */
+  async setForTenant(tenantId: string, csmUserId: string | null): Promise<CsmAssignment | null> {
+    const supabase = getSupabaseServiceClient();
+    if (supabase) {
+      const { error } = await supabase.from('csm_assignments').delete().eq('tenant_id', tenantId);
+      if (error) throw new DatabaseError(`Failed to clear CSM assignment: ${error.message}`, error);
+    } else {
+      const store = getStore();
+      store.csmAssignments = store.csmAssignments.filter((a) => a.tenant_id !== tenantId);
+    }
+    return csmUserId ? this.assign(csmUserId, tenantId) : null;
+  }
+
   async findByTenant(tenantId: string): Promise<CsmAssignment | null> {
     const supabase = getSupabaseServiceClient();
     if (supabase) {

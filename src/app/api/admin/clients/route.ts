@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import { validatePhone } from '@/lib/validation';
 import {
   tenantRepository,
   csmAssignmentRepository,
@@ -161,6 +162,13 @@ export async function POST(request: Request) {
       );
     }
 
+    let validPhone: string | undefined;
+    try {
+      validPhone = validatePhone(phone);
+    } catch (e: any) {
+      return NextResponse.json({ error: e.message }, { status: 400 });
+    }
+
     const normalizedEmail = primary_email.trim().toLowerCase();
     const existingUser = await userRepository.findByEmail(normalizedEmail);
     if (existingUser) {
@@ -185,7 +193,7 @@ export async function POST(request: Request) {
       slug: generatedSlug,
       primary_email: normalizedEmail,
       primary_contact_name,
-      phone,
+      phone: validPhone,
       csm_user_id,
       template_id,
       feature_overrides,

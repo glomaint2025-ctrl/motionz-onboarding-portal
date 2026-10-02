@@ -47,6 +47,19 @@ export class ContractRepository {
     store.contracts.push(newRecord);
     return newRecord;
   }
+
+  async remove(tenantId: string, id: string): Promise<boolean> {
+    const supabase = getSupabaseServiceClient();
+    if (supabase) {
+      const { error, count } = await supabase.from('contracts').delete({ count: 'exact' }).eq('id', id).eq('tenant_id', tenantId);
+      if (error) throw new DatabaseError(`Failed to delete contract: ${error.message}`, error);
+      return (count || 0) > 0;
+    }
+    const store = getStore();
+    const before = store.contracts.length;
+    store.contracts = store.contracts.filter((c) => !(c.id === id && c.tenant_id === tenantId));
+    return store.contracts.length < before;
+  }
 }
 
 export const contractRepository = new ContractRepository();

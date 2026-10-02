@@ -1,3 +1,4 @@
+import { validatePhone, validateText } from '@/lib/validation';
 import { NextRequest, NextResponse } from 'next/server';
 import { getTenantById, updateTenantProfile, logAuditEvent, DEMO_TENANT_UUID } from '@/lib/db';
 import { assertPortalAccess, handleAuthError } from '@/lib/auth/guard';
@@ -29,14 +30,24 @@ export async function PATCH(
       actorEmail = session.email;
     }
 
-    const body = await request.json();
-    const { name, phone, primary_contact_name, primary_email } = body;
+    const body = await request.json().catch(() => ({}));
+    let changes: { name?: string; phone?: string; primary_contact_name?: string };
+    try {
+      changes = {
+        name: validateText(body.name, 'Company name', { max: 255 }),
+        phone: validatePhone(body.phone),
+        primary_contact_name: validateText(body.primary_contact_name, 'Contact name', { max: 255 }),
+      };
+    } catch (e: any) {
+      return NextResponse.json({ error: e.message }, { status: 400 });
+    }
+    // The primary email identifies the client (invites, onboarding form matching); only admins change it.
+    const { name, phone, primary_contact_name } = changes;
 
     const updated = await updateTenantProfile(tenantId, {
-      name,
-      phone,
-      primary_contact_name,
-      primary_email,
+      ...(name ? { name } : {}),
+      ...(phone ? { phone } : {}),
+      ...(primary_contact_name ? { primary_contact_name } : {}),
     });
 
     await logAuditEvent({
@@ -46,7 +57,7 @@ export async function PATCH(
       action: 'tenant.profile_updated',
       resourceType: 'tenant',
       resourceId: tenantId,
-      details: { name, phone, primary_contact_name, primary_email },
+      details: { name, phone, primary_contact_name },
     });
 
     return NextResponse.json({ success: true, tenant: updated });

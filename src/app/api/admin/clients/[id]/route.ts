@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import { validatePhone, validateText } from '@/lib/validation';
 import {
   tenantRepository,
   csmAssignmentRepository,
@@ -39,6 +40,7 @@ export async function GET(
     const sheetConfig = integrations.find((i) => i.integration_type === 'google_sheets');
 
     const csm = assignment ? await userRepository.findById(assignment.csm_user_id) : null;
+    const availableCsms = (await userRepository.listByRole('csm')).map((u) => ({ id: u.id, name: u.full_name, email: u.email }));
 
     return NextResponse.json({
       success: true,
@@ -50,6 +52,7 @@ export async function GET(
       invitations,
       trackingSheetUrl: sheetConfig?.config_data?.sheet_url || null,
       onboardingSubmissions,
+      availableCsms,
     });
   } catch (err: any) {
     if (err.statusCode === 401 || err.statusCode === 403) {
@@ -74,20 +77,42 @@ export async function PUT(
 
     const body = await request.json();
     const { name, phone, status, ghl_location_id, csm_user_id, feature_toggles } = body;
+    const csmChange = 'csm_user_id' in body;
 
     const updates: any = {};
-    if (name) updates.name = name;
-    if (phone !== undefined) updates.phone = phone;
-    if (status) updates.status = status;
-    if (ghl_location_id !== undefined) updates.ghl_location_id = ghl_location_id;
+    try {
+      if (name !== undefined) updates.name = validateText(name, 'Company name', { required: true, max: 255 });
+      if (phone !== undefined) updates.phone = validatePhone(phone) ?? null;
+    } catch (e: any) {
+      return NextResponse.json({ error: e.message }, { status: 400 });
+    }
+    if (status) {
+      if (!['active', 'onboarding', 'cancelled', 'suspended'].includes(status)) {
+        return NextResponse.json({ error: 'Invalid portal status.' }, { status: 400 });
+      }
+      updates.status = status;
+    }
+    if (ghl_location_id !== undefined) {
+      const loc = typeof ghl_location_id === 'string' ? ghl_location_id.trim() : '';
+      if (loc && !/^[A-Za-z0-9_-]{6,64}$/.test(loc)) {
+        return NextResponse.json({ error: 'The GoHighLevel Location ID looks wrong. Copy it from the sub-account URL.' }, { status: 400 });
+      }
+      updates.ghl_location_id = loc || null;
+    }
 
     const updatedTenant = Object.keys(updates).length > 0
       ? await tenantRepository.update(tenant.id, updates)
       : tenant;
 
     // Update CSM assignment if supplied
-    if (csm_user_id) {
-      await csmAssignmentRepository.assign(csm_user_id, tenant.id);
+    if (csmChange) {
+      if (csm_user_id) {
+        const csmUser = await userRepository.findById(String(csm_user_id));
+        if (!csmUser || csmUser.role !== 'csm') {
+          return NextResponse.json({ error: 'Choose a valid CSM.' }, { status: 400 });
+        }
+      }
+      await csmAssignmentRepository.setForTenant(tenant.id, csm_user_id ? String(csm_user_id) : null);
     }
 
     // Update feature toggles if supplied
@@ -328,6 +353,15 @@ export async function PATCH(
     if (action === 'create_invitation') {
       const { email, role, phone, allowed_modules } = body;
       const targetEmail = (email || tenant.primary_email).trim().toLowerCase();
+      if (role && role !== 'client' && role !== 'client_member') {
+        return NextResponse.json({ error: 'Portal invitations can only be for client roles.' }, { status: 400 });
+      }
+      let invitePhone: string | undefined;
+      try {
+        invitePhone = validatePhone(phone) || tenant.phone || undefined;
+      } catch (e: any) {
+        return NextResponse.json({ error: e.message }, { status: 400 });
+      }
 
       // Enforce hierarchy with tenant toggles
       const tenantToggles = await featureToggleRepository.getTogglesForTenant(tenant.id);
@@ -342,7 +376,7 @@ export async function PATCH(
         tenantId: tenant.id,
         email: targetEmail,
         role: role || 'client',
-        phone: phone || tenant.phone,
+        phone: invitePhone,
         allowed_modules: sanitizedAllowed,
         createdBy: actorEmail,
         allowExistingUser: true,

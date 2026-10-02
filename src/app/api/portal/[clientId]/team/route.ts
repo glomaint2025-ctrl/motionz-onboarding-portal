@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { validatePhone } from '@/lib/validation';
 import { getTenantById, getTeamMembers, listTeamMemberInvitations, getFeatureToggles, logAuditEvent, DEMO_TENANT_UUID } from '@/lib/db';
 import { assertPortalAccess, handleAuthError } from '@/lib/auth/guard';
 import { assertPermission, assertTenantAccess } from '@/lib/auth/permissions';
@@ -124,11 +125,11 @@ export async function POST(
       );
     }
 
-    if (!phone || String(phone).trim().length < 7) {
-      return NextResponse.json(
-        { error: 'A valid phone number is required for team member invitations' },
-        { status: 400 }
-      );
+    let validPhone: string;
+    try {
+      validPhone = validatePhone(phone, { required: true })!;
+    } catch (e: any) {
+      return NextResponse.json({ error: e.message }, { status: 400 });
     }
 
     // Role assignment is strictly server-controlled: forced to 'client_member' unless admin invites
@@ -147,7 +148,7 @@ export async function POST(
       tenantId,
       email: normalizedEmail,
       role: assignedRole,
-      phone: String(phone).trim(),
+      phone: validPhone,
       allowed_modules: resolvedAllowedModules,
       createdBy: actorEmail,
       expiresInHours: 72,
@@ -161,7 +162,7 @@ export async function POST(
       action: 'team.invite_sent',
       resourceType: 'user_invitation',
       resourceId: inviteResult.invitation.id,
-      details: { email: String(email).trim().toLowerCase(), role: assignedRole, phone: String(phone).trim() },
+      details: { email: String(email).trim().toLowerCase(), role: assignedRole, phone: validPhone },
     });
 
     return NextResponse.json({

@@ -65,6 +65,43 @@ export class OrderRepository {
     store.orders.push(newRecord);
     return newRecord;
   }
+
+  async update(
+    tenantId: string,
+    id: string,
+    fields: Partial<Pick<Order, 'label' | 'stage' | 'carrier' | 'tracking_number' | 'tracking_url' | 'issue_notes'>>
+  ): Promise<Order | null> {
+    const updated_at = new Date().toISOString();
+    const supabase = getSupabaseServiceClient();
+    if (supabase) {
+      const { data, error } = await supabase
+        .from('orders')
+        .update({ ...fields, updated_at })
+        .eq('id', id)
+        .eq('tenant_id', tenantId)
+        .select('*')
+        .maybeSingle();
+      if (error) throw new DatabaseError(`Failed to update order: ${error.message}`, error);
+      return data as Order | null;
+    }
+    const order = getStore().orders.find((o) => o.id === id && o.tenant_id === tenantId);
+    if (!order) return null;
+    Object.assign(order, fields, { updated_at });
+    return order;
+  }
+
+  async remove(tenantId: string, id: string): Promise<boolean> {
+    const supabase = getSupabaseServiceClient();
+    if (supabase) {
+      const { error, count } = await supabase.from('orders').delete({ count: 'exact' }).eq('id', id).eq('tenant_id', tenantId);
+      if (error) throw new DatabaseError(`Failed to delete order: ${error.message}`, error);
+      return (count || 0) > 0;
+    }
+    const store = getStore();
+    const before = store.orders.length;
+    store.orders = store.orders.filter((o) => !(o.id === id && o.tenant_id === tenantId));
+    return store.orders.length < before;
+  }
 }
 
 export const orderRepository = new OrderRepository();

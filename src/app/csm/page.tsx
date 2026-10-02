@@ -98,7 +98,11 @@ export default function CSMWorkspacePage() {
                   <div style={{ fontWeight: 'var(--font-weight-semibold)', fontSize: 'var(--font-size-base)' }}>{client.name}</div>
                   <div style={{ fontSize: 'var(--font-size-xs)', color: 'var(--color-text-muted)', marginTop: '2px' }}>
                     {client.primary_contact_name ? `Contact: ${client.primary_contact_name} · ` : ''}
-                    {client.current_step_name ? `Current step: ${client.current_step_name}` : 'Setup complete'}
+                    {client.current_step_name
+                      ? `Current step: ${client.current_step_name}`
+                      : client.progress_percent === 100
+                        ? 'Setup complete'
+                        : 'No setup steps yet'}
                   </div>
                 </div>
 
