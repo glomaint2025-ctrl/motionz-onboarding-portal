@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { verifyInvitationToken } from '@/lib/auth/invitations';
 import { createSessionToken, SESSION_COOKIE_NAME } from '@/lib/auth/session';
-import { enforceRateLimit, sanitizeRedirectUrl } from '@/lib/auth/security-utils';
+import { enforceRateLimit, getClientIp, sanitizeRedirectUrl } from '@/lib/auth/security-utils';
 import { securityEventRepository } from '@/lib/db/repositories';
 import { resolveTenantId } from '@/lib/db/supabase-client';
 
@@ -35,10 +35,10 @@ export async function GET(request: Request) {
 
 export async function POST(request: Request) {
   try {
-    const ip = request.headers.get('x-forwarded-for') || request.headers.get('x-real-ip') || 'global';
+    const ip = getClientIp(request);
 
     // Rate limit token verification attempts to prevent brute-forcing
-    const rateLimit = enforceRateLimit(`verify_ip:${ip}`, { maxRequests: 15, windowMs: 60 * 1000 });
+    const rateLimit = await enforceRateLimit(`verify_ip:${ip}`, { maxRequests: 15, windowMs: 60 * 1000 });
     if (!rateLimit.allowed) {
       await securityEventRepository.create({
         event_type: 'rate_limit_exceeded',
