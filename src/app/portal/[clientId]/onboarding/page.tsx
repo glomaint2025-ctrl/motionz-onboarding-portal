@@ -129,7 +129,7 @@ export default function OnboardingRoadmapPage() {
             </strong>
           </div>
 
-          <div style={{ display: 'flex', gap: 'var(--space-2)' }}>
+          <div style={{ display: 'flex', gap: 'var(--space-2)', flexWrap: 'wrap' }}>
             <Button
               variant={filter === 'all' ? 'primary' : 'outline'}
               size="sm"

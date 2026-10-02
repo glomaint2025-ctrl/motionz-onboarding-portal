@@ -31,6 +31,7 @@ export function getNavGroups(
         items: [
           { label: 'Dashboard', href: '/admin', icon: 'dashboard' },
           { label: 'Clients', href: '/admin/clients', icon: 'clients' },
+          { label: 'Staff', href: '/admin/staff', icon: 'team' },
         ],
       },
       {

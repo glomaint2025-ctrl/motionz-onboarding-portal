@@ -33,7 +33,7 @@ export default function ClientPortalLayout({
 
   const clientId = (params?.clientId as string) || 'demo';
   const [companyName, setCompanyName] = useState<string>(
-    clientId === 'demo' ? 'ABC Roofing' : ''
+    ''
   );
   const [featureToggles, setFeatureToggles] = useState<Record<string, boolean>>({});
   const [isLoading, setIsLoading] = useState(true);

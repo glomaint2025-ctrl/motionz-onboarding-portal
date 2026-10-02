@@ -150,7 +150,8 @@ async function runDuplicateEmailTests() {
   const memberInviteAdminRes = await portalTeamPostHandler(memberInviteAdminReq as any, { params: { clientId: demoTenantId } });
   assert.strictEqual(memberInviteAdminRes.status, 400);
   const memberInviteAdminData = await memberInviteAdminRes.json();
-  assert.strictEqual(memberInviteAdminData.error, 'An account with this email already exists.');
+  // Staff emails are rejected outright as client team members (client answer P1.1).
+  assert.match(memberInviteAdminData.error, /@motionz.ai addresses are for Motionz staff only/);
   console.log(' PASS: Team member invite blocked when email belongs to existing member or admin');
 
   // 5. invitationService.createInvitation duplicate email blocking
