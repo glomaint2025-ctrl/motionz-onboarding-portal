@@ -7,25 +7,34 @@ import {
   featureToggleRepository,
   invitationRepository,
   auditLogRepository,
+  integrationConfigRepository,
 } from '@/lib/db/repositories';
+import { requireAuth, handleAuthError } from '@/lib/auth/guard';
+import { provisionClientSheet } from '@/lib/integrations/sheets/provision';
+import { createInvitation, resendInvitation, revokeInvitation } from '@/lib/auth/invitations';
 
 export async function GET(
   request: Request,
   { params }: { params: { id: string } }
 ) {
   try {
-    const tenant = await tenantRepository.findById(params.id);
+    await requireAuth(request, { roles: ['admin'] });
+
+    const tenant = await tenantRepository.findById(params.id, { includeArchived: true });
     if (!tenant) {
       return NextResponse.json({ error: 'Client portal not found.' }, { status: 404 });
     }
 
-    const [assignment, steps, toggles, members, invitations] = await Promise.all([
+    const [assignment, steps, toggles, members, invitations, integrations] = await Promise.all([
       csmAssignmentRepository.findByTenant(tenant.id),
       clientSetupStepRepository.listByTenant(tenant.id),
       featureToggleRepository.getTogglesForTenant(tenant.id),
       userRepository.listByTenant(tenant.id),
-      invitationRepository.listByTenant(tenant.id),
+      invitationRepository.listByTenant(tenant.id, { pendingOnly: false, includeRevoked: true }),
+      integrationConfigRepository.listByTenant(tenant.id),
     ]);
+
+    const sheetConfig = integrations.find((i) => i.integration_type === 'google_sheets');
 
     const csm = assignment ? await userRepository.findById(assignment.csm_user_id) : null;
 
@@ -37,8 +46,12 @@ export async function GET(
       features: toggles,
       members,
       invitations,
+      trackingSheetUrl: sheetConfig?.config_data?.sheet_url || null,
     });
   } catch (err: any) {
+    if (err.statusCode === 401 || err.statusCode === 403) {
+      return handleAuthError(err);
+    }
     return NextResponse.json({ error: err.message || 'Failed to get client.' }, { status: 500 });
   }
 }
@@ -48,7 +61,10 @@ export async function PUT(
   { params }: { params: { id: string } }
 ) {
   try {
-    const tenant = await tenantRepository.findById(params.id);
+    const { session } = await requireAuth(request, { roles: ['admin'] });
+    const actorEmail = session?.email || 'admin@motionz.ai';
+
+    const tenant = await tenantRepository.findById(params.id, { includeArchived: true });
     if (!tenant) {
       return NextResponse.json({ error: 'Client portal not found.' }, { status: 404 });
     }
@@ -82,7 +98,7 @@ export async function PUT(
 
     await auditLogRepository.create({
       tenant_id: tenant.id,
-      actor_email: 'admin@motionz.ai',
+      actor_email: actorEmail,
       actor_role: 'admin',
       action: 'client.updated',
       resource_type: 'tenant',
@@ -92,6 +108,9 @@ export async function PUT(
 
     return NextResponse.json({ success: true, tenant: updatedTenant });
   } catch (err: any) {
+    if (err.statusCode === 401 || err.statusCode === 403) {
+      return handleAuthError(err);
+    }
     return NextResponse.json({ error: err.message || 'Failed to update client.' }, { status: 500 });
   }
 }
@@ -101,6 +120,9 @@ export async function DELETE(
   { params }: { params: { id: string } }
 ) {
   try {
+    const { session } = await requireAuth(request, { roles: ['admin'] });
+    const actorEmail = session?.email || 'admin@motionz.ai';
+
     const tenant = await tenantRepository.findById(params.id);
     if (!tenant) {
       return NextResponse.json({ error: 'Client portal not found.' }, { status: 404 });
@@ -110,7 +132,7 @@ export async function DELETE(
 
     await auditLogRepository.create({
       tenant_id: tenant.id,
-      actor_email: 'admin@motionz.ai',
+      actor_email: actorEmail,
       actor_role: 'admin',
       action: 'client.deleted',
       resource_type: 'tenant',
@@ -119,6 +141,283 @@ export async function DELETE(
 
     return NextResponse.json({ success: true, message: 'Portal archived successfully.' });
   } catch (err: any) {
+    if (err.statusCode === 401 || err.statusCode === 403) {
+      return handleAuthError(err);
+    }
     return NextResponse.json({ error: err.message || 'Failed to delete portal.' }, { status: 500 });
   }
 }
+
+export async function PATCH(
+  request: Request,
+  { params }: { params: { id: string } }
+) {
+  try {
+    const { session } = await requireAuth(request, { roles: ['admin'] });
+    const actorEmail = session?.email || 'admin@motionz.ai';
+
+    const tenant = await tenantRepository.findById(params.id, { includeArchived: true });
+    if (!tenant) {
+      return NextResponse.json({ error: 'Client portal not found.' }, { status: 404 });
+    }
+
+    const body = await request.json();
+    const { action, invitationId, memberId, reason } = body;
+
+    // Create (or re-link) the client's tracking sheet, e.g. when it failed during client creation.
+    if (action === 'create_sheet') {
+      const sheet = await provisionClientSheet({
+        tenantId: tenant.id,
+        clientName: tenant.name,
+        clientEmail: tenant.primary_email,
+      });
+      await auditLogRepository.create({
+        tenant_id: tenant.id,
+        actor_email: actorEmail,
+        actor_role: 'admin',
+        action: 'integration.sheet_created',
+        resource_type: 'tenant',
+        resource_id: tenant.id,
+        details: { ok: sheet.ok, error: sheet.error },
+      });
+      return NextResponse.json({ success: sheet.ok, sheet, error: sheet.error }, { status: sheet.ok ? 200 : 502 });
+    }
+
+    // 1. Tenant-level suspension (Admin bans whole client company portal + cascades to all members)
+    if (action === 'suspend_client') {
+      const banReason = reason?.trim() || 'Client account disabled by Motionz administrator.';
+      const updatedTenant = await tenantRepository.suspendTenant(tenant.id, banReason, actorEmail);
+      const cascadedCount = await userRepository.cascadeSuspendByTenant(tenant.id, banReason, actorEmail, 'admin');
+
+      await auditLogRepository.create({
+        tenant_id: tenant.id,
+        actor_email: actorEmail,
+        actor_role: 'admin',
+        action: 'tenant.suspended',
+        resource_type: 'tenant',
+        resource_id: tenant.id,
+        details: { reason: banReason, cascadedMembersDisabled: cascadedCount },
+      });
+
+      return NextResponse.json({
+        success: true,
+        message: 'Client organization and members suspended.',
+        tenant: updatedTenant,
+        cascadedMembers: cascadedCount,
+      });
+    }
+
+    // 2. Tenant-level unban (Admin unlocks client company + unlocks all cascade-suspended members)
+    if (action === 'unsuspend_client') {
+      const updatedTenant = await tenantRepository.unsuspendTenant(tenant.id);
+      const unlockedCount = await userRepository.cascadeUnsuspendByTenant(tenant.id);
+
+      await auditLogRepository.create({
+        tenant_id: tenant.id,
+        actor_email: actorEmail,
+        actor_role: 'admin',
+        action: 'tenant.unsuspended',
+        resource_type: 'tenant',
+        resource_id: tenant.id,
+        details: { unlockedMembersCount: unlockedCount },
+      });
+
+      return NextResponse.json({
+        success: true,
+        message: 'Client organization and cascade-suspended members reactivated.',
+        tenant: updatedTenant,
+        unlockedMembers: unlockedCount,
+      });
+    }
+
+    // 3. Member-level suspension by Admin
+    if (action === 'suspend_member') {
+      if (!memberId) {
+        return NextResponse.json({ error: 'Member ID is required' }, { status: 400 });
+      }
+      const targetUser = await userRepository.findById(memberId);
+      if (!targetUser || targetUser.tenant_id !== tenant.id) {
+        return NextResponse.json({ error: 'Member not found for this tenant' }, { status: 404 });
+      }
+      if (targetUser.role === 'client') {
+        return NextResponse.json(
+          { error: 'The primary account holder cannot be disabled individually. Use "Ban Client Portal" to suspend the client company.' },
+          { status: 400 }
+        );
+      }
+      const banReason = reason?.trim() || 'Account disabled by Motionz administrator.';
+      const updatedUser = await userRepository.suspendUser(targetUser.id, banReason, actorEmail, 'admin', false);
+
+      await auditLogRepository.create({
+        tenant_id: tenant.id,
+        actor_email: actorEmail,
+        actor_role: 'admin',
+        action: 'user.suspended_by_admin',
+        resource_type: 'user',
+        resource_id: targetUser.id,
+        details: { email: targetUser.email, reason: banReason },
+      });
+
+      return NextResponse.json({ success: true, message: 'Member account suspended.', user: updatedUser });
+    }
+
+    // 4. Member-level unban by Admin
+    if (action === 'unsuspend_member') {
+      if (!memberId) {
+        return NextResponse.json({ error: 'Member ID is required' }, { status: 400 });
+      }
+      const targetUser = await userRepository.findById(memberId);
+      if (!targetUser || targetUser.tenant_id !== tenant.id) {
+        return NextResponse.json({ error: 'Member not found for this tenant' }, { status: 404 });
+      }
+      const updatedUser = await userRepository.unsuspendUser(targetUser.id);
+
+      await auditLogRepository.create({
+        tenant_id: tenant.id,
+        actor_email: actorEmail,
+        actor_role: 'admin',
+        action: 'user.unsuspended_by_admin',
+        resource_type: 'user',
+        resource_id: targetUser.id,
+        details: { email: targetUser.email },
+      });
+
+      return NextResponse.json({ success: true, message: 'Member account reactivated.', user: updatedUser });
+    }
+
+    // 4b. Member permissions update by Admin
+    if (action === 'update_member_permissions') {
+      if (!memberId) {
+        return NextResponse.json({ error: 'Member ID is required' }, { status: 400 });
+      }
+      const targetUser = await userRepository.findById(memberId);
+      if (!targetUser || targetUser.tenant_id !== tenant.id) {
+        return NextResponse.json({ error: 'Member not found for this tenant' }, { status: 404 });
+      }
+      const { allowed_modules } = body;
+      if (!Array.isArray(allowed_modules)) {
+        return NextResponse.json({ error: 'allowed_modules must be an array of module keys.' }, { status: 400 });
+      }
+
+      const tenantToggles = await featureToggleRepository.getTogglesForTenant(tenant.id);
+      const sanitized = allowed_modules.filter((k: string) => tenantToggles[k] !== false);
+
+      const updatedUser = await userRepository.updatePermissions(targetUser.id, sanitized);
+
+      await auditLogRepository.create({
+        tenant_id: tenant.id,
+        actor_email: actorEmail,
+        actor_role: 'admin',
+        action: 'user.permissions_updated_by_admin',
+        resource_type: 'user',
+        resource_id: targetUser.id,
+        details: { email: targetUser.email, allowed_modules: sanitized },
+      });
+
+      return NextResponse.json({
+        success: true,
+        message: 'Member permissions updated successfully.',
+        user: updatedUser,
+      });
+    }
+
+    // 5. Create new magic link / invitation for this client
+    if (action === 'create_invitation') {
+      const { email, role, phone, allowed_modules } = body;
+      const targetEmail = (email || tenant.primary_email).trim().toLowerCase();
+
+      // Enforce hierarchy with tenant toggles
+      const tenantToggles = await featureToggleRepository.getTogglesForTenant(tenant.id);
+      let sanitizedAllowed: string[] | undefined = undefined;
+      if (Array.isArray(allowed_modules)) {
+        sanitizedAllowed = allowed_modules.filter((k: string) => tenantToggles[k] !== false);
+      } else {
+        sanitizedAllowed = Object.keys(tenantToggles).filter((k: string) => tenantToggles[k] !== false);
+      }
+
+      const result = await createInvitation({
+        tenantId: tenant.id,
+        email: targetEmail,
+        role: role || 'client',
+        phone: phone || tenant.phone,
+        allowed_modules: sanitizedAllowed,
+        createdBy: actorEmail,
+        allowExistingUser: true,
+        request,
+      });
+
+      return NextResponse.json({
+        success: true,
+        message: 'Magic link generated successfully.',
+        invitation: result.invitation,
+        magicLinkUrl: result.magicLinkUrl,
+      });
+    }
+
+    // 6. Invitation operations (resend, revoke)
+    if (!invitationId) {
+      return NextResponse.json({ error: 'Invitation ID or valid action is required' }, { status: 400 });
+    }
+
+    const existing = await invitationRepository.findById(invitationId);
+    if (!existing || existing.tenant_id !== tenant.id) {
+      return NextResponse.json({ error: 'Invitation not found for this tenant' }, { status: 404 });
+    }
+
+    if (action === 'revoke') {
+      await revokeInvitation(invitationId, actorEmail, 'admin');
+      return NextResponse.json({ success: true, message: 'Invitation revoked successfully.' });
+    }
+
+    if (action === 'resend') {
+      if (existing.accepted_at) {
+        return NextResponse.json(
+          { error: 'Cannot resend: this invitation has already been accepted.' },
+          { status: 400 }
+        );
+      }
+
+      const result = await resendInvitation({
+        invitationId,
+        actorEmail,
+        actorRole: 'admin',
+        request,
+      });
+
+      return NextResponse.json({
+        success: true,
+        message: 'Invitation regenerated and resent successfully.',
+        invitation: result.invitation,
+        magicLinkUrl: result.magicLinkUrl,
+      });
+    }
+
+    // 7. Unarchive / Restore client portal
+    if (action === 'unarchive' || action === 'restore') {
+      const updatedTenant = await tenantRepository.unarchive(tenant.id);
+
+      await auditLogRepository.create({
+        tenant_id: tenant.id,
+        actor_email: actorEmail,
+        actor_role: 'admin',
+        action: 'client.unarchived',
+        resource_type: 'tenant',
+        resource_id: tenant.id,
+      });
+
+      return NextResponse.json({
+        success: true,
+        message: 'Client portal unarchived and reactivated successfully.',
+        tenant: updatedTenant,
+      });
+    }
+
+    return NextResponse.json({ error: 'Invalid action. Supported: create_invitation, resend, revoke, suspend_client, unsuspend_client, suspend_member, unsuspend_member, unarchive' }, { status: 400 });
+  } catch (err: any) {
+    if (err.statusCode === 401 || err.statusCode === 403) {
+      return handleAuthError(err);
+    }
+    return NextResponse.json({ error: err.message || 'Operation failed.' }, { status: 500 });
+  }
+}
+

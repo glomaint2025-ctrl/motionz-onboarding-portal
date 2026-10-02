@@ -1,60 +1,36 @@
-# Phase 3: Security Events & Audit Logging
+# Phase 02: Security Events & Audit Logging
 
-The security monitoring subsystem tracks all critical security events, anomalies, and administrative actions to satisfy enterprise compliance and proactive threat detection.
-
----
-
-## 1. Security Event Catalog
-
-| Event Code | Event Name | Severity | Description | Trigger Condition |
-| :--- | :--- | :--- | :--- | :--- |
-| `SEC-001` | `auth.login_success` | Low | Successful login | User verifies credentials / magic link |
-| `SEC-002` | `auth.login_failed` | Medium | Authentication failure | Invalid password, expired magic link |
-| `SEC-003` | `auth.brute_force_blocked` | High | IP / Account locked | 5 failed login attempts in 10 minutes |
-| `SEC-004` | `tenant.cross_tenant_probe` | Critical | Cross-tenant access attempt | User attempts to access a different tenant's URL |
-| `SEC-005` | `role.privilege_escalation` | Critical | Unauthorized permission attempt | Client user requests an Admin API route |
-| `SEC-006` | `portal.impersonation_start` | Medium | Staff views portal as client | Admin / CSM initiates View-As mode |
-| `SEC-007` | `portal.deleted` | High | Client portal deleted | Admin executes soft/hard portal deletion |
-| `SEC-008` | `data.ssn_revealed` | High | SSN or tax ID viewed | Staff views unmasked tax details |
-| `SEC-009` | `integration.key_modified` | High | API credentials altered | GHL or external secret updated |
+The security monitoring subsystem tracks all critical security events, anomalies, and administrative actions in `public.security_events` and `public.audit_logs`.
 
 ---
 
-## 2. Automated Alert Dispatching Pipeline
+## 1. Confirmed Security Event Catalog
 
-```mermaid
-flowchart LR
-    EVENT["Security Event Triggered"] --> SEVERITY{"Severity Level?"}
-    
-    SEVERITY -->|Low / Medium| DB["PostgreSQL audit_logs (Standard Log)"]
-    SEVERITY -->|High / Critical| ALERT["High-Priority Dispatch Engine"]
-    
-    ALERT --> DB
-    ALERT --> SLACK["Slack #security-alerts (Instant Webhook)"]
-    ALERT --> EMAIL["Email to security@motionz.ai"]
-    ALERT --> BLOCK["Automated IP / User Session Revocation"]
-```
+| Event Type | Severity | Description | Trigger Condition |
+| :--- | :--- | :--- | :--- |
+| `unauthorized_staff_domain_access` | **High** | Staff login attempt with non-@motionz.ai domain | External email enters staff login flow |
+| `staff_privilege_escalation_attempt` | **High** | Staff user attempts to claim unauthorized admin role | Non-designated admin requests admin login or CSM requests admin route |
+| `role_privilege_escalation_attempt` | **High** | Non-privileged role requests privileged route | Client attempts `/api/admin/*` or `/api/csm/*` |
+| `unauthorized_capability_attempt` | **High** | Actor lacks required capability | Member attempts `team:invite` or CSM attempts `portal:delete` |
+| `cross_tenant_access_attempt` | **Critical** | Tenant attempts accessing another client's data | Client A requests Tenant B data or URL |
+| `magic_link_verification_failed` | **Medium** | Invalid, revoked, or expired token used | Failed verification via `/api/auth/verify` |
+| `rate_limit_exceeded` | **Medium** | Request threshold exceeded | Rapid auth or invitation requests |
+| `staff_login_success` | **Low** | Legitimate staff session created | Staff logs in with `@motionz.ai` |
+| `invitation_created` | **Low** | Magic link generated | Admin/Client issues invitation |
+| `invitation_accepted` | **Low** | Magic link claimed | User verifies token |
+| `invitation_revoked` | **Low** | Active invitation cancelled | Administrator revokes invitation |
+| `auth_logout` | **Low** | User signs out | Session cookie cleared |
 
-### 2.1. Critical Alert Slack Payload Example
-```json
-{
-  "text": "🚨 CRITICAL SECURITY ALERT: Cross-Tenant Probe Detected",
-  "blocks": [
-    {
-      "type": "header",
-      "text": { "type": "plain_text", "text": "🚨 Security Alert: SEC-004" }
-    },
-    {
-      "type": "section",
-      "fields": [
-        { "type": "mrkdwn", "text": "*Actor:* user@client-a.com" },
-        { "type": "mrkdwn", "text": "*Assigned Tenant:* Client A (Apex)" },
-        { "type": "mrkdwn", "text": "*Target Tenant:* Client B (Metro)" },
-        { "type": "mrkdwn", "text": "*Path:* `/portal/metro/contracts/12`" },
-        { "type": "mrkdwn", "text": "*Action:* Blocked (403 Forbidden)" },
-        { "type": "mrkdwn", "text": "*IP Address:* 198.51.100.42" }
-      ]
-    }
-  ]
-}
-```
+> [!IMPORTANT]
+> Raw token values are NEVER logged or stored in `security_events` or `audit_logs`. Only token hashes or prefix hashes may appear in diagnostic records.
+
+---
+
+## 2. Decision Log
+
+| Decision Item | Status | Summary |
+| :--- | :---: | :--- |
+| Never Log Raw Tokens | **CONFIRMED** | Only SHA-256 token hash or token prefix logged. |
+| Automatic Alert on Non-Staff Domain | **CONFIRMED** | High-severity security event emitted immediately. |
+| Automatic Alert on Cross-Tenant Probe | **CONFIRMED** | Critical-severity security event emitted with actor details. |
+| Rate Limit Event Persistence | **CONFIRMED** | Rate limit violations logged to `security_events`. |

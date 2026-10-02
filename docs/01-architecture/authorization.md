@@ -1,96 +1,89 @@
-# Phase 1: Authorization & RBAC Architecture
+# Phase 02: Production Authorization & RBAC Architecture
 
-Authorization governs what authenticated actors are permitted to see, execute, and mutate across the platform.
-
----
-
-## 1. Role Hierarchy & Scope
-
-```mermaid
-graph TD
-    ADMIN["Admin (Superuser)"] -->|Inherits & Supervises| CSM["CSM (Staff Operations)"]
-    CSM -->|Manages Assigned| CLIENT["Client Owner (Tenant Admin)"]
-    CLIENT -->|Delegates Restricted| MEMBER["Client Team Member"]
-```
-
-- **Global Scope**: Only `Admin` and `CSM` operate at the multi-tenant supervisory level.
-- **Tenant Scope**: `Client` and `Client Team Member` are strictly scoped to `tenant_id = user.tenant_id`.
+This document defines the authorization model, role-based access control (RBAC), and multi-tenant isolation mechanisms implemented in the Motionz Onboarding Portal.
 
 ---
 
-## 2. Guard Enforcement Layers
+## 1. Confirmed Role Model & Scope
 
-Authorization is enforced at three sequential code boundaries:
+The platform defines exactly four verified user roles:
 
-```mermaid
-flowchart LR
-    L1["1. Next.js Edge Middleware"] --> L2["2. Server Action / API Handler"] --> L3["3. PostgreSQL RLS Policies"]
-    L1 -->|Rejects Unauthorized Routes| REJ1["401 / 403 Redirect"]
-    L2 -->|Rejects Disallowed Actions| REJ2["403 Action Forbidden"]
-    L3 -->|Filters Row Access| REJ3["Zero Rows Returned"]
+| Role | Classification | Tenant Scope | Route Access | Responsibilities |
+| :--- | :--- | :--- | :--- | :--- |
+| **`admin`** | Internal Motionz Staff | Global Multi-Tenant | `/admin/*`, `/csm/*`, `/portal/*` | Platform supervision, template management, portal creation/deletion, staff provisioning, feature flag management. |
+| **`csm`** | Internal Motionz Staff | Assigned Tenants | `/csm/*`, `/portal/*` | Onboarding guidance, milestone status override, conversational copy updates, client review. |
+| **`client`** | External Organization Owner | Single Tenant (`tenant_id`) | `/portal/[clientId]/*` | Onboarding completion, team invitations, contract review, GHL lead inspection, company profile management. |
+| **`client_member`** | External Organization Member | Single Tenant (`tenant_id`) | `/portal/[clientId]/*` (Restricted) | Operational tool usage (roof measurement), lead view, assigned quiz completion. Strictly prohibited from inviting members or editing company profile. |
+
+- **[CONFIRMED]** External users cannot become `admin` or `csm`.
+- **[CONFIRMED]** Clients and client members cannot access `/admin` or `/csm` or peer client portals.
+- **[CONFIRMED]** CSMs cannot execute Admin-only capabilities (e.g. portal deletion, feature flag toggles).
+
+---
+
+## 2. Multi-Layer Guard Enforcement Pipeline
+
+Authorization is enforced at three synchronized architectural layers:
+
 ```
-
-### 2.1. Middleware Enforcement (`middleware.ts`)
-Inspects route prefix against the verified session role:
-```typescript
-export function middleware(req: NextRequest) {
-  const session = getSession(req);
-  const path = req.nextUrl.pathname;
-
-  if (path.startsWith('/admin') && session.role !== 'admin') {
-    return NextResponse.redirect(new URL('/login?err=unauthorized', req.url));
-  }
-
-  if (path.startsWith('/csm') && !['admin', 'csm'].includes(session.role)) {
-    return NextResponse.redirect(new URL('/login?err=unauthorized', req.url));
-  }
-
-  if (path.startsWith('/portal/')) {
-    const routeTenantSlug = path.split('/')[2];
-    if (session.role === 'client' || session.role === 'client_member') {
-      if (session.tenantSlug !== routeTenantSlug) {
-        return new NextResponse('Forbidden: Cross-tenant access denied', { status: 403 });
-      }
-    }
-  }
-}
-```
-
-### 2.2. Server Action Capability Guard
-Before mutating data, Server Actions invoke a typed capability guard:
-```typescript
-export async function updateOnboardingStep(stepId: string, status: StepStatus) {
-  const session = await requireAuth();
-  
-  // Verify actor has permission to override step status
-  if (!hasPermission(session.role, 'onboarding:update_status')) {
-    throw new AuthorizationError('Insufficient permissions to update onboarding step status');
-  }
-
-  // Execute database update with tenant isolation
-  return db.step.update({
-    where: { id: stepId, tenantId: session.tenantId },
-    data: { status, updatedAt: new Date() }
-  });
-}
+Incoming Request
+      ↓
+[Layer 1: Next.js Edge Middleware]
+  • Route prefix checks: `/admin/*`, `/csm/*`, `/portal/*`
+  • API route prefix checks: `/api/admin/*`, `/api/csm/*`, `/api/portal/*`
+  • Fast HMAC session signature validation
+  • 401 Unauthenticated / 403 Forbidden / Redirect to Login
+      ↓
+[Layer 2: Server-Side API & Action Guard (`requireAuth`)]
+  • Independent server-side cryptographic session verification
+  • Typed capability guard (`hasPermission(role, capability)`)
+  • Tenant boundary assertion (`assertTenantAccess(session, targetTenantId)`)
+  • Security event emission on unauthorized access probes
+      ↓
+[Layer 3: PostgreSQL Database Row-Level Security (RLS)]
+  • Enforced at the database engine via authenticated user JWT (`auth.uid()`)
+  • Subquery filters against `public.users.tenant_id` and `public.users.role`
+  • Zero cross-tenant data leakage even under raw queries
 ```
 
 ---
 
-## 3. Granular Capability Permission Tokens
+## 3. Centralized Capability Matrix
 
-| Permission Token | Description | Admin | CSM | Client | Member |
-| :--- | :--- | :---: | :---: | :---: | :---: |
-| `platform:analytics` | View executive platform health & cross-client stats | ✅ | ❌ | ❌ | ❌ |
-| `portal:provision` | Clone master template into new client portal | ✅ | ✅ | ❌ | ❌ |
-| `portal:delete` | Permanently delete or archive a client portal | ✅ | ❌ | ❌ | ❌ |
-| `portal:toggle_feature` | Enable/disable modules per client portal | ✅ | ❌ | ❌ | ❌ |
-| `onboarding:edit_step` | Modify step copy, instructions, and unlock criteria | ✅ | ✅ | ❌ | ❌ |
-| `onboarding:update_status` | Override milestone status (`Done`, `In Progress`) | ✅ | ✅ | ❌ | ❌ |
-| `contract:view` | View and download executed agreements & LLC docs | ✅ | ✅ | ✅ | ⚠️ (Toggle) |
-| `leads:view` | Inspect live GoHighLevel leads & pipeline metrics | ✅ | ✅ | ✅ | ✅ |
-| `leads:send_sms` | Send outbound SMS messages via in-portal composer | ✅ | ✅ | ✅ | ✅ |
-| `tools:measure_roof` | Use satellite roof measurement tool & export specs | ✅ | ✅ | ✅ | ✅ |
-| `ai:assistant_execute` | [OUT OF SCOPE] Trigger CRM actions via AI assistant | ❌ | ❌ | ❌ | ❌ |
-| `team:manage` | Invite and remove client organizational team members | ✅ | ✅ | ✅ | ❌ |
-| `profile:edit` | Update company address, phone, and brand identity | ✅ | ✅ | ✅ | ❌ |
+Implemented in `src/lib/auth/permissions.ts`:
+
+| Capability | Admin | CSM | Client | Client Member | Description |
+| :--- | :---: | :---: | :---: | :---: | :--- |
+| `platform:analytics` | ✅ | ❌ | ❌ | ❌ | Inspect platform cross-client metrics |
+| `platform:integrations` | ✅ | ❌ | ❌ | ❌ | Manage global GHL/Sheets credentials |
+| `platform:manage_staff` | ✅ | ❌ | ❌ | ❌ | Provision and manage staff users |
+| `portal:create` | ✅ | ❌ | ❌ | ❌ | Provision new client portals |
+| `portal:delete` | ✅ | ❌ | ❌ | ❌ | Permanently delete/archive client portals |
+| `portal:feature_toggle` | ✅ | ❌ | ❌ | ❌ | Modify per-tenant feature modules |
+| `portal:assign_csm` | ✅ | ❌ | ❌ | ❌ | Assign CSMs to client portals |
+| `onboarding:edit_content` | ✅ | ✅ | ❌ | ❌ | Edit onboarding copy and guidance |
+| `onboarding:update_status` | ✅ | ✅ | ❌ | ❌ | Override setup step status (`done`, `in_progress`) |
+| `onboarding:view_guidance` | ✅ | ✅ | ✅ | ✅ | View onboarding roadmap and guidance |
+| `onboarding:submit_form` | ✅ | ✅ | ✅ | ✅ | Submit onboarding forms |
+| `client:view_contract` | ✅ | ✅ | ✅ | ❌ | View executed contracts |
+| `client:view_leads` | ✅ | ✅ | ✅ | ✅ | View GHL leads and appointments |
+| `client:use_tools` | ✅ | ✅ | ✅ | ✅ | Access roof measurement and operational tools |
+| `client:use_roof_measurement` | ✅ | ✅ | ✅ | ✅ | Perform satellite roof measurements |
+| `client:video_preference` | ✅ | ✅ | ✅ | ❌ | Select AI avatar vs self-filmed video |
+| `client:view_scripts` | ✅ | ✅ | ✅ | ✅ | Review generated video scripts |
+| `client:book_call` | ✅ | ✅ | ✅ | ✅ | Schedule strategic onboarding calls |
+| `team:invite` | ✅ | ❌ | ✅ | ❌ | Invite organizational team members |
+| `team:remove` | ✅ | ❌ | ✅ | ❌ | Remove team members |
+| `profile:update` | ✅ | ✅ | ✅ | ❌ | Update primary company profile |
+
+---
+
+## 4. Decision Log
+
+| Decision Item | Status | Summary |
+| :--- | :---: | :--- |
+| 4-Role Hierarchy | **CONFIRMED** | `admin`, `csm`, `client`, `client_member` strictly defined. |
+| Server-Side Route Guarding | **CONFIRMED** | Both middleware and route handler `requireAuth` enforce checks. |
+| Tenant Resolution | **CONFIRMED** | Always resolved from verified session; never from URL or body parameters. |
+| Client Member Owner-Only Limits | **CONFIRMED** | Team invites and company profile updates blocked for client members. |
+| CSM Destructive Action Limits | **CONFIRMED** | Portal deletion and feature toggle manipulation blocked for CSMs. |

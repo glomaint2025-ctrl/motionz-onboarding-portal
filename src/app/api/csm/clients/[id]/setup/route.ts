@@ -1,15 +1,19 @@
 import { NextResponse } from 'next/server';
 import { getTenantById, getClientSetupSteps, updateClientSetupStep, logAuditEvent } from '@/lib/db';
+import { requireAuth, handleAuthError, assertCsmAssigned } from '@/lib/auth/guard';
 
 export async function GET(
   request: Request,
   { params }: { params: { id: string } }
 ) {
   try {
+    const { session } = await requireAuth(request, { roles: ['csm', 'admin'] });
+
     const tenant = await getTenantById(params.id);
     if (!tenant) {
       return NextResponse.json({ error: 'Client portal not found.' }, { status: 404 });
     }
+    await assertCsmAssigned(session, tenant.id);
 
     const steps = await getClientSetupSteps(tenant.id);
     const completedCount = steps.filter((s) => s.status === 'done').length;
@@ -22,6 +26,9 @@ export async function GET(
       progressPercent,
     });
   } catch (err: any) {
+    if (err.statusCode === 401 || err.statusCode === 403) {
+      return handleAuthError(err);
+    }
     return NextResponse.json({ error: err.message || 'Failed to fetch setup steps.' }, { status: 500 });
   }
 }
@@ -31,10 +38,18 @@ export async function PUT(
   { params }: { params: { id: string } }
 ) {
   try {
+    const { session } = await requireAuth(request, {
+      roles: ['csm', 'admin'],
+      capability: 'onboarding:update_status',
+    });
+    const actorEmail = session?.email || 'csm@motionz.ai';
+    const actorRole = session?.role || 'csm';
+
     const tenant = await getTenantById(params.id);
     if (!tenant) {
       return NextResponse.json({ error: 'Client portal not found.' }, { status: 404 });
     }
+    await assertCsmAssigned(session, tenant.id);
 
     const body = await request.json();
     const { stepKey, status, what_it_is, right_now, we_need_from_you, unlocks } = body;
@@ -65,8 +80,8 @@ export async function PUT(
 
     await logAuditEvent({
       tenantId: tenant.id,
-      actorEmail: 'csm@motionz.ai',
-      actorRole: 'csm',
+      actorEmail,
+      actorRole,
       action: 'step.updated',
       resourceType: 'client_setup_step',
       resourceId: updatedStep.id,
@@ -75,6 +90,9 @@ export async function PUT(
 
     return NextResponse.json({ success: true, step: updatedStep });
   } catch (err: any) {
+    if (err.statusCode === 401 || err.statusCode === 403) {
+      return handleAuthError(err);
+    }
     return NextResponse.json({ error: err.message || 'Failed to update step.' }, { status: 500 });
   }
 }

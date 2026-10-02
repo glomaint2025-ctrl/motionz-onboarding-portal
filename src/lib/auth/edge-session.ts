@@ -9,9 +9,37 @@ export interface SessionPayload {
   expiresAt: number;
 }
 
-export const SESSION_SECRET =
-  process.env.SESSION_SECRET || 'motionz-dev-fallback-session-secret-at-least-32-chars';
+const DEV_FALLBACK_SECRET = 'motionz-dev-fallback-session-secret-at-least-32-chars';
+
+/**
+ * Session signing secret. Production refuses to sign or verify sessions without a real
+ * SESSION_SECRET (at least 32 characters), so the public dev fallback can never be used there.
+ * Resolved lazily so `next build` does not require the secret.
+ */
+export function getSessionSecret(): string {
+  const secret = process.env.SESSION_SECRET;
+  if (secret && secret.length >= 32) return secret;
+  if (process.env.NODE_ENV === 'production') {
+    throw new Error('SESSION_SECRET must be set to at least 32 characters in production.');
+  }
+  return DEV_FALLBACK_SECRET;
+}
 export const SESSION_COOKIE_NAME = 'motionz_session';
+
+export const DEMO_TENANT_UUID = '4f3c7e8a-92b1-4d3a-8f5c-1a2b3c4d5e6f';
+export const LEGACY_DEMO_TENANT_UUID = 'd0000000-0000-0000-0000-000000000001';
+
+export const resolveTenantId = (tenantId: string): string => {
+  if (
+    tenantId === 'demo' ||
+    tenantId === 'tenant-demo-abc-roofing' ||
+    tenantId === 'abc-roofing' ||
+    tenantId === LEGACY_DEMO_TENANT_UUID
+  ) {
+    return DEMO_TENANT_UUID;
+  }
+  return tenantId;
+};
 
 function base64UrlToUint8Array(base64url: string): Uint8Array {
   let base64 = base64url.replace(/-/g, '+').replace(/_/g, '/');
@@ -45,7 +73,7 @@ function parseBase64UrlJson<T>(base64url: string): T | null {
  */
 export async function verifyEdgeSession(
   token: string,
-  secret = SESSION_SECRET
+  secret?: string
 ): Promise<SessionPayload | null> {
   if (!token || typeof token !== 'string') return null;
 
@@ -58,7 +86,7 @@ export async function verifyEdgeSession(
     const encoder = new TextEncoder();
     const key = await crypto.subtle.importKey(
       'raw',
-      encoder.encode(secret),
+      encoder.encode(secret ?? getSessionSecret()),
       { name: 'HMAC', hash: 'SHA-256' },
       false,
       ['verify']
@@ -86,3 +114,101 @@ export async function verifyEdgeSession(
     return null;
   }
 }
+
+/**
+ * Edge-compatible check to inspect whether a tenant is suspended.
+ * Uses native fetch to Supabase PostgREST REST API without any Node.js dependencies.
+ */
+export async function checkEdgeTenantSuspension(
+  tenantId: string
+): Promise<{ suspended: boolean; reason?: string }> {
+  const resolvedId = resolveTenantId(tenantId);
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const key =
+    process.env.SUPABASE_SERVICE_ROLE_KEY ||
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+  if (!supabaseUrl || !key || !resolvedId) return { suspended: false };
+
+  try {
+    const isUuid =
+      /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(
+        resolvedId
+      );
+    const filter = isUuid
+      ? `or=(id.eq.${resolvedId},slug.eq.${resolvedId})`
+      : `slug.eq.${resolvedId}`;
+
+    const res = await fetch(
+      `${supabaseUrl}/rest/v1/tenants?${filter}&select=status,settings`,
+      {
+        headers: {
+          apikey: key,
+          Authorization: `Bearer ${key}`,
+        },
+        cache: 'no-store',
+      }
+    );
+
+    if (!res.ok) return { suspended: false };
+    const rows = await res.json();
+    if (rows && rows.length > 0) {
+      const tenant = rows[0];
+      const suspension = tenant.settings?.suspension;
+      if (tenant.status === 'suspended' || suspension?.suspended_at) {
+        return {
+          suspended: true,
+          reason:
+            suspension?.suspended_reason ||
+            'Client account disabled by Motionz administrator.',
+        };
+      }
+    }
+  } catch {
+    // Fail safe to allow normal fallback flow
+  }
+  return { suspended: false };
+}
+
+/**
+ * Edge-compatible check to inspect whether a user account is suspended.
+ */
+export async function checkEdgeUserSuspension(
+  userId: string
+): Promise<{ suspended: boolean; reason?: string }> {
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const key =
+    process.env.SUPABASE_SERVICE_ROLE_KEY ||
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+  if (!supabaseUrl || !key || !userId) return { suspended: false };
+
+  try {
+    const res = await fetch(
+      `${supabaseUrl}/rest/v1/users?id=eq.${userId}&select=status,suspended_reason`,
+      {
+        headers: {
+          apikey: key,
+          Authorization: `Bearer ${key}`,
+        },
+        cache: 'no-store',
+      }
+    );
+
+    if (!res.ok) return { suspended: false };
+    const rows = await res.json();
+    if (rows && rows.length > 0) {
+      const user = rows[0];
+      if (user.status === 'suspended') {
+        return {
+          suspended: true,
+          reason:
+            user.suspended_reason ||
+            'Account has been disabled by an administrator.',
+        };
+      }
+    }
+  } catch {
+    // Fail safe
+  }
+  return { suspended: false };
+}
+

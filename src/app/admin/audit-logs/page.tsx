@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
-import { Card, CardHeader, Input, Table, Column, StatusBadge } from '@/components/ui';
+import { Card, CardHeader, Input, Table, Column, StatusBadge, TableSkeleton } from '@/components/ui';
 
 interface AuditLogRecord {
   id: string;
@@ -112,9 +112,7 @@ export default function AuditLogsPage() {
       </Card>
 
       {loading ? (
-        <Card style={{ textAlign: 'center', padding: 'var(--space-8)' }}>
-          <p>Loading audit ledger...</p>
-        </Card>
+        <TableSkeleton rows={8} columns={5} />
       ) : (
         <Table
           columns={columns}

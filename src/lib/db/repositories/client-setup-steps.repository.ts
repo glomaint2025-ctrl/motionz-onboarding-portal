@@ -20,8 +20,9 @@ export class ClientSetupStepRepository {
     }
 
     const store = getStore();
+    const resolvedId = resolveTenantId(tenantId);
     return store.clientSetupSteps
-      .filter((s) => s.tenant_id === tenantId)
+      .filter((s) => s.tenant_id === tenantId || s.tenant_id === resolvedId)
       .sort((a, b) => a.sort_order - b.sort_order);
   }
 
@@ -79,8 +80,9 @@ export class ClientSetupStepRepository {
     }
 
     const store = getStore();
+    const resolvedId = resolveTenantId(tenantId);
     const step = store.clientSetupSteps.find(
-      (s) => s.tenant_id === tenantId && s.step_key === stepKey
+      (s) => (s.tenant_id === tenantId || s.tenant_id === resolvedId) && s.step_key === stepKey
     );
     if (!step) throw new NotFoundError('ClientSetupStep', `${tenantId}:${stepKey}`);
 

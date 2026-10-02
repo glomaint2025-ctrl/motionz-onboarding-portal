@@ -8,8 +8,13 @@ export interface CreateInvitationParams {
   role: UserRole;
   phone?: string;
   fullName?: string;
+  allowed_modules?: string[];
   createdBy?: string;
   expiresInHours?: number;
+  baseUrl?: string;
+  request?: Request | any;
+  allowExistingUser?: boolean;
+  notify?: 'invite' | 'login' | false;
 }
 
 export interface VerificationResult {
@@ -32,14 +37,19 @@ export const hashToken = (token: string): string => {
  */
 export const createInvitation = async (
   params: CreateInvitationParams
-): Promise<{ invitation: UserInvitation; rawToken: string; magicLinkUrl: string }> => {
+): Promise<{ invitation: UserInvitation; rawToken: string; magicLinkUrl: string; emailDelivered: boolean }> => {
   return invitationService.createInvitation({
     tenantId: params.tenantId,
     email: params.email,
     role: params.role,
     phone: params.phone,
+    allowed_modules: params.allowed_modules,
     createdBy: params.createdBy,
     expiresInHours: params.expiresInHours,
+    baseUrl: params.baseUrl,
+    request: params.request,
+    allowExistingUser: params.allowExistingUser,
+    notify: params.notify,
   });
 };
 
@@ -66,10 +76,23 @@ export const verifyInvitationToken = async (rawToken: string): Promise<Verificat
 /**
  * Revokes an existing invitation token immediately.
  */
-export const revokeInvitation = async (invitationId: string, revokedByEmail: string): Promise<boolean> => {
+export const revokeInvitation = async (invitationId: string, revokedByEmail: string, revokedByRole: string = 'client'): Promise<boolean> => {
   try {
-    return await invitationService.revokeInvitation(invitationId, revokedByEmail);
+    return await invitationService.revokeInvitation(invitationId, revokedByEmail, revokedByRole);
   } catch {
     return false;
   }
+};
+
+/**
+ * Resends an existing invitation: revokes the old one and generates a new active magic link.
+ */
+export const resendInvitation = async (params: {
+  invitationId: string;
+  actorEmail: string;
+  actorRole?: string;
+  request?: Request | any;
+  baseUrl?: string;
+}) => {
+  return await invitationService.resendInvitation(params);
 };

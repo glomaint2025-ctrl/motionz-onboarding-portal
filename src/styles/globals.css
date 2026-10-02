@@ -67,6 +67,72 @@ input, select, textarea, button {
   font-size: var(--font-size-sm);
 }
 
+/* Global Custom Select & Dropdown Override (Theme-aligned) */
+select, .ui-select {
+  appearance: none;
+  -webkit-appearance: none;
+  -moz-appearance: none;
+  background-color: var(--color-bg-input);
+  color: var(--color-text-primary);
+  border: 1px solid var(--color-border-subtle);
+  border-radius: var(--radius-md);
+  padding: var(--space-2) var(--space-8) var(--space-2) var(--space-3);
+  font-size: var(--font-size-sm);
+  font-family: inherit;
+  font-weight: var(--font-weight-normal);
+  line-height: var(--line-height-normal);
+  cursor: pointer;
+  width: 100%;
+  display: block;
+  transition: border-color var(--transition-fast), box-shadow var(--transition-fast), background-color var(--transition-fast);
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%2334A5CB' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'%3E%3C/polyline%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right var(--space-3) center;
+  background-size: 16px 16px;
+}
+
+select::-ms-expand {
+  display: none;
+}
+
+select:hover, .ui-select:hover {
+  border-color: var(--color-border-strong);
+  background-color: var(--color-bg-card-hover);
+}
+
+select:focus, select:focus-visible, .ui-select:focus {
+  outline: none;
+  border-color: var(--color-primary);
+  box-shadow: 0 0 0 1px var(--color-primary), 0 0 12px var(--color-primary-muted);
+  background-color: var(--color-bg-card);
+}
+
+select:disabled, .ui-select:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  border-color: var(--color-border-subtle);
+  background-color: var(--color-bg-base);
+}
+
+/* Global Dropdown Option Menus */
+select option, .ui-select option {
+  background-color: var(--color-bg-surface);
+  color: var(--color-text-primary);
+  padding: var(--space-2) var(--space-3);
+  font-size: var(--font-size-sm);
+}
+
+select option:checked, .ui-select option:checked {
+  background-color: var(--color-bg-card-hover);
+  color: var(--color-primary);
+  font-weight: var(--font-weight-semibold);
+}
+
+select option:hover, .ui-select option:hover {
+  background-color: var(--color-bg-card-hover);
+  color: var(--color-primary);
+}
+
 /* Scrollbar Styling - Cross Browser */
 * {
   scrollbar-width: thin;

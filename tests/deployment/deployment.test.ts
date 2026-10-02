@@ -11,7 +11,7 @@ console.log('Testing Environment Variable Validation...');
 const validDev = validateEnv({
   NODE_ENV: 'development',
   SESSION_SECRET: 'dev-secret-key-that-is-at-least-32-characters-long',
-  NEXTAUTH_URL: 'http://localhost:3000',
+  NEXTAUTH_URL: process.env.NEXTAUTH_URL || 'https://portal.motionz.ai',
   GHL_API_BASE_URL: 'https://services.leadconnectorhq.com',
 });
 assert.strictEqual(validDev.valid, true, 'Valid dev config should pass');

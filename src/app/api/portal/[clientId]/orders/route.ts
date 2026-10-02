@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getTenantById, getOrders } from '@/lib/db';
-import { verifySession } from '@/lib/auth/session';
-import { assertTenantAccess } from '@/lib/auth/permissions';
+import { getTenantById, getOrders, DEMO_TENANT_UUID } from '@/lib/db';
+import { assertPortalAccess, handleAuthError } from '@/lib/auth/guard';
 
 export async function GET(
   request: NextRequest,
@@ -15,18 +14,10 @@ export async function GET(
       return NextResponse.json({ error: 'Tenant not found' }, { status: 404 });
     }
 
-    const tenantId = targetTenant ? targetTenant.id : 'tenant-demo-abc-roofing';
+    const tenantId = targetTenant ? targetTenant.id : DEMO_TENANT_UUID;
 
-    const sessionCookie = request.cookies.get('motionz_session');
-    if (sessionCookie) {
-      const session = verifySession(sessionCookie.value);
-      if (session) {
-        assertTenantAccess(
-          { role: session.role, tenantId: session.tenantId },
-          tenantId
-        );
-      }
-    }
+    // Enforce active account, tenant suspension, and tenant isolation
+    await assertPortalAccess(request, targetTenant, rawClientId);
 
     // Return strictly orders - no extraneous data
     const orders = await getOrders(tenantId);
@@ -40,8 +31,13 @@ export async function GET(
       }
     );
   } catch (error: any) {
-    if (error.message?.includes('Forbidden') || error.message?.includes('Unauthorized')) {
-      return NextResponse.json({ error: error.message }, { status: 403 });
+    if (
+      error.code ||
+      error.message?.includes('suspended') ||
+      error.message?.includes('Forbidden') ||
+      error.message?.includes('Unauthorized')
+    ) {
+      return handleAuthError(error);
     }
     return NextResponse.json(
       { error: 'Failed to retrieve orders' },

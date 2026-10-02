@@ -1,15 +1,37 @@
 'use client';
 
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import Link from 'next/link';
-import { Card, CardHeader, Button, StatusBadge } from '@/components/ui';
+import { Card, CardHeader, Button, StatusBadge, Skeleton } from '@/components/ui';
+
+interface AssignedClient {
+  id: string;
+  name: string;
+  primary_contact_name?: string;
+  progress_percent: number;
+  current_step_name: string | null;
+}
 
 export default function CSMWorkspacePage() {
-  const assignedClients = [
-    { id: 'demo', name: 'ABC Roofing', contact: 'John Smith', progress: 60, currentStep: 'GoHighLevel / A2P Verified', status: 'Active' },
-    { id: 'client-2', name: 'Apex Exteriors', contact: 'David Miller', progress: 80, currentStep: 'Phone system & A2P texting', status: 'Active' },
-    { id: 'client-3', name: 'Summit Restoration', contact: 'Sarah Connor', progress: 20, currentStep: 'Facebook', status: 'Needs Review' },
-  ];
+  const [clients, setClients] = useState<AssignedClient[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
+
+  useEffect(() => {
+    fetch('/api/csm/clients')
+      .then((res) => res.json())
+      .then((data) => {
+        if (data.success) setClients(data.clients || []);
+        else setError(data.error || 'Could not load your clients.');
+      })
+      .catch(() => setError('Network error while loading your clients.'))
+      .finally(() => setLoading(false));
+  }, []);
+
+  const inSetup = clients.filter((c) => c.progress_percent < 100).length;
+  const avgProgress = clients.length
+    ? Math.round(clients.reduce((sum, c) => sum + c.progress_percent, 0) / clients.length)
+    : 0;
 
   return (
     <div>
@@ -27,77 +49,75 @@ export default function CSMWorkspacePage() {
         }}
       >
         <Card>
-          <span style={{ fontSize: 'var(--font-size-xs)', color: 'var(--color-text-muted)' }}>
-            Assigned Clients
-          </span>
+          <span style={{ fontSize: 'var(--font-size-xs)', color: 'var(--color-text-muted)' }}>Assigned Clients</span>
           <div style={{ fontSize: 'var(--font-size-2xl)', fontWeight: 'bold', margin: 'var(--space-1) 0' }}>
-            14
+            {loading ? '-' : clients.length}
           </div>
-          <span style={{ fontSize: 'var(--font-size-xs)', color: 'var(--color-status-done-text)' }}>
-            3 requiring review
+          <span style={{ fontSize: 'var(--font-size-xs)', color: 'var(--color-text-secondary)' }}>
+            {loading ? '' : `${inSetup} still in setup`}
           </span>
         </Card>
 
         <Card>
-          <span style={{ fontSize: 'var(--font-size-xs)', color: 'var(--color-text-muted)' }}>
-            Average Velocity
-          </span>
+          <span style={{ fontSize: 'var(--font-size-xs)', color: 'var(--color-text-muted)' }}>Average Setup Progress</span>
           <div style={{ fontSize: 'var(--font-size-2xl)', fontWeight: 'bold', margin: 'var(--space-1) 0' }}>
-            68%
+            {loading ? '-' : `${avgProgress}%`}
           </div>
-          <span style={{ fontSize: 'var(--font-size-xs)', color: 'var(--color-text-secondary)' }}>
-            Setup completion
-          </span>
+          <span style={{ fontSize: 'var(--font-size-xs)', color: 'var(--color-text-secondary)' }}>Across assigned clients</span>
         </Card>
       </div>
 
-      {/* Assigned Clients Table */}
       <Card>
-        <CardHeader
-          title="My Assigned Portals"
-          subtitle="Direct link to client portal administrative view"
-        />
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-3)' }}>
-          {assignedClients.map((client) => (
-            <div
-              key={client.id}
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'space-between',
-                padding: 'var(--space-4)',
-                backgroundColor: 'var(--color-bg-surface)',
-                borderRadius: 'var(--radius-md)',
-                border: '1px solid var(--color-border-subtle)',
-                flexWrap: 'wrap',
-                gap: 'var(--space-3)',
-              }}
-            >
-              <div>
-                <div style={{ fontWeight: 'var(--font-weight-semibold)', fontSize: 'var(--font-size-base)' }}>
-                  {client.name}
+        <CardHeader title="My Assigned Portals" subtitle="Clients your CSM manager has assigned to you" />
+        {loading ? (
+          <Skeleton height="120px" />
+        ) : error ? (
+          <p style={{ color: 'var(--color-status-danger-text)' }}>{error}</p>
+        ) : clients.length === 0 ? (
+          <p style={{ color: 'var(--color-text-secondary)' }}>
+            No clients are assigned to you yet. Ask your CSM manager to assign clients.
+          </p>
+        ) : (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-3)' }}>
+            {clients.map((client) => (
+              <div
+                key={client.id}
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                  padding: 'var(--space-4)',
+                  backgroundColor: 'var(--color-bg-surface)',
+                  borderRadius: 'var(--radius-md)',
+                  border: '1px solid var(--color-border-subtle)',
+                  flexWrap: 'wrap',
+                  gap: 'var(--space-3)',
+                }}
+              >
+                <div>
+                  <div style={{ fontWeight: 'var(--font-weight-semibold)', fontSize: 'var(--font-size-base)' }}>{client.name}</div>
+                  <div style={{ fontSize: 'var(--font-size-xs)', color: 'var(--color-text-muted)', marginTop: '2px' }}>
+                    {client.primary_contact_name ? `Contact: ${client.primary_contact_name} · ` : ''}
+                    {client.current_step_name ? `Current step: ${client.current_step_name}` : 'Setup complete'}
+                  </div>
                 </div>
-                <div style={{ fontSize: 'var(--font-size-xs)', color: 'var(--color-text-muted)', marginTop: '2px' }}>
-                  Contact: {client.contact} &middot; Current Step: {client.currentStep}
-                </div>
-              </div>
 
-              <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-3)' }}>
-                <StatusBadge status={`${client.progress}% Progress`} variant="progress" />
-                <Link href={`/portal/${client.id}`}>
-                  <Button variant="secondary" size="sm">
-                    Open Client Portal
-                  </Button>
-                </Link>
-                <Link href={`/csm/clients/${client.id}/setup`}>
-                  <Button variant="primary" size="sm">
-                    Update Setup
-                  </Button>
-                </Link>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-3)' }}>
+                  <StatusBadge
+                    status={`${client.progress_percent}% Progress`}
+                    variant={client.progress_percent === 100 ? 'done' : 'progress'}
+                  />
+                  <Link href={`/portal/${client.id}`}>
+                    <Button variant="secondary" size="sm">Open Client Portal</Button>
+                  </Link>
+                  <Link href={`/csm/clients/${client.id}/setup`}>
+                    <Button variant="primary" size="sm">Update Setup</Button>
+                  </Link>
+                </div>
               </div>
-            </div>
-          ))}
-        </div>
+            ))}
+          </div>
+        )}
       </Card>
     </div>
   );

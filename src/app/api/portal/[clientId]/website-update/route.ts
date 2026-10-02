@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getTenantById, logAuditEvent } from '@/lib/db';
-import { verifySession } from '@/lib/auth/session';
-import { assertTenantAccess } from '@/lib/auth/permissions';
+import { getTenantById, logAuditEvent, DEMO_TENANT_UUID } from '@/lib/db';
+import { assertPortalAccess, handleAuthError } from '@/lib/auth/guard';
 
 export async function POST(
   request: NextRequest,
@@ -15,23 +14,13 @@ export async function POST(
       return NextResponse.json({ error: 'Tenant not found' }, { status: 404 });
     }
 
-    const tenantId = targetTenant ? targetTenant.id : 'tenant-demo-abc-roofing';
+    const tenantId = targetTenant ? targetTenant.id : DEMO_TENANT_UUID;
 
-    let actorRole = 'client';
-    let actorEmail = 'john@abcroofing.com';
+    // Enforce active account, tenant suspension, and tenant isolation
+    const session = await assertPortalAccess(request, targetTenant, rawClientId);
 
-    const sessionCookie = request.cookies.get('motionz_session');
-    if (sessionCookie) {
-      const session = verifySession(sessionCookie.value);
-      if (session) {
-        assertTenantAccess(
-          { role: session.role, tenantId: session.tenantId },
-          tenantId
-        );
-        actorRole = session.role;
-        actorEmail = session.email;
-      }
-    }
+    let actorRole = session?.role || 'client';
+    let actorEmail = session?.email || 'john@abcroofing.com';
 
     const body = await request.json();
     const { title, description, targetPageUrl, isUrgent } = body;
@@ -57,8 +46,13 @@ export async function POST(
       message: 'Website change request submitted to Motionz CSM queue',
     });
   } catch (error: any) {
-    if (error.message?.includes('Forbidden') || error.message?.includes('Unauthorized')) {
-      return NextResponse.json({ error: error.message }, { status: 403 });
+    if (
+      error.code ||
+      error.message?.includes('suspended') ||
+      error.message?.includes('Forbidden') ||
+      error.message?.includes('Unauthorized')
+    ) {
+      return handleAuthError(error);
     }
     return NextResponse.json(
       { error: 'Failed to submit website change request' },

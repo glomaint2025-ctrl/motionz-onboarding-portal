@@ -11,6 +11,8 @@ export interface AppShellProps {
   clientId?: string;
   companyName?: string;
   portalTitle?: string;
+  featureToggles?: Record<string, boolean>;
+  isLoading?: boolean;
   onLogout?: () => void;
 }
 
@@ -20,16 +22,32 @@ export const AppShell: React.FC<AppShellProps> = ({
   clientId = 'demo',
   companyName = 'ABC Roofing',
   portalTitle = 'Client Portal',
+  featureToggles,
+  isLoading = false,
   onLogout,
 }) => {
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
 
   const roleLabel = role === 'admin' ? 'Motionz Admin' : role === 'csm' ? 'Motionz CSM' : 'Client';
 
+  const handleLogout = onLogout || (async () => {
+    try {
+      await fetch('/api/auth/logout', { method: 'POST' });
+    } catch {
+      // Ignore network errors
+    } finally {
+      window.location.href = '/auth/login';
+    }
+  });
+
   return (
     <div className="app-shell">
       {/* Desktop Persistent Sidebar */}
-      <Sidebar role={role} clientId={clientId} />
+      <Sidebar
+        role={role}
+        clientId={clientId}
+        featureToggles={featureToggles}
+      />
 
       {/* Main Content Area */}
       <div className="main-wrapper">
@@ -38,7 +56,7 @@ export const AppShell: React.FC<AppShellProps> = ({
           portalTitle={portalTitle}
           userRole={roleLabel}
           onMenuToggle={() => setIsMobileMenuOpen(true)}
-          onLogout={onLogout}
+          onLogout={handleLogout}
         />
 
         <main className="content-body">
@@ -53,6 +71,7 @@ export const AppShell: React.FC<AppShellProps> = ({
         onOpen={() => setIsMobileMenuOpen(true)}
         role={role}
         clientId={clientId}
+        featureToggles={featureToggles}
       />
     </div>
   );

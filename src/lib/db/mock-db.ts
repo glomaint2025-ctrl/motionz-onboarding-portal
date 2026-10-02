@@ -17,6 +17,7 @@ import {
   Appointment,
   AuditLog,
   SecurityEvent,
+  PasswordResetToken,
 } from './schema';
 
 export interface DatabaseStore {
@@ -24,6 +25,7 @@ export interface DatabaseStore {
   users: User[];
   csmAssignments: CsmAssignment[];
   userInvitations: UserInvitation[];
+  passwordResetTokens: PasswordResetToken[];
   portalTemplates: PortalTemplate[];
   templateSteps: TemplateStep[];
   clientSetupSteps: ClientSetupStep[];
@@ -42,7 +44,7 @@ export interface DatabaseStore {
 
 export const createInitialStore = (): DatabaseStore => {
   const masterTemplateId = 'tmpl-master-standard';
-  const demoTenantId = 'tenant-demo-abc-roofing';
+  const demoTenantId = '4f3c7e8a-92b1-4d3a-8f5c-1a2b3c4d5e6f';
 
   return {
     portalTemplates: [
@@ -154,6 +156,7 @@ export const createInitialStore = (): DatabaseStore => {
         email: 'admin@motionz.ai',
         full_name: 'Motionz Admin',
         role: 'admin',
+        password_hash: 'password',
         created_at: '2026-09-01T00:00:00Z',
         updated_at: '2026-09-01T00:00:00Z',
       },
@@ -162,6 +165,16 @@ export const createInitialStore = (): DatabaseStore => {
         email: 'csm@motionz.ai',
         full_name: 'Motionz CSM',
         role: 'csm',
+        password_hash: 'password',
+        created_at: '2026-09-01T00:00:00Z',
+        updated_at: '2026-09-01T00:00:00Z',
+      },
+      {
+        id: 'user-csm-2',
+        email: 'csm.agent@motionz.ai',
+        full_name: 'Motionz CSM Agent',
+        role: 'csm',
+        password_hash: 'password',
         created_at: '2026-09-01T00:00:00Z',
         updated_at: '2026-09-01T00:00:00Z',
       },
@@ -171,6 +184,7 @@ export const createInitialStore = (): DatabaseStore => {
         full_name: 'John Smith',
         role: 'client',
         tenant_id: demoTenantId,
+        password_hash: 'password',
         created_at: '2026-09-10T00:00:00Z',
         updated_at: '2026-09-10T00:00:00Z',
       },
@@ -180,6 +194,19 @@ export const createInitialStore = (): DatabaseStore => {
         full_name: 'Sarah Connor',
         role: 'client_member',
         tenant_id: demoTenantId,
+        password_hash: 'password',
+        allowed_modules: [
+          'onboarding',
+          'leads',
+          'tracking',
+          'contracts',
+          'orders',
+          'tools',
+          'roof_measurement',
+          'video_scripts',
+          'book_call',
+          'team',
+        ],
         created_at: '2026-09-12T00:00:00Z',
         updated_at: '2026-09-12T00:00:00Z',
       },
@@ -195,6 +222,7 @@ export const createInitialStore = (): DatabaseStore => {
     ],
 
     userInvitations: [],
+    passwordResetTokens: [],
 
     clientSetupSteps: [
       {

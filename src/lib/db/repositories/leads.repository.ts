@@ -64,6 +64,48 @@ export class LeadRepository {
     store.leads.unshift(newRecord);
     return newRecord;
   }
+
+  /**
+   * Inserts or updates a lead keyed by its GoHighLevel contact id within a tenant,
+   * so repeated ContactCreate/ContactUpdate webhooks never duplicate a lead.
+   */
+  async upsertByGhlContactId(
+    tenantId: string,
+    ghlContactId: string,
+    fields: Partial<Omit<Lead, 'id' | 'tenant_id' | 'ghl_contact_id' | 'created_at' | 'updated_at'>>
+  ): Promise<Lead> {
+    const now = new Date().toISOString();
+    const supabase = getSupabaseServiceClient();
+    if (supabase) {
+      const { data: existing, error: findError } = await supabase
+        .from('leads')
+        .select('id')
+        .eq('tenant_id', tenantId)
+        .eq('ghl_contact_id', ghlContactId)
+        .maybeSingle();
+      if (findError) throw new DatabaseError(`Failed to look up lead: ${findError.message}`, findError);
+
+      if (existing) {
+        const { data, error } = await supabase
+          .from('leads')
+          .update({ ...fields, updated_at: now })
+          .eq('id', existing.id)
+          .select('*')
+          .single();
+        if (error) throw new DatabaseError(`Failed to update lead: ${error.message}`, error);
+        return data as Lead;
+      }
+      return this.create({ tenant_id: tenantId, ghl_contact_id: ghlContactId, status: 'New', ...fields });
+    }
+
+    const store = getStore();
+    const existing = store.leads.find((l) => l.tenant_id === tenantId && l.ghl_contact_id === ghlContactId);
+    if (existing) {
+      Object.assign(existing, fields, { updated_at: now });
+      return existing;
+    }
+    return this.create({ tenant_id: tenantId, ghl_contact_id: ghlContactId, status: 'New', ...fields });
+  }
 }
 
 export const leadRepository = new LeadRepository();

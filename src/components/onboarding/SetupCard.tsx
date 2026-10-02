@@ -144,35 +144,6 @@ export const SetupCard: React.FC<SetupCardProps> = ({
           </Button>
         )}
 
-        {step.step_key === 'facebook' && (
-          <Button
-            variant="primary"
-            size="sm"
-            onClick={() => onActionClick && onActionClick(step.step_key)}
-          >
-            Confirm Facebook Access
-          </Button>
-        )}
-
-        {step.step_key === 'domain_web' && (
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => onActionClick && onActionClick(step.step_key)}
-          >
-            Verify Domain Status
-          </Button>
-        )}
-
-        {step.step_key === 'phone_system' && (
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => onActionClick && onActionClick(step.step_key)}
-          >
-            Check Phone Provisioning
-          </Button>
-        )}
       </div>
     </Card>
   );

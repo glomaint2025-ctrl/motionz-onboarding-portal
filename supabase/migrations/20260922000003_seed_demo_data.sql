@@ -96,7 +96,7 @@ VALUES
 -- 4. Insert Demo Tenant: ABC Roofing
 INSERT INTO tenants (id, name, slug, primary_email, primary_contact_name, phone, status, template_id, ghl_location_id)
 VALUES (
-    'd0000000-0000-0000-0000-000000000001',
+    '4f3c7e8a-92b1-4d3a-8f5c-1a2b3c4d5e6f',
     'ABC Roofing',
     'abc-roofing',
     'john@abcroofing.com',
@@ -120,24 +120,24 @@ ON CONFLICT (email) DO NOTHING;
 
 -- ABC Roofing Client Owner
 INSERT INTO users (id, email, full_name, role, tenant_id)
-VALUES ('e0000000-0000-0000-0000-000000000003', 'john@abcroofing.com', 'John Smith', 'client', 'd0000000-0000-0000-0000-000000000001')
+VALUES ('e0000000-0000-0000-0000-000000000003', 'john@abcroofing.com', 'John Smith', 'client', '4f3c7e8a-92b1-4d3a-8f5c-1a2b3c4d5e6f')
 ON CONFLICT (email) DO NOTHING;
 
 -- ABC Roofing Team Member
 INSERT INTO users (id, email, full_name, role, tenant_id)
-VALUES ('e0000000-0000-0000-0000-000000000004', 'sarah@abcroofing.com', 'Sarah Connor', 'client_member', 'd0000000-0000-0000-0000-000000000001')
+VALUES ('e0000000-0000-0000-0000-000000000004', 'sarah@abcroofing.com', 'Sarah Connor', 'client_member', '4f3c7e8a-92b1-4d3a-8f5c-1a2b3c4d5e6f')
 ON CONFLICT (email) DO NOTHING;
 
 -- 6. Assign CSM to ABC Roofing
 INSERT INTO csm_assignments (csm_user_id, tenant_id)
-VALUES ('e0000000-0000-0000-0000-000000000002', 'd0000000-0000-0000-0000-000000000001')
+VALUES ('e0000000-0000-0000-0000-000000000002', '4f3c7e8a-92b1-4d3a-8f5c-1a2b3c4d5e6f')
 ON CONFLICT DO NOTHING;
 
 -- 7. Insert ABC Roofing Client Setup Steps (60% Progress: 3 Done, 1 In Progress, 1 Not Started)
 INSERT INTO client_setup_steps (tenant_id, template_step_id, step_key, name, owner, status, what_it_is, right_now, unlocks, sort_order)
 VALUES
 (
-    'd0000000-0000-0000-0000-000000000001',
+    '4f3c7e8a-92b1-4d3a-8f5c-1a2b3c4d5e6f',
     'b0000000-0000-0000-0000-000000000001',
     'google_sheet',
     'Google Sheet',
@@ -149,7 +149,7 @@ VALUES
     1
 ),
 (
-    'd0000000-0000-0000-0000-000000000001',
+    '4f3c7e8a-92b1-4d3a-8f5c-1a2b3c4d5e6f',
     'b0000000-0000-0000-0000-000000000002',
     'ghl_a2p',
     'GoHighLevel / A2P Verified',
@@ -161,7 +161,7 @@ VALUES
     2
 ),
 (
-    'd0000000-0000-0000-0000-000000000001',
+    '4f3c7e8a-92b1-4d3a-8f5c-1a2b3c4d5e6f',
     'b0000000-0000-0000-0000-000000000003',
     'facebook',
     'Facebook',
@@ -173,7 +173,7 @@ VALUES
     3
 ),
 (
-    'd0000000-0000-0000-0000-000000000001',
+    '4f3c7e8a-92b1-4d3a-8f5c-1a2b3c4d5e6f',
     'b0000000-0000-0000-0000-000000000004',
     'domain_web',
     'Domain, email & website',
@@ -185,7 +185,7 @@ VALUES
     4
 ),
 (
-    'd0000000-0000-0000-0000-000000000001',
+    '4f3c7e8a-92b1-4d3a-8f5c-1a2b3c4d5e6f',
     'b0000000-0000-0000-0000-000000000005',
     'phone_system',
     'Phone system & A2P texting',

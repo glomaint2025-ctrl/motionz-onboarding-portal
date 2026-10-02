@@ -1,6 +1,6 @@
 import assert from 'assert';
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
-import { getSupabaseServiceClient } from '../../src/lib/db/supabase-client';
+import { getSupabaseServiceClient, DEMO_TENANT_UUID } from '../../src/lib/db/supabase-client';
 import { randomUUID } from 'crypto';
 
 interface TestUserSession {
@@ -32,7 +32,7 @@ export async function runAuthenticatedRlsTests() {
   const password = `RlsTestPass!${testSuffix}Aa1`;
 
   // Tenant IDs
-  const tenantAId = 'd0000000-0000-0000-0000-000000000001'; // Seed ABC Roofing
+  const tenantAId = DEMO_TENANT_UUID; // Seed ABC Roofing
   const tenantBId = randomUUID();
   const tenantBSlug = `rls-test-b-${testSuffix}`;
 

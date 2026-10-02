@@ -33,7 +33,7 @@ export function validateEnv(env: Record<string, string | undefined> = process.en
   }
 
   const sessionSecret = env.SESSION_SECRET || 'motionz-default-dev-secret-key-at-least-32-chars-long';
-  if (nodeEnv === 'production' && !env.VERCEL) {
+  if (nodeEnv === 'production') {
     if (!env.SESSION_SECRET) {
       errors.push('SESSION_SECRET is required in production.');
     } else if (env.SESSION_SECRET.length < 32) {
@@ -41,11 +41,17 @@ export function validateEnv(env: Record<string, string | undefined> = process.en
     }
   }
 
-  const nextAuthUrl = env.NEXTAUTH_URL || 'http://localhost:3000';
-  try {
-    new URL(nextAuthUrl);
-  } catch {
-    errors.push(`NEXTAUTH_URL "${nextAuthUrl}" is not a valid URL.`);
+  const nextAuthUrl = env.NEXTAUTH_URL || env.APP_URL || env.NEXT_PUBLIC_APP_URL || '';
+  if (!nextAuthUrl) {
+    if (nodeEnv === 'production') {
+      errors.push('NEXTAUTH_URL or APP_URL environment variable is required in production.');
+    }
+  } else {
+    try {
+      new URL(nextAuthUrl);
+    } catch {
+      errors.push(`NEXTAUTH_URL "${nextAuthUrl}" is not a valid URL.`);
+    }
   }
 
   const ghlBaseUrl = env.GHL_API_BASE_URL || 'https://services.leadconnectorhq.com';

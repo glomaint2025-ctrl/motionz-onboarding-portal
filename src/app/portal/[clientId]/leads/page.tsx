@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { useParams } from 'next/navigation';
-import { Card, CardHeader, Button, StatusBadge, Input, Select } from '@/components/ui';
+import { Card, CardHeader, Button, StatusBadge, Input, Select, Skeleton } from '@/components/ui';
 
 interface Lead {
   id: string;
@@ -32,6 +32,7 @@ export default function LeadsAndPerformancePage() {
   const [statusFilter, setStatusFilter] = useState('ALL');
   const [leads, setLeads] = useState<Lead[]>([]);
   const [appointments, setAppointments] = useState<Appointment[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
   const [ghlConnected, setGhlConnected] = useState(true);
   const [locationId, setLocationId] = useState('loc_ghl_demo_abc');
 
@@ -54,6 +55,8 @@ export default function LeadsAndPerformancePage() {
         }
       } catch (err) {
         // Fallback
+      } finally {
+        if (isMounted) setIsLoading(false);
       }
     }
     loadLeads();
@@ -62,26 +65,18 @@ export default function LeadsAndPerformancePage() {
     };
   }, [clientId]);
 
-  // Default fallback leads if initial fetch empty
-  const activeLeads: Lead[] = leads.length > 0 ? leads : [
-    { id: 'lead-1', first_name: 'Robert', last_name: 'Johnson', email: 'robert.j@example.com', phone: '(555) 101-2020', status: 'Appointment Booked', source: 'Facebook Ads', created_at: '2026-09-18T09:00:00Z' },
-    { id: 'lead-2', first_name: 'Mary', last_name: 'Williams', email: 'mary.w@example.com', phone: '(555) 303-4040', status: 'Contacted', source: 'Google Ads', created_at: '2026-09-19T11:30:00Z' },
-    { id: 'lead-3', first_name: 'Michael', last_name: 'Brown', email: 'michael.b@example.com', phone: '(555) 505-6060', status: 'Inspection Completed', source: 'Facebook Ads', created_at: '2026-09-20T14:15:00Z' },
-  ];
-
-  const activeAppointments: Appointment[] = appointments.length > 0 ? appointments : [
-    { id: 'apt-1', contact_name: 'Robert Johnson', appointment_time: '2026-09-24T10:00:00Z', status: 'confirmed', notes: 'Residential roof inspection - 2,400 sq ft home' },
-  ];
+  const activeLeads: Lead[] = leads;
+  const activeAppointments: Appointment[] = appointments;
 
   const filteredLeads = activeLeads.filter((lead) => {
-    const fullName = `${lead.first_name} ${lead.last_name}`.toLowerCase();
+    const fullName = `${lead.first_name || ''} ${lead.last_name || ''}`.toLowerCase();
     const matchesQuery =
       fullName.includes(searchQuery.toLowerCase()) ||
-      lead.email.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      lead.phone.includes(searchQuery);
+      (lead.email || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
+      (lead.phone || '').includes(searchQuery);
 
     const matchesStatus =
-      statusFilter === 'ALL' || lead.status.toLowerCase() === statusFilter.toLowerCase();
+      statusFilter === 'ALL' || (lead.status || '').toLowerCase() === statusFilter.toLowerCase();
 
     return matchesQuery && matchesStatus;
   });
@@ -164,7 +159,7 @@ export default function LeadsAndPerformancePage() {
             Appointments Booked
           </span>
           <div style={{ fontSize: 'var(--font-size-2xl)', fontWeight: 'bold', margin: 'var(--space-1) 0' }}>
-            {activeAppointments.length}
+            {isLoading ? <Skeleton width="50px" height="32px" /> : activeAppointments.length}
           </div>
           <span style={{ fontSize: 'var(--font-size-xs)', color: 'var(--color-status-progress-text)' }}>
             Confirmed inspections
@@ -176,7 +171,7 @@ export default function LeadsAndPerformancePage() {
             Inspection Completed
           </span>
           <div style={{ fontSize: 'var(--font-size-2xl)', fontWeight: 'bold', margin: 'var(--space-1) 0' }}>
-            {activeLeads.filter((l) => l.status === 'Inspection Completed').length}
+            {isLoading ? <Skeleton width="50px" height="32px" /> : activeLeads.filter((l) => l.status === 'Inspection Completed').length}
           </div>
           <span style={{ fontSize: 'var(--font-size-xs)', color: 'var(--color-status-done-text)' }}>
             Ready for proposal
@@ -251,7 +246,34 @@ export default function LeadsAndPerformancePage() {
           </div>
 
           {/* Leads Table / Responsive List */}
-          {filteredLeads.length === 0 ? (
+          {isLoading ? (
+            <div style={{ overflowX: 'auto' }}>
+              <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 'var(--font-size-sm)' }}>
+                <thead>
+                  <tr style={{ borderBottom: '1px solid var(--color-border-subtle)', textAlign: 'left' }}>
+                    <th style={{ padding: 'var(--space-2) var(--space-3)', color: 'var(--color-text-muted)' }}>Contact</th>
+                    <th style={{ padding: 'var(--space-2) var(--space-3)', color: 'var(--color-text-muted)' }}>Email</th>
+                    <th style={{ padding: 'var(--space-2) var(--space-3)', color: 'var(--color-text-muted)' }}>Phone</th>
+                    <th style={{ padding: 'var(--space-2) var(--space-3)', color: 'var(--color-text-muted)' }}>Source</th>
+                    <th style={{ padding: 'var(--space-2) var(--space-3)', color: 'var(--color-text-muted)' }}>Date</th>
+                    <th style={{ padding: 'var(--space-2) var(--space-3)', color: 'var(--color-text-muted)' }}>Status</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {[1, 2, 3, 4].map((idx) => (
+                    <tr key={idx} style={{ borderBottom: '1px solid var(--color-border-subtle)' }}>
+                      <td style={{ padding: 'var(--space-3)' }}><Skeleton width="130px" height="18px" /></td>
+                      <td style={{ padding: 'var(--space-3)' }}><Skeleton width="160px" height="16px" /></td>
+                      <td style={{ padding: 'var(--space-3)' }}><Skeleton width="110px" height="16px" /></td>
+                      <td style={{ padding: 'var(--space-3)' }}><Skeleton width="90px" height="14px" /></td>
+                      <td style={{ padding: 'var(--space-3)' }}><Skeleton width="75px" height="14px" /></td>
+                      <td style={{ padding: 'var(--space-3)' }}><Skeleton width="85px" height="24px" borderRadius="var(--radius-full)" /></td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          ) : filteredLeads.length === 0 ? (
             <div style={{ padding: 'var(--space-6)', textAlign: 'center', color: 'var(--color-text-muted)' }}>
               No leads match the selected criteria.
             </div>

@@ -1,100 +1,100 @@
-# Phase 3: Permissions & Capability Engine
+# Phase 02: Centralized Capability Engine & Permissions
 
-This document defines the capability token dictionary, programmatic permission guards, and the mapping of roles to permissions.
+This document defines the capability dictionary, programmatic guards, and role-to-capability mappings implemented in `src/lib/auth/permissions.ts`.
 
 ---
 
-## 1. Capability Permission Token Dictionary
+## 1. Capability Token Dictionary
 
 ```typescript
-export type PermissionToken =
-  // Platform & Multi-Tenant Administration
-  | 'platform:view_analytics'
-  | 'platform:manage_integrations'
-  | 'platform:view_audit_logs'
+export type Capability =
+  // Platform & Administration
+  | 'platform:analytics'
+  | 'platform:integrations'
+  | 'platform:audit_logs'
   | 'platform:manage_staff'
   
-  // Portal & Template Operations
-  | 'template:create'
-  | 'template:edit'
-  | 'portal:provision'
-  | 'portal:duplicate'
+  // Portal Lifecycle
+  | 'portal:create'
   | 'portal:delete'
-  | 'portal:toggle_features'
+  | 'portal:feature_toggle'
   | 'portal:assign_csm'
-  | 'portal:impersonate'
   
-  // Onboarding Management
-  | 'onboarding:edit_step_content'
-  | 'onboarding:override_status'
-  | 'onboarding:submit_forms'
+  // Onboarding Roadmap
+  | 'onboarding:edit_content'
+  | 'onboarding:update_status'
+  | 'onboarding:view_guidance'
+  | 'onboarding:submit_form'
   
   // Client Features & Tools
-  | 'contracts:view'
-  | 'contracts:download'
-  | 'contracts:upload'
-  | 'leads:view'
-  | 'leads:send_sms'
-  | 'tools:roof_measure'
-  | 'tools:brand_studio'
-  | 'tools:sales_coach'
-  | 'tools:call_practice'
-  | 'ai:crm_execute'
-  | 'video:select_preference'
-  | 'video:manage_scripts'
+  | 'client:view_contract'
+  | 'client:view_leads'
+  | 'client:use_tools'
+  | 'client:use_roof_measurement'
+  | 'client:video_preference'
+  | 'client:view_scripts'
+  | 'client:book_call'
   
-  // Organization Administration
+  // Team & Organization
   | 'team:invite'
   | 'team:remove'
-  | 'profile:update_company';
+  | 'profile:update';
 ```
 
 ---
 
-## 2. Role-to-Permission Mapping Matrix
+## 2. Capability Mapping Matrix
 
-| Permission Token | Admin | CSM | Client | Client Member |
-| :--- | :---: | :---: | :---: | :---: |
-| `platform:view_analytics` | ✅ | ❌ | ❌ | ❌ |
-| `platform:manage_integrations` | ✅ | ❌ | ❌ | ❌ |
-| `platform:view_audit_logs` | ✅ | ❌ | ❌ | ❌ |
-| `platform:manage_staff` | ✅ | ❌ | ❌ | ❌ |
-| `template:create` / `template:edit` | ✅ | ❌ | ❌ | ❌ |
-| `portal:provision` / `portal:duplicate`| ✅ | ✅ | ❌ | ❌ |
-| `portal:delete` | ✅ | ❌ | ❌ | ❌ |
-| `portal:toggle_features` | ✅ | ❌ | ❌ | ❌ |
-| `portal:assign_csm` | ✅ | ✅ | ❌ | ❌ |
-| `portal:impersonate` | ✅ | ✅ | ❌ | ❌ |
-| `onboarding:edit_step_content` | ✅ | ✅ | ❌ | ❌ |
-| `onboarding:override_status` | ✅ | ✅ | ❌ | ❌ |
-| `onboarding:submit_forms` | ✅ | ✅ | ✅ | ✅ |
-| `contracts:view` / `contracts:download`| ✅ | ✅ | ✅ | ⚠️ (Optional toggle) |
-| `contracts:upload` | ✅ | ✅ | ❌ | ❌ |
-| `leads:view` | ✅ | ✅ | ✅ | ✅ |
-| `leads:send_sms` | ✅ | ✅ | ✅ | ✅ |
-| `tools:roof_measure` | ✅ | ✅ | ✅ | ✅ |
-| `tools:brand_studio` | ✅ | ✅ | ✅ | ✅ |
-| `tools:sales_coach` | ✅ | ✅ | ✅ | ✅ |
-| `tools:call_practice` | ✅ | ✅ | ✅ | ✅ |
-| `ai:crm_execute` | ✅ | ✅ | ✅ | ❌ |
-| `video:select_preference` | ✅ | ✅ | ✅ | ❌ |
-| `video:manage_scripts` | ✅ | ✅ | ✅ | ✅ |
-| `team:invite` / `team:remove` | ✅ | ✅ | ✅ | ❌ |
-| `profile:update_company` | ✅ | ✅ | ✅ | ❌ |
+| Capability | Admin | CSM | Client | Client Member | Description |
+| :--- | :---: | :---: | :---: | :---: | :--- |
+| `platform:analytics` | ✅ | ❌ | ❌ | ❌ | Cross-client executive statistics |
+| `platform:integrations` | ✅ | ❌ | ❌ | ❌ | GHL / Google Sheets API configuration |
+| `platform:audit_logs` | ✅ | ❌ | ❌ | ❌ | Immutable system security log review |
+| `platform:manage_staff` | ✅ | ❌ | ❌ | ❌ | Staff user management |
+| `portal:create` | ✅ | ❌ | ❌ | ❌ | Client portal provisioning |
+| `portal:delete` | ✅ | ❌ | ❌ | ❌ | Client portal soft-delete / archiving |
+| `portal:feature_toggle` | ✅ | ❌ | ❌ | ❌ | Client module enable/disable overrides |
+| `portal:assign_csm` | ✅ | ❌ | ❌ | ❌ | Link CSM to client organization |
+| `onboarding:edit_content` | ✅ | ✅ | ❌ | ❌ | Update onboarding instructions & copy |
+| `onboarding:update_status` | ✅ | ✅ | ❌ | ❌ | Override setup step status |
+| `onboarding:view_guidance` | ✅ | ✅ | ✅ | ✅ | View roadmap cards & guidance |
+| `onboarding:submit_form` | ✅ | ✅ | ✅ | ✅ | Submit onboarding forms |
+| `client:view_contract` | ✅ | ✅ | ✅ | ❌ | Inspect executed agreements & LLC filings |
+| `client:view_leads` | ✅ | ✅ | ✅ | ✅ | View GHL live leads & appointments |
+| `client:use_tools` | ✅ | ✅ | ✅ | ✅ | Access operational tool suite |
+| `client:use_roof_measurement` | ✅ | ✅ | ✅ | ✅ | Satellite roof measurement tool |
+| `client:video_preference` | ✅ | ✅ | ✅ | ❌ | AI avatar vs self-filmed video selection |
+| `client:view_scripts` | ✅ | ✅ | ✅ | ✅ | Generated video scripts |
+| `client:book_call` | ✅ | ✅ | ✅ | ✅ | Strategic onboarding call booking |
+| `team:invite` | ✅ | ❌ | ✅ | ❌ | Invite organization team members |
+| `team:remove` | ✅ | ❌ | ✅ | ❌ | Remove team members |
+| `profile:update` | ✅ | ✅ | ✅ | ❌ | Update primary company profile & contacts |
 
 ---
 
-## 3. Programmatic Permission Helper
+## 3. Programmatic Authorization Helpers
 
 ```typescript
-export function hasPermission(role: UserRole, permission: PermissionToken): boolean {
-  const rolePermissions = ROLE_PERMISSIONS_MAP[role];
-  return rolePermissions ? rolePermissions.includes(permission) : false;
-}
+// Capability inspection
+export const hasPermission = (role: UserRole, capability: Capability): boolean;
 
-export function assertPermission(role: UserRole, permission: PermissionToken): void {
-  if (!hasPermission(role, permission)) {
-    throw new AuthorizationError(`Forbidden: Role '${role}' lacks capability '${permission}'`);
-  }
-}
+// Throws Error if capability is missing
+export const assertPermission = (role: UserRole, capability: Capability): void;
+
+// Asserts tenant quarantine boundary (allows staff, isolates clients & members)
+export const assertTenantAccess = (
+  user: { role: UserRole; tenantId?: string },
+  targetTenantId: string
+): void;
 ```
+
+---
+
+## 4. Decision Log
+
+| Decision Item | Status | Summary |
+| :--- | :---: | :--- |
+| Centralized Permissions Map | **CONFIRMED** | No scattered ad-hoc role comparisons across UI components. |
+| Admin-Only Capabilities | **CONFIRMED** | `portal:delete`, `portal:feature_toggle`, `platform:analytics` strictly admin. |
+| Client Member Quarantine | **CONFIRMED** | No team invitations, no profile changes, no contract access. |
+| Tenant Access Assertion | **CONFIRMED** | Evaluated with normalized UUID resolution (`resolveTenantId`). |

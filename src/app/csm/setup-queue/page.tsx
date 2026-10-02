@@ -21,18 +21,18 @@ export default function CSMSetupQueuePage() {
     const fetchQueue = async () => {
       try {
         setLoading(true);
-        const res = await fetch('/api/admin/clients');
+        const res = await fetch('/api/csm/clients?status=in_progress');
         const data = await res.json();
         if (data.success && data.tenants) {
           // Filter to clients that have incomplete steps (< 100%)
           const activeQueue: QueueItem[] = data.tenants
-            .filter((t: any) => t.status === 'active' && t.progress_percent < 100)
+            .filter((t: any) => t.status !== 'suspended' && t.current_step_name)
             .map((t: any) => ({
               id: t.id,
               name: t.name,
               primary_email: t.primary_email,
-              current_step_name: 'GoHighLevel / A2P Verified',
-              current_step_status: 'In Progress',
+              current_step_name: t.current_step_name,
+              current_step_status: t.current_step_status === 'in_progress' ? 'In Progress' : 'Not Started',
               progress_percent: t.progress_percent,
             }));
           setQueue(activeQueue);

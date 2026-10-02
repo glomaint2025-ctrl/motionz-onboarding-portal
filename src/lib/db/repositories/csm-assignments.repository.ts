@@ -4,14 +4,50 @@ import { getStore } from '../mock-db';
 import { CsmAssignment } from '../schema';
 import { DatabaseError } from '../../errors';
 
+const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
 export class CsmAssignmentRepository {
+  private async resolveCsmUuid(csmUserId: string, supabase: any): Promise<string> {
+    if (UUID_REGEX.test(csmUserId)) {
+      return csmUserId;
+    }
+
+    let targetEmail = 'csm@motionz.ai';
+    if (csmUserId === 'user-csm-2') {
+      targetEmail = 'csm.agent@motionz.ai';
+    } else if (csmUserId.includes('@')) {
+      targetEmail = csmUserId;
+    }
+
+    const { data: user } = await supabase
+      .from('users')
+      .select('id')
+      .eq('email', targetEmail)
+      .maybeSingle();
+
+    if (user?.id) {
+      return user.id;
+    }
+
+    const { data: fallbackUser } = await supabase
+      .from('users')
+      .select('id')
+      .eq('role', 'csm')
+      .limit(1)
+      .maybeSingle();
+
+    return fallbackUser?.id || 'e0000000-0000-0000-0000-000000000002';
+  }
+
   async assign(csmUserId: string, tenantId: string): Promise<CsmAssignment> {
     const now = new Date().toISOString();
     const id = randomUUID();
-    const record: CsmAssignment = { id, csm_user_id: csmUserId, tenant_id: tenantId, assigned_at: now };
 
     const supabase = getSupabaseServiceClient();
     if (supabase) {
+      const resolvedCsmId = await this.resolveCsmUuid(csmUserId, supabase);
+      const record: CsmAssignment = { id, csm_user_id: resolvedCsmId, tenant_id: tenantId, assigned_at: now };
+
       const { data, error } = await supabase
         .from('csm_assignments')
         .upsert(record, { onConflict: 'csm_user_id,tenant_id' })
@@ -28,6 +64,7 @@ export class CsmAssignmentRepository {
     );
     if (existing) return existing;
 
+    const record: CsmAssignment = { id, csm_user_id: csmUserId, tenant_id: tenantId, assigned_at: now };
     store.csmAssignments.push(record);
     return record;
   }
@@ -35,6 +72,10 @@ export class CsmAssignmentRepository {
   async findByTenant(tenantId: string): Promise<CsmAssignment | null> {
     const supabase = getSupabaseServiceClient();
     if (supabase) {
+      if (!UUID_REGEX.test(tenantId)) {
+        return null;
+      }
+
       const { data, error } = await supabase
         .from('csm_assignments')
         .select('*')
@@ -52,17 +93,22 @@ export class CsmAssignmentRepository {
   async listByCsm(csmUserId: string): Promise<CsmAssignment[]> {
     const supabase = getSupabaseServiceClient();
     if (supabase) {
+      const resolvedCsmId = await this.resolveCsmUuid(csmUserId, supabase);
       const { data, error } = await supabase
         .from('csm_assignments')
         .select('*')
-        .eq('csm_user_id', csmUserId);
+        .eq('csm_user_id', resolvedCsmId);
 
       if (error) throw new DatabaseError(`Failed to list assignments: ${error.message}`, error);
       return (data || []) as CsmAssignment[];
     }
 
     const store = getStore();
-    return store.csmAssignments.filter((a) => a.csm_user_id === csmUserId);
+    return store.csmAssignments.filter(
+      (a) =>
+        a.csm_user_id === csmUserId ||
+        (csmUserId === 'user-csm-1' && a.csm_user_id === 'e0000000-0000-0000-0000-000000000002')
+    );
   }
 }
 

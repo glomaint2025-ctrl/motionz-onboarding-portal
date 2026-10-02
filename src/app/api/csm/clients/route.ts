@@ -1,34 +1,33 @@
-import { NextRequest, NextResponse } from 'next/server';
+import { NextResponse } from 'next/server';
 import { listTenants, getClientSetupSteps } from '@/lib/db';
-import { verifySession } from '@/lib/auth/session';
-import { assertPermission } from '@/lib/auth/permissions';
+import { requireAuth, handleAuthError, getVisibleTenantIds } from '@/lib/auth/guard';
 import { calculateSetupProgress } from '@/lib/onboarding/progress';
+import { parsePaginationParams, buildPaginationMeta } from '@/lib/utils/pagination';
 
-export async function GET(request: NextRequest) {
+/**
+ * Client roster for the CSM workspace. CSMs see only their assigned clients; admins see all.
+ * Supports ?page, ?pageSize, ?search and ?status (all | active | onboarding | suspended | in_progress).
+ */
+export async function GET(request: Request) {
   try {
-    const sessionCookie = request.cookies.get('motionz_session');
-    if (!sessionCookie) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-    }
+    const { session } = await requireAuth(request, {
+      roles: ['csm', 'admin'],
+      capability: 'onboarding:view_guidance',
+    });
 
-    const session = verifySession(sessionCookie.value);
-    if (!session) {
-      return NextResponse.json({ error: 'Invalid or expired session' }, { status: 401 });
-    }
+    const { searchParams } = new URL(request.url);
+    const hasPagination = searchParams.has('page') || searchParams.has('pageSize') || searchParams.has('limit');
+    const { page, pageSize, offset, search } = parsePaginationParams(request, 10);
+    const status = searchParams.get('status')?.trim() || 'all';
 
-    if (session.role !== 'csm' && session.role !== 'admin') {
-      return NextResponse.json({ error: 'Forbidden: CSM workspace restricted to staff' }, { status: 403 });
-    }
+    const visible = await getVisibleTenantIds(session!);
+    const tenants = (await listTenants()).filter((t) => !visible || visible.has(t.id));
 
-    assertPermission(session.role, 'onboarding:view_guidance');
-
-    const tenants = await listTenants();
-
-    // Attach minimal progress summary per tenant
-    const clientSummaries = await Promise.all(
+    const clients = await Promise.all(
       tenants.map(async (t) => {
         const steps = await getClientSetupSteps(t.id);
         const progress = calculateSetupProgress(steps);
+        const currentStep = steps.find((s) => s.status !== 'done');
         return {
           id: t.id,
           name: t.name,
@@ -37,6 +36,12 @@ export async function GET(request: NextRequest) {
           primary_email: t.primary_email,
           primary_contact_name: t.primary_contact_name,
           phone: t.phone,
+          progress_percent: progress.percentage,
+          completed_steps: progress.completedSteps,
+          total_steps: progress.totalSteps,
+          current_step_name: currentStep?.name || null,
+          current_step_status: currentStep?.status || null,
+          // Legacy field names kept for existing consumers
           progressPercentage: progress.percentage,
           completedCount: progress.completedSteps,
           totalCount: progress.totalSteps,
@@ -44,21 +49,41 @@ export async function GET(request: NextRequest) {
       })
     );
 
+    const q = search?.toLowerCase();
+    const filtered = clients.filter((c) => {
+      const matchesSearch =
+        !q ||
+        c.name.toLowerCase().includes(q) ||
+        c.primary_email.toLowerCase().includes(q) ||
+        Boolean(c.primary_contact_name && c.primary_contact_name.toLowerCase().includes(q));
+      const matchesStatus =
+        status === 'all' ||
+        (status === 'in_progress' ? c.progress_percent < 100 : c.status === status);
+      return matchesSearch && matchesStatus;
+    });
+
+    const stats = {
+      totalClients: clients.length,
+      activeClients: clients.filter((c) => c.status === 'active').length,
+      pendingSetup: clients.filter((c) => c.progress_percent < 100).length,
+      archivedClients: 0,
+      newThisMonth: 0,
+    };
+
     return NextResponse.json(
-      { clients: clientSummaries },
       {
-        headers: {
-          'Cache-Control': 'no-store, no-cache, must-revalidate',
-        },
-      }
+        success: true,
+        tenants: hasPagination ? filtered.slice(offset, offset + pageSize) : filtered,
+        clients: filtered,
+        pagination: buildPaginationMeta(filtered.length, page, pageSize),
+        stats,
+      },
+      { headers: { 'Cache-Control': 'no-store, no-cache, must-revalidate' } }
     );
-  } catch (error: any) {
-    if (error.message?.includes('Forbidden') || error.message?.includes('Unauthorized')) {
-      return NextResponse.json({ error: error.message }, { status: 403 });
+  } catch (err: any) {
+    if (err.statusCode === 401 || err.statusCode === 403) {
+      return handleAuthError(err);
     }
-    return NextResponse.json(
-      { error: 'Failed to retrieve CSM clients' },
-      { status: 500 }
-    );
+    return NextResponse.json({ error: 'Failed to retrieve CSM clients' }, { status: 500 });
   }
 }

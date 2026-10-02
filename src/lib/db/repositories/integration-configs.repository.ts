@@ -39,9 +39,11 @@ export class IntegrationConfigRepository {
 
     const supabase = getSupabaseServiceClient();
     if (supabase) {
+      // Let Postgres generate the UUID; the (tenant_id, integration_type) pair is the real key.
+      const { id: _localId, ...row } = record;
       const { data, error } = await supabase
         .from('integration_configs')
-        .upsert(record, { onConflict: 'tenant_id,integration_type' })
+        .upsert(row, { onConflict: 'tenant_id,integration_type' })
         .select('*')
         .single();
 

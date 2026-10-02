@@ -139,7 +139,7 @@ To switch from the local in-memory/Docker database to live Supabase:
    ```
 5. Verify health:
    ```bash
-   curl http://localhost:3000/api/health
+   curl "${NEXTAUTH_URL}/api/health"
    ```
 
 ---

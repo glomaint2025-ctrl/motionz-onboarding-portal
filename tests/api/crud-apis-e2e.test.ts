@@ -14,16 +14,30 @@ import { GET as portalLeadsHandler } from '../../src/app/api/portal/[clientId]/l
 import { GET as portalContractsHandler } from '../../src/app/api/portal/[clientId]/contracts/route';
 import { GET as portalOrdersHandler } from '../../src/app/api/portal/[clientId]/orders/route';
 import { PUT as portalProfileHandler } from '../../src/app/api/portal/[clientId]/profile/route';
-import { POST as portalTeamHandler } from '../../src/app/api/portal/[clientId]/team/route';
+import { GET as portalTeamGetHandler, POST as portalTeamHandler, DELETE as portalTeamDeleteHandler, PATCH as portalTeamPatchHandler } from '../../src/app/api/portal/[clientId]/team/route';
 import { GET as videoPrefGetHandler, POST as videoPrefPostHandler } from '../../src/app/api/portal/[clientId]/video-preference/route';
 import { POST as ghlWebhookHandler } from '../../src/app/api/webhooks/ghl/route';
 import { createSessionToken } from '../../src/lib/auth/session';
 
 console.log('--- Starting Complete End-to-End CRUD APIs Test Suite ---');
 
+if (typeof process.loadEnvFile === 'function') {
+  try {
+    process.loadEnvFile('.env.local');
+  } catch {}
+}
+// Tests must never send real email or create real Google Sheets.
+for (const key of ['RESEND_API_KEY', 'BREVO_API_KEY', 'GOOGLE_SHEETS_SCRIPT_URL', 'GHL_WEBHOOK_SECRET']) delete process.env[key];
+
 async function runCrudApiTests() {
+  const BASE_URL = process.env.NEXTAUTH_URL || process.env.APP_URL || process.env.NEXT_PUBLIC_APP_URL;
+  if (!BASE_URL) {
+    throw new Error('Base URL must be configured via NEXTAUTH_URL or APP_URL in environment.');
+  }
+
   // Helper to create NextRequest with JSON body
-  function makeJsonRequest(url: string, method: string, body?: any, cookies?: Record<string, string>): NextRequest {
+  function makeJsonRequest(pathOrUrl: string, method: string, body?: any, cookies?: Record<string, string>): NextRequest {
+    const url = pathOrUrl.startsWith('http') ? pathOrUrl : `${BASE_URL}${pathOrUrl}`;
     const headers = new Headers({ 'content-type': 'application/json' });
     if (cookies) {
       const cookieStr = Object.entries(cookies).map(([k, v]) => `${k}=${v}`).join('; ');
@@ -49,7 +63,7 @@ async function runCrudApiTests() {
   console.log('\n[2/6] Testing Auth APIs (POST /api/auth/login, POST /api/auth/verify)...');
   
   // Non-staff attempting staff login
-  const badLoginReq = makeJsonRequest('http://localhost:3000/api/auth/login', 'POST', {
+  const badLoginReq = makeJsonRequest('/api/auth/login', 'POST', {
     email: 'intruder@external.com',
     role: 'admin',
     action: 'staff',
@@ -59,7 +73,7 @@ async function runCrudApiTests() {
   console.log(' PASS: Non-staff email blocked from admin login.');
 
   // Valid staff login
-  const staffLoginReq = makeJsonRequest('http://localhost:3000/api/auth/login', 'POST', {
+  const staffLoginReq = makeJsonRequest('/api/auth/login', 'POST', {
     email: 'admin@motionz.ai',
     role: 'admin',
     action: 'staff',
@@ -72,7 +86,7 @@ async function runCrudApiTests() {
   console.log(' PASS: Staff email authenticated and session established.');
 
   // Client Magic Link Request
-  const clientMagicReq = makeJsonRequest('http://localhost:3000/api/auth/login', 'POST', {
+  const clientMagicReq = makeJsonRequest('/api/auth/login', 'POST', {
     email: 'john@abcroofing.com',
     action: 'magic_link',
   });
@@ -86,7 +100,7 @@ async function runCrudApiTests() {
   console.log(' PASS: Client magic link generated with valid token.');
 
   // Verify token
-  const verifyReq = makeJsonRequest('http://localhost:3000/api/auth/verify', 'POST', { token });
+  const verifyReq = makeJsonRequest('/api/auth/verify', 'POST', { token });
   const verifyRes = await authVerifyHandler(verifyReq);
   assert.strictEqual(verifyRes.status, 200);
   const verifyBody = await verifyRes.json();
@@ -102,7 +116,10 @@ async function runCrudApiTests() {
   console.log('\n[3/6] Testing Admin Clients CRUD API (/api/admin/clients)...');
   
   // GET: List clients
-  const listClientsRes = await adminClientsGetHandler();
+  const listClientsReq = makeJsonRequest('/api/admin/clients', 'GET', undefined, {
+    motionz_session: adminSessionCookie,
+  });
+  const listClientsRes = await adminClientsGetHandler(listClientsReq);
   assert.strictEqual(listClientsRes.status, 200);
   const listClientsBody = await listClientsRes.json();
   assert.strictEqual(listClientsBody.success, true);
@@ -111,12 +128,14 @@ async function runCrudApiTests() {
 
   // POST: Create client
   const testTenantSlug = `test-crud-${Date.now()}`;
-  const createClientReq = makeJsonRequest('http://localhost:3000/api/admin/clients', 'POST', {
+  const createClientReq = makeJsonRequest('/api/admin/clients', 'POST', {
     name: 'Summit Roof Masters',
     slug: testTenantSlug,
     primary_email: 'owner@summitroofmasters.com',
     primary_contact_name: 'Sarah Summit',
     phone: '(555) 987-6543',
+  }, {
+    motionz_session: adminSessionCookie,
   });
   const createClientRes = await adminClientsPostHandler(createClientReq);
   assert.strictEqual(createClientRes.status, 200);
@@ -127,7 +146,9 @@ async function runCrudApiTests() {
   console.log(` PASS: Admin created new client "${createClientBody.tenant.name}" (ID: ${createdTenantId}).`);
 
   // GET by ID: Read client
-  const getClientReq = new Request(`http://localhost:3000/api/admin/clients/${createdTenantId}`);
+  const getClientReq = makeJsonRequest(`/api/admin/clients/${createdTenantId}`, 'GET', undefined, {
+    motionz_session: adminSessionCookie,
+  });
   const getClientRes = await adminClientGetByIdHandler(getClientReq, { params: { id: createdTenantId } });
   assert.strictEqual(getClientRes.status, 200);
   const getClientBody = await getClientRes.json();
@@ -136,9 +157,11 @@ async function runCrudApiTests() {
   console.log(' PASS: Admin retrieved client details with 5 cloned setup steps.');
 
   // PUT: Update client
-  const updateClientReq = makeJsonRequest(`http://localhost:3000/api/admin/clients/${createdTenantId}`, 'PUT', {
+  const updateClientReq = makeJsonRequest(`/api/admin/clients/${createdTenantId}`, 'PUT', {
     name: 'Summit Roof Masters LLC',
     phone: '(555) 000-1111',
+  }, {
+    motionz_session: adminSessionCookie,
   });
   const updateClientRes = await adminClientPutHandler(updateClientReq, { params: { id: createdTenantId } });
   assert.strictEqual(updateClientRes.status, 200);
@@ -147,7 +170,9 @@ async function runCrudApiTests() {
   console.log(' PASS: Admin updated client profile via PUT.');
 
   // DELETE: Archive client
-  const deleteClientReq = new Request(`http://localhost:3000/api/admin/clients/${createdTenantId}`, { method: 'DELETE' });
+  const deleteClientReq = makeJsonRequest(`/api/admin/clients/${createdTenantId}`, 'DELETE', undefined, {
+    motionz_session: adminSessionCookie,
+  });
   const deleteClientRes = await adminClientDeleteHandler(deleteClientReq, { params: { id: createdTenantId } });
   assert.strictEqual(deleteClientRes.status, 200);
   console.log(' PASS: Admin soft-deleted/archived client portal.');
@@ -156,7 +181,7 @@ async function runCrudApiTests() {
   console.log('\n[4/6] Testing CSM APIs (/api/csm/clients, /api/csm/clients/[id]/setup)...');
   
   // GET: List assigned clients for CSM
-  const csmClientsReq = makeJsonRequest('http://localhost:3000/api/csm/clients', 'GET', undefined, {
+  const csmClientsReq = makeJsonRequest('/api/csm/clients', 'GET', undefined, {
     motionz_session: csmSessionCookie,
   });
   const csmClientsRes = await csmClientsHandler(csmClientsReq);
@@ -167,7 +192,9 @@ async function runCrudApiTests() {
 
   // GET: Setup steps for demo client
   const targetId = 'tenant-demo-abc-roofing';
-  const csmSetupGetReq = new Request(`http://localhost:3000/api/csm/clients/${targetId}/setup`);
+  const csmSetupGetReq = makeJsonRequest(`/api/csm/clients/${targetId}/setup`, 'GET', undefined, {
+    motionz_session: csmSessionCookie,
+  });
   const csmSetupGetRes = await csmSetupGetHandler(csmSetupGetReq, { params: { id: targetId } });
   assert.strictEqual(csmSetupGetRes.status, 200);
   const csmSetupGetBody = await csmSetupGetRes.json();
@@ -175,10 +202,12 @@ async function runCrudApiTests() {
   console.log(' PASS: CSM retrieved client setup roadmap.');
 
   // PUT: Update step status & guidance
-  const csmSetupPutReq = makeJsonRequest(`http://localhost:3000/api/csm/clients/${targetId}/setup`, 'PUT', {
+  const csmSetupPutReq = makeJsonRequest(`/api/csm/clients/${targetId}/setup`, 'PUT', {
     stepKey: 'google_sheet',
     status: 'done',
     right_now: 'Intake sheet verified by CSM. Ready for GoHighLevel provisioning.',
+  }, {
+    motionz_session: csmSessionCookie,
   });
   const csmSetupPutRes = await csmSetupPutHandler(csmSetupPutReq, { params: { id: targetId } });
   assert.strictEqual(csmSetupPutRes.status, 200);
@@ -190,7 +219,7 @@ async function runCrudApiTests() {
   console.log('\n[5/6] Testing Client Portal Focused APIs (/api/portal/[clientId]/*)...');
   
   // GET: Leads
-  const leadsReq = makeJsonRequest('http://localhost:3000/api/portal/abc-roofing/leads', 'GET', undefined, {
+  const leadsReq = makeJsonRequest('/api/portal/abc-roofing/leads', 'GET', undefined, {
     motionz_session: clientSessionCookie,
   });
   const leadsRes = await portalLeadsHandler(leadsReq, { params: { clientId: 'abc-roofing' } });
@@ -201,7 +230,7 @@ async function runCrudApiTests() {
   console.log(` PASS: Focused Leads API returned strictly leads (${leadsBody.leads.length} leads).`);
 
   // GET: Contracts
-  const contractsReq = makeJsonRequest('http://localhost:3000/api/portal/abc-roofing/contracts', 'GET', undefined, {
+  const contractsReq = makeJsonRequest('/api/portal/abc-roofing/contracts', 'GET', undefined, {
     motionz_session: clientSessionCookie,
   });
   const contractsRes = await portalContractsHandler(contractsReq, { params: { clientId: 'abc-roofing' } });
@@ -212,7 +241,7 @@ async function runCrudApiTests() {
   console.log(` PASS: Focused Contracts API returned strictly contracts.`);
 
   // GET: Orders
-  const ordersReq = makeJsonRequest('http://localhost:3000/api/portal/abc-roofing/orders', 'GET', undefined, {
+  const ordersReq = makeJsonRequest('/api/portal/abc-roofing/orders', 'GET', undefined, {
     motionz_session: clientSessionCookie,
   });
   const ordersRes = await portalOrdersHandler(ordersReq, { params: { clientId: 'abc-roofing' } });
@@ -222,7 +251,7 @@ async function runCrudApiTests() {
   console.log(` PASS: Focused Orders API returned strictly orders.`);
 
   // PUT: Update Profile
-  const profileReq = makeJsonRequest('http://localhost:3000/api/portal/abc-roofing/profile', 'PUT', {
+  const profileReq = makeJsonRequest('/api/portal/abc-roofing/profile', 'PUT', {
     phone: '(555) 333-4444',
     primary_contact_name: 'John Updated Smith',
   }, {
@@ -233,7 +262,7 @@ async function runCrudApiTests() {
   console.log(' PASS: Client profile updated via PUT.');
 
   // POST: Team Member Invitation (Requires ONLY Email & Phone)
-  const teamReq = makeJsonRequest('http://localhost:3000/api/portal/abc-roofing/team', 'POST', {
+  const teamReq = makeJsonRequest('/api/portal/abc-roofing/team', 'POST', {
     email: 'installer@abcroofing.com',
     phone: '+1 (555) 987-6543',
   }, {
@@ -248,8 +277,59 @@ async function runCrudApiTests() {
   assert.strictEqual(teamBody.invitation.role, 'client_member');
   console.log(' PASS: Team member invited via POST with only email and phone.');
 
+  // Verify GET /api/portal/abc-roofing/team excludes active members and includes pending invite
+  const teamGetReq = makeJsonRequest('/api/portal/abc-roofing/team', 'GET', undefined, {
+    motionz_session: clientSessionCookie,
+  });
+  const teamGetRes = await portalTeamGetHandler(teamGetReq, { params: { clientId: 'abc-roofing' } });
+  assert.strictEqual(teamGetRes.status, 200);
+  const teamGetBody = await teamGetRes.json();
+  const pendingEmails = (teamGetBody.invitations || []).map((i: any) => i.email.toLowerCase());
+  // Active member 'john@abcroofing.com' must NEVER be in pending invitations
+  assert.strictEqual(pendingEmails.includes('john@abcroofing.com'), false);
+  // 'installer@abcroofing.com' must be in pending invitations
+  assert.strictEqual(pendingEmails.includes('installer@abcroofing.com'), true);
+  console.log(' PASS: Active team members verified strictly excluded from pending invitations.');
+
+  // PATCH: Resend Team Member Invitation (Revokes old link, generates new active magic link)
+  const patchReq = makeJsonRequest(
+    '/api/portal/abc-roofing/team',
+    'PATCH',
+    { invitationId: teamBody.invitation.id },
+    { motionz_session: clientSessionCookie }
+  );
+  const patchRes = await portalTeamPatchHandler(patchReq, { params: { clientId: 'abc-roofing' } });
+  assert.strictEqual(patchRes.status, 200);
+  const patchBody = await patchRes.json();
+  assert.strictEqual(patchBody.success, true);
+  assert.ok(patchBody.magicLinkUrl);
+  assert.notStrictEqual(patchBody.invitation.id, teamBody.invitation.id);
+  console.log(' PASS: Team invitation resent via PATCH (old link revoked, fresh 72h magic link generated).');
+
+  // DELETE: Revoke Team Member Invitation (target newly generated invite)
+  const deleteReq = makeJsonRequest(
+    `/api/portal/abc-roofing/team?invitationId=${patchBody.invitation.id}`,
+    'DELETE',
+    undefined,
+    { motionz_session: clientSessionCookie }
+  );
+  const deleteRes = await portalTeamDeleteHandler(deleteReq, { params: { clientId: 'abc-roofing' } });
+  assert.strictEqual(deleteRes.status, 200);
+  const deleteBody = await deleteRes.json();
+  assert.strictEqual(deleteBody.success, true);
+
+  // Verify pending invitations list no longer contains the revoked invite
+  const afterRevokeReq = makeJsonRequest('/api/portal/abc-roofing/team', 'GET', undefined, {
+    motionz_session: clientSessionCookie,
+  });
+  const afterRevokeRes = await portalTeamGetHandler(afterRevokeReq, { params: { clientId: 'abc-roofing' } });
+  const afterRevokeBody = await afterRevokeRes.json();
+  const afterRevokePending = (afterRevokeBody.invitations || []).map((i: any) => i.email.toLowerCase());
+  assert.strictEqual(afterRevokePending.includes('installer@abcroofing.com'), false);
+  console.log(' PASS: Team invitation successfully revoked and removed from pending invitations.');
+
   // Video Preference POST and GET
-  const videoPrefPostReq = makeJsonRequest('http://localhost:3000/api/portal/abc-roofing/video-preference', 'POST', {
+  const videoPrefPostReq = makeJsonRequest('/api/portal/abc-roofing/video-preference', 'POST', {
     video_preference: 'ai_video',
     custom_name: 'John Smith',
     custom_company: 'ABC Roofing',
@@ -259,7 +339,7 @@ async function runCrudApiTests() {
   const videoPrefPostRes = await videoPrefPostHandler(videoPrefPostReq, { params: { clientId: 'abc-roofing' } });
   assert.strictEqual(videoPrefPostRes.status, 200);
 
-  const videoPrefGetReq = makeJsonRequest('http://localhost:3000/api/portal/abc-roofing/video-preference', 'GET', undefined, {
+  const videoPrefGetReq = makeJsonRequest('/api/portal/abc-roofing/video-preference', 'GET', undefined, {
     motionz_session: clientSessionCookie,
   });
   const videoPrefGetRes = await videoPrefGetHandler(videoPrefGetReq, { params: { clientId: 'abc-roofing' } });
@@ -270,7 +350,7 @@ async function runCrudApiTests() {
 
   // 6. Webhooks & Integrations API
   console.log('\n[6/6] Testing Webhooks API (POST /api/webhooks/ghl)...');
-  const ghlWebhookReq = makeJsonRequest('http://localhost:3000/api/webhooks/ghl', 'POST', {
+  const ghlWebhookReq = makeJsonRequest('/api/webhooks/ghl', 'POST', {
     type: 'contact.created',
     locationId: 'loc-12345',
     contact: {

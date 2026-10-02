@@ -2,16 +2,17 @@
 
 import React, { useState, useEffect } from 'react';
 import { useParams } from 'next/navigation';
-import { Card, CardHeader, Button, Input } from '@/components/ui';
+import { Card, CardHeader, Button, Input, Skeleton } from '@/components/ui';
 
 export default function ClientProfilePage() {
   const params = useParams();
   const clientId = (params?.clientId as string) || 'demo';
 
-  const [name, setName] = useState('ABC Roofing');
-  const [primaryContact, setPrimaryContact] = useState('John Smith');
+  const [name, setName] = useState('');
+  const [primaryContact, setPrimaryContact] = useState('');
   const [email, setEmail] = useState('john@abcroofing.com');
   const [phone, setPhone] = useState('(555) 234-5678');
+  const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
   const [statusMessage, setStatusMessage] = useState('');
   const [isError, setIsError] = useState(false);
@@ -24,14 +25,16 @@ export default function ClientProfilePage() {
         if (res.ok) {
           const data = await res.json();
           if (isMounted && data.tenant) {
-            setName(data.tenant.name || 'ABC Roofing');
-            setPrimaryContact(data.tenant.primary_contact_name || 'John Smith');
+            setName(data.tenant.name || '');
+            setPrimaryContact(data.tenant.primary_contact_name || '');
             setEmail(data.tenant.primary_email || 'john@abcroofing.com');
             setPhone(data.tenant.phone || '(555) 234-5678');
           }
         }
       } catch {
         // Fallback remains active
+      } finally {
+        if (isMounted) setIsLoading(false);
       }
     }
     loadProfile();
@@ -110,37 +113,49 @@ export default function ClientProfilePage() {
             title="Business Contact Information"
             subtitle="Details used across your website, GoHighLevel campaigns, and invoices"
           />
-          <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-4)' }}>
-            <Input
-              label="Legal Business Name"
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              required
-            />
-            <Input
-              label="Primary Contact Person"
-              value={primaryContact}
-              onChange={(e) => setPrimaryContact(e.target.value)}
-              required
-            />
-            <Input
-              label="Primary Business Email"
-              type="email"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              required
-            />
-            <Input
-              label="Business Phone Number"
-              value={phone}
-              onChange={(e) => setPhone(e.target.value)}
-              required
-            />
+          {isLoading ? (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-4)' }}>
+              {[1, 2, 3, 4].map((i) => (
+                <div key={i}>
+                  <Skeleton width="140px" height="14px" style={{ marginBottom: '6px' }} />
+                  <Skeleton width="100%" height="40px" borderRadius="var(--radius-md)" />
+                </div>
+              ))}
+              <Skeleton width="160px" height="40px" borderRadius="var(--radius-md)" style={{ marginTop: 'var(--space-2)' }} />
+            </div>
+          ) : (
+            <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-4)' }}>
+              <Input
+                label="Legal Business Name"
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                required
+              />
+              <Input
+                label="Primary Contact Person"
+                value={primaryContact}
+                onChange={(e) => setPrimaryContact(e.target.value)}
+                required
+              />
+              <Input
+                label="Primary Business Email"
+                type="email"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                required
+              />
+              <Input
+                label="Business Phone Number"
+                value={phone}
+                onChange={(e) => setPhone(e.target.value)}
+                required
+              />
 
-            <Button type="submit" variant="primary" disabled={isSaving}>
-              {isSaving ? 'Saving Changes...' : 'Save Profile Changes'}
-            </Button>
-          </form>
+              <Button type="submit" variant="primary" disabled={isSaving}>
+                {isSaving ? 'Saving Changes...' : 'Save Profile Changes'}
+              </Button>
+            </form>
+          )}
         </Card>
 
         {/* Tenant Configuration Metadata */}

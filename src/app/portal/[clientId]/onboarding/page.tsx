@@ -45,7 +45,7 @@ export default function OnboardingRoadmapPage() {
   const activeSteps: ClientSetupStep[] = steps.length > 0 ? steps : [
     {
       id: 'c-step-1',
-      tenant_id: 'tenant-demo-abc-roofing',
+      tenant_id: clientId,
       template_step_id: 't-step-1',
       step_key: 'google_sheet',
       name: 'Google Sheet',
@@ -60,7 +60,7 @@ export default function OnboardingRoadmapPage() {
     },
     {
       id: 'c-step-2',
-      tenant_id: 'tenant-demo-abc-roofing',
+      tenant_id: clientId,
       template_step_id: 't-step-2',
       step_key: 'ghl_a2p',
       name: 'GoHighLevel / A2P Verified',
@@ -75,7 +75,7 @@ export default function OnboardingRoadmapPage() {
     },
     {
       id: 'c-step-3',
-      tenant_id: 'tenant-demo-abc-roofing',
+      tenant_id: clientId,
       template_step_id: 't-step-3',
       step_key: 'facebook',
       name: 'Facebook',
@@ -90,7 +90,7 @@ export default function OnboardingRoadmapPage() {
     },
     {
       id: 'c-step-4',
-      tenant_id: 'tenant-demo-abc-roofing',
+      tenant_id: clientId,
       template_step_id: 't-step-4',
       step_key: 'domain_web',
       name: 'Domain, email & website',
@@ -105,7 +105,7 @@ export default function OnboardingRoadmapPage() {
     },
     {
       id: 'c-step-5',
-      tenant_id: 'tenant-demo-abc-roofing',
+      tenant_id: clientId,
       template_step_id: 't-step-5',
       step_key: 'phone_system',
       name: 'Phone system & A2P texting',
@@ -136,12 +136,6 @@ export default function OnboardingRoadmapPage() {
       router.push(`/portal/${clientId}/tracking`);
     } else if (stepKey === 'ghl_a2p') {
       setIsA2PFormOpen(true);
-    } else if (stepKey === 'facebook') {
-      alert('Facebook Business Integration: Verification token verified.');
-    } else if (stepKey === 'domain_web') {
-      alert('Domain DNS Status: Active. SSL certificate valid through 2027.');
-    } else if (stepKey === 'phone_system') {
-      alert('Phone System: Routing to primary contact number.');
     }
   };
 

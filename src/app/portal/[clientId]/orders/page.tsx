@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { useParams } from 'next/navigation';
-import { Card, CardHeader, Button, StatusBadge } from '@/components/ui';
+import { Card, CardHeader, Button, StatusBadge, Skeleton } from '@/components/ui';
 
 interface OrderRecord {
   id: string;
@@ -29,7 +29,7 @@ export default function OrdersAndShippingPage() {
   const clientId = (params?.clientId as string) || 'demo';
 
   const [orders, setOrders] = useState<OrderRecord[]>([]);
-  const [reorderNotice, setReorderNotice] = useState('');
+  const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
     let isMounted = true;
@@ -44,6 +44,8 @@ export default function OrdersAndShippingPage() {
         }
       } catch {
         // Fallback remains active
+      } finally {
+        if (isMounted) setIsLoading(false);
       }
     }
     loadOrders();
@@ -52,32 +54,11 @@ export default function OrdersAndShippingPage() {
     };
   }, [clientId]);
 
-  // Fallback order if not loaded
-  const activeOrders: OrderRecord[] = orders.length > 0 ? orders : [
-    {
-      id: 'order-1',
-      order_number: 'ORD-2026-001',
-      label: 'Initial Contractor Marketing & Swag Package',
-      stage: 'shipped',
-      carrier: 'FedEx Freight',
-      tracking_number: '784920194821',
-      tracking_url: 'https://fedex.com/tracking?id=784920194821',
-      batch_info: 'Batch 1 - Eastern Regional Fulfillment Center',
-      created_at: '2026-09-12T00:00:00Z',
-      updated_at: '2026-09-14T00:00:00Z',
-    },
-  ];
-
-  const handleRequestSupplies = () => {
-    setReorderNotice('Supply replenishment request submitted to Motionz logistics team.');
-    setTimeout(() => {
-      setReorderNotice('');
-    }, 4000);
-  };
+  const activeOrders: OrderRecord[] = orders;
 
   const getStageIndex = (stage: string) => {
     const idx = STAGES.findIndex((s) => s.key === stage);
-    return idx >= 0 ? idx : 2; // default to shipped
+    return idx >= 0 ? idx : 0;
   };
 
   return (
@@ -90,24 +71,42 @@ export default function OrdersAndShippingPage() {
         </p>
       </div>
 
-      {reorderNotice && (
-        <div
-          style={{
-            padding: 'var(--space-3)',
-            backgroundColor: 'var(--color-status-done-bg)',
-            color: 'var(--color-status-done-text)',
-            borderRadius: 'var(--radius-md)',
-            marginBottom: 'var(--space-4)',
-            fontSize: 'var(--font-size-sm)',
-          }}
-        >
-          {reorderNotice}
-        </div>
-      )}
-
       {/* Orders List */}
       <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-6)' }}>
-        {activeOrders.map((order) => {
+        {isLoading ? (
+          <Card>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 'var(--space-4)' }}>
+              <div>
+                <Skeleton width="300px" height="22px" style={{ marginBottom: '6px' }} />
+                <Skeleton width="220px" height="14px" />
+              </div>
+              <Skeleton width="90px" height="26px" borderRadius="var(--radius-full)" />
+            </div>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 'var(--space-2)', margin: 'var(--space-4) 0' }}>
+              {[1, 2, 3, 4].map((i) => (
+                <div key={i}>
+                  <Skeleton width="100%" height="8px" borderRadius="var(--radius-full)" style={{ marginBottom: '6px' }} />
+                  <Skeleton width="60px" height="12px" />
+                </div>
+              ))}
+            </div>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 'var(--space-3)', marginTop: 'var(--space-4)' }}>
+              {[1, 2, 3].map((i) => (
+                <div key={i}>
+                  <Skeleton width="70px" height="12px" style={{ marginBottom: '4px' }} />
+                  <Skeleton width="130px" height="16px" />
+                </div>
+              ))}
+            </div>
+          </Card>
+        ) : activeOrders.length === 0 ? (
+          <Card>
+            <p style={{ color: 'var(--color-text-secondary)', margin: 0 }}>
+              No orders yet. When Motionz ships something to you, you will be able to track it here.
+            </p>
+          </Card>
+        ) : (
+          activeOrders.map((order) => {
           const currentStageIdx = getStageIndex(order.stage);
 
           return (
@@ -207,14 +206,6 @@ export default function OrdersAndShippingPage() {
                   </span>
                 </div>
 
-                <div>
-                  <span style={{ fontSize: 'var(--font-size-xs)', color: 'var(--color-text-muted)', display: 'block' }}>
-                    Estimated Arrival
-                  </span>
-                  <span style={{ color: 'var(--color-status-done-text)', fontWeight: 'var(--font-weight-medium)', fontSize: 'var(--font-size-sm)' }}>
-                    Thursday, Sep 24 by 4:00 PM
-                  </span>
-                </div>
               </div>
 
               {/* Actions */}
@@ -226,13 +217,10 @@ export default function OrdersAndShippingPage() {
                     </Button>
                   </a>
                 )}
-                <Button variant="outline" onClick={handleRequestSupplies}>
-                  Request Supply Reorder
-                </Button>
               </div>
             </Card>
           );
-        })}
+        }))}
       </div>
     </div>
   );

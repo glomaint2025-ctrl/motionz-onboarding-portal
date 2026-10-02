@@ -10,7 +10,21 @@ export interface SessionPayload {
   expiresAt: number;
 }
 
-const SESSION_SECRET = process.env.SESSION_SECRET || 'motionz-dev-fallback-session-secret-at-least-32-chars';
+const DEV_FALLBACK_SECRET = 'motionz-dev-fallback-session-secret-at-least-32-chars';
+
+/**
+ * Session signing secret. Production refuses to sign or verify sessions without a real
+ * SESSION_SECRET (at least 32 characters), so the public dev fallback can never be used there.
+ * Resolved lazily so `next build` does not require the secret.
+ */
+export function getSessionSecret(): string {
+  const secret = process.env.SESSION_SECRET;
+  if (secret && secret.length >= 32) return secret;
+  if (process.env.NODE_ENV === 'production') {
+    throw new Error('SESSION_SECRET must be set to at least 32 characters in production.');
+  }
+  return DEV_FALLBACK_SECRET;
+}
 export const SESSION_COOKIE_NAME = 'motionz_session';
 
 /**
@@ -20,7 +34,7 @@ export const signSession = (payload: SessionPayload): string => {
   const json = JSON.stringify(payload);
   const base64Data = Buffer.from(json).toString('base64url');
   const signature = crypto
-    .createHmac('sha256', SESSION_SECRET)
+    .createHmac('sha256', getSessionSecret())
     .update(base64Data)
     .digest('base64url');
   return `${base64Data}.${signature}`;
@@ -37,11 +51,13 @@ export const verifySession = (token: string): SessionPayload | null => {
 
   const [base64Data, signature] = parts;
   const expectedSignature = crypto
-    .createHmac('sha256', SESSION_SECRET)
+    .createHmac('sha256', getSessionSecret())
     .update(base64Data)
     .digest('base64url');
 
-  if (signature !== expectedSignature) {
+  const given = Buffer.from(signature);
+  const expected = Buffer.from(expectedSignature);
+  if (given.length !== expected.length || !crypto.timingSafeEqual(given, expected)) {
     return null; // Tampered session token
   }
 

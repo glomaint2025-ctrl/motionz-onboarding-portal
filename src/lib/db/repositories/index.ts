@@ -14,3 +14,4 @@ export * from './roof-measurements.repository';
 export * from './audit-logs.repository';
 export * from './security-events.repository';
 export * from './integration-configs.repository';
+export * from './password-reset.repository';

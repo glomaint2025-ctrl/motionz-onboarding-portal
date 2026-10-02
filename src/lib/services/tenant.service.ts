@@ -5,6 +5,7 @@ import {
   featureToggleRepository,
   csmAssignmentRepository,
   auditLogRepository,
+  userRepository,
 } from '../db/repositories';
 import { validateTenantPayload } from '../validation';
 import { Tenant, UserRole } from '../db/schema';
@@ -44,23 +45,37 @@ export class TenantService {
       phone: params.phone,
     });
 
+    const normalizedEmail = validated.primary_email.trim().toLowerCase();
+    const existingUser = await userRepository.findByEmail(normalizedEmail);
+    if (existingUser) {
+      throw new AppError('An account with this email already exists.', 400, 'EMAIL_ALREADY_EXISTS');
+    }
+
+    const existingTenant = await tenantRepository.findByEmail(normalizedEmail);
+    if (existingTenant) {
+      throw new AppError('An account with this email already exists.', 400, 'EMAIL_ALREADY_EXISTS');
+    }
+
     // 1. Resolve master template and default steps
     const { template, steps } = await portalTemplateRepository.getDefaultTemplate();
     const templateId = params.template_id || template.id;
 
-    // 2. Create the core tenant record
+    // 2. Ensure guaranteed unique slug so multiple clients can share the same business name
+    const uniqueSlug = await tenantRepository.generateUniqueSlug(validated.slug || validated.name);
+
+    // 3. Create the core tenant record
     const tenant = await tenantRepository.create({
       name: validated.name,
-      slug: validated.slug,
+      slug: uniqueSlug,
       primary_email: validated.primary_email,
       primary_contact_name: params.primary_contact_name?.trim() || validated.name,
       phone: validated.phone,
       template_id: templateId,
-      status: 'active',
+      status: 'onboarding',
     });
 
     try {
-      // 3. Clone template steps into concrete tenant setup steps
+      // 4. Clone template steps into concrete tenant setup steps
       const clonedSteps = await clientSetupStepRepository.cloneStepsForTenant(
         tenant.id,
         steps.map((ts) => ({
@@ -78,19 +93,19 @@ export class TenantService {
         }))
       );
 
-      // 4. Initialize feature toggles (merging default template features with overrides)
+      // 5. Initialize feature toggles (merging default template features with overrides)
       const mergedFeatures = {
         ...(template.default_features || {}),
         ...(params.feature_overrides || {}),
       };
       await featureToggleRepository.initializeDefaults(tenant.id, mergedFeatures);
 
-      // 5. Assign CSM if specified
+      // 6. Assign CSM if specified
       if (params.csm_user_id) {
         await csmAssignmentRepository.assign(params.csm_user_id, tenant.id);
       }
 
-      // 6. Record audit log
+      // 7. Record audit log
       await auditLogRepository.create({
         tenant_id: tenant.id,
         actor_email: params.actorEmail || 'system',
@@ -118,9 +133,16 @@ export class TenantService {
         console.error(`Rollback failed for tenant ${tenant.id}:`, rollbackErr);
       }
 
+      if (err instanceof AppError && err.statusCode === 400) {
+        throw err;
+      }
+      if (err.message?.includes('23505') || err.message?.toLowerCase().includes('email')) {
+        throw new AppError('An account with this email already exists.', 400, 'EMAIL_ALREADY_EXISTS');
+      }
+
       throw new AppError(
-        `Failed to provision client portal: ${err.message}. Changes were rolled back.`,
-        500,
+        err.message || 'Failed to provision client portal.',
+        err.statusCode || 500,
         'PROVISIONING_FAILED',
         { original: String(err) }
       );

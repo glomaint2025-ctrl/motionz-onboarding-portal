@@ -32,12 +32,5 @@ export const getSupabaseServiceClient = (): SupabaseClient | null => {
   return serviceClient;
 };
 
-export const DEMO_TENANT_UUID = 'd0000000-0000-0000-0000-000000000001';
-
-export const resolveTenantId = (tenantId: string): string => {
-  if (tenantId === 'demo' || tenantId === 'tenant-demo-abc-roofing' || tenantId === 'abc-roofing') {
-    return DEMO_TENANT_UUID;
-  }
-  return tenantId;
-};
+export { DEMO_TENANT_UUID, LEGACY_DEMO_TENANT_UUID, resolveTenantId } from '../auth/edge-session';
 

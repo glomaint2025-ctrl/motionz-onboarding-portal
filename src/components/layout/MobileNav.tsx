@@ -11,6 +11,8 @@ export interface MobileNavProps {
   onOpen?: () => void;
   role?: 'client' | 'admin' | 'csm';
   clientId?: string;
+  featureToggles?: Record<string, boolean>;
+  isLoading?: boolean;
 }
 
 export const MobileNav: React.FC<MobileNavProps> = ({
@@ -19,6 +21,8 @@ export const MobileNav: React.FC<MobileNavProps> = ({
   onOpen,
   role = 'client',
   clientId = 'demo',
+  featureToggles,
+  isLoading = false,
 }) => {
   const pathname = usePathname();
 
@@ -37,6 +41,28 @@ export const MobileNav: React.FC<MobileNavProps> = ({
     { label: 'Team Members', href: `/portal/${clientId}/team` },
   ];
 
+  const featureKeyMap: Record<string, string> = {
+    [`/portal/${clientId}/onboarding`]: 'onboarding',
+    [`/portal/${clientId}/leads`]: 'leads',
+    [`/portal/${clientId}/tracking`]: 'tracking',
+    [`/portal/${clientId}/contract`]: 'contracts',
+    [`/portal/${clientId}/orders`]: 'orders',
+    [`/portal/${clientId}/tools`]: 'tools',
+    [`/portal/${clientId}/roof-measurement`]: 'roof_measurement',
+    [`/portal/${clientId}/video-scripts`]: 'video_scripts',
+    [`/portal/${clientId}/book-call`]: 'book_call',
+    [`/portal/${clientId}/team`]: 'team',
+  };
+
+  const filteredClientNavItems = clientNavItems.filter((item) => {
+    const key = featureKeyMap[item.href];
+    if (!key) return true;
+    if (featureToggles && featureToggles[key] === false) {
+      return false;
+    }
+    return true;
+  });
+
   const adminNavItems = [
     { label: 'Admin Dashboard', href: '/admin' },
     { label: 'Client Management', href: '/admin/clients' },
@@ -52,7 +78,7 @@ export const MobileNav: React.FC<MobileNavProps> = ({
     { label: 'Setup Review Queue', href: '/csm/setup-queue' },
   ];
 
-  const navItems = role === 'admin' ? adminNavItems : role === 'csm' ? csmNavItems : clientNavItems;
+  const navItems = role === 'admin' ? adminNavItems : role === 'csm' ? csmNavItems : filteredClientNavItems;
 
   return (
     <>
@@ -68,7 +94,10 @@ export const MobileNav: React.FC<MobileNavProps> = ({
             </div>
             <nav className="drawer-nav">
               {navItems.map((item) => {
-                const isActive = pathname === item.href;
+                const isRootPage = item.href === `/portal/${clientId}` || item.href === '/admin' || item.href === '/csm';
+                const isActive = isRootPage
+                  ? pathname === item.href
+                  : (pathname === item.href || pathname.startsWith(item.href + '/'));
                 return (
                   <Link
                     key={item.href}
@@ -95,24 +124,30 @@ export const MobileNav: React.FC<MobileNavProps> = ({
             >
               Overview
             </Link>
-            <Link
-              href={`/portal/${clientId}/onboarding`}
-              className={`bottom-tab-item ${pathname === `/portal/${clientId}/onboarding` ? 'bottom-tab-item-active' : ''}`}
-            >
-              Setup
-            </Link>
-            <Link
-              href={`/portal/${clientId}/leads`}
-              className={`bottom-tab-item ${pathname === `/portal/${clientId}/leads` ? 'bottom-tab-item-active' : ''}`}
-            >
-              Leads
-            </Link>
-            <Link
-              href={`/portal/${clientId}/tracking`}
-              className={`bottom-tab-item ${pathname === `/portal/${clientId}/tracking` ? 'bottom-tab-item-active' : ''}`}
-            >
-              Tracking
-            </Link>
+            {(!featureToggles || featureToggles.onboarding !== false) && (
+              <Link
+                href={`/portal/${clientId}/onboarding`}
+                className={`bottom-tab-item ${pathname === `/portal/${clientId}/onboarding` ? 'bottom-tab-item-active' : ''}`}
+              >
+                Setup
+              </Link>
+            )}
+            {(!featureToggles || featureToggles.leads !== false) && (
+              <Link
+                href={`/portal/${clientId}/leads`}
+                className={`bottom-tab-item ${pathname === `/portal/${clientId}/leads` ? 'bottom-tab-item-active' : ''}`}
+              >
+                Leads
+              </Link>
+            )}
+            {(!featureToggles || featureToggles.tracking !== false) && (
+              <Link
+                href={`/portal/${clientId}/tracking`}
+                className={`bottom-tab-item ${pathname === `/portal/${clientId}/tracking` ? 'bottom-tab-item-active' : ''}`}
+              >
+                Tracking
+              </Link>
+            )}
             <button
               type="button"
               className="bottom-tab-item"

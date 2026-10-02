@@ -202,16 +202,15 @@ export default function CSMClientSetupEditorPage() {
                 /* Inline Editing Form for CSM */
                 <div style={{ borderTop: '1px solid var(--color-border-subtle)', paddingTop: 'var(--space-4)', marginTop: 'var(--space-3)' }}>
                   <div style={{ marginBottom: 'var(--space-4)' }}>
-                    <label className="ui-label">Milestone Status</label>
-                    <select
-                      className="ui-select"
+                    <Select
+                      label="Milestone Status"
                       value={editStatus}
                       onChange={(e) => setEditStatus(e.target.value as any)}
                     >
                       <option value="not_started">Not Started</option>
                       <option value="in_progress">In Progress</option>
                       <option value="done">Done</option>
-                    </select>
+                    </Select>
                   </div>
 
                   <div className="ui-form-group">

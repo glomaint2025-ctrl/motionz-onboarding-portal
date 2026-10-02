@@ -49,6 +49,9 @@ CREATE TABLE IF NOT EXISTS tenants (
     template_id UUID REFERENCES portal_templates(id) ON DELETE SET NULL,
     ghl_location_id VARCHAR(100),
     settings JSONB DEFAULT '{}'::JSONB,
+    suspended_at TIMESTAMPTZ,
+    suspended_reason TEXT,
+    suspended_by VARCHAR(255),
     created_at TIMESTAMPTZ DEFAULT NOW(),
     updated_at TIMESTAMPTZ DEFAULT NOW(),
     deleted_at TIMESTAMPTZ
@@ -64,6 +67,12 @@ CREATE TABLE IF NOT EXISTS users (
     phone VARCHAR(50),
     avatar_url TEXT,
     two_factor_enabled BOOLEAN DEFAULT FALSE,
+    status VARCHAR(50) DEFAULT 'active',
+    suspended_at TIMESTAMPTZ,
+    suspended_reason TEXT,
+    suspended_by VARCHAR(255),
+    suspended_by_role VARCHAR(50),
+    cascade_suspended BOOLEAN DEFAULT FALSE,
     created_at TIMESTAMPTZ DEFAULT NOW(),
     updated_at TIMESTAMPTZ DEFAULT NOW()
 );

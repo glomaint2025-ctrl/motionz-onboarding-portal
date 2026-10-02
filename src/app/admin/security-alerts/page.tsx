@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
-import { Card, CardHeader, Table, Column, StatusBadge } from '@/components/ui';
+import { Card, CardHeader, Table, Column, StatusBadge, TableSkeleton } from '@/components/ui';
 
 interface SecurityAlertRecord {
   id: string;
@@ -93,9 +93,7 @@ export default function SecurityAlertsPage() {
       </div>
 
       {loading ? (
-        <Card style={{ textAlign: 'center', padding: 'var(--space-8)' }}>
-          <p>Loading security alerts...</p>
-        </Card>
+        <TableSkeleton rows={6} columns={5} />
       ) : alerts.length === 0 ? (
         <Card style={{ textAlign: 'center', padding: 'var(--space-8)' }}>
           <StatusBadge status="All Systems Secure" variant="done" />

@@ -42,6 +42,7 @@ export * from '../services';
 export * from '../errors';
 export * from '../validation';
 export { getStore, resetStore } from './mock-db';
+export { DEMO_TENANT_UUID, LEGACY_DEMO_TENANT_UUID, resolveTenantId } from './supabase-client';
 
 /**
  * Tenant Repository Delegations
@@ -217,7 +218,19 @@ export const getTeamMembers = async (tenantId: string): Promise<User[]> => {
 export const listTeamMemberInvitations = async (tenantId: string): Promise<UserInvitation[]> => {
   const tenant = await getTenantById(tenantId);
   const resolvedId = tenant ? tenant.id : tenantId;
-  return invitationRepository.listByTenant(resolvedId);
+  const [members, invitations] = await Promise.all([
+    userRepository.listByTenant(resolvedId),
+    invitationRepository.listByTenant(resolvedId, { pendingOnly: true }),
+  ]);
+  const activeEmails = new Set(members.map((m) => m.email.toLowerCase()));
+  const now = new Date();
+  return invitations.filter((inv) => {
+    if (inv.accepted_at) return false;
+    if (inv.revoked_at) return false;
+    if (new Date(inv.expires_at) <= now) return false;
+    if (activeEmails.has(inv.email.toLowerCase())) return false;
+    return true;
+  });
 };
 
 export const getTenantIntegrations = async (tenantId: string): Promise<IntegrationConfig[]> => {

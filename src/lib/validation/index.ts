@@ -83,11 +83,12 @@ export function validateSetupStatus(status: any): SetupStatus {
 }
 
 export function validateUserRole(role: any): UserRole {
+  const normalized = role === 'client_team' ? 'client_member' : role;
   const validRoles: UserRole[] = ['admin', 'csm', 'client', 'client_member'];
-  if (!validRoles.includes(role)) {
+  if (!validRoles.includes(normalized)) {
     throw new ValidationError(
       `Invalid user role: "${role}". Must be one of: ${validRoles.join(', ')}.`
     );
   }
-  return role;
+  return normalized;
 }

@@ -9,8 +9,8 @@ export default function VideoScriptsPage() {
   const params = useParams();
   const clientId = (params?.clientId as string) || 'demo';
 
-  const [clientName, setClientName] = useState('John Smith');
-  const [companyName, setCompanyName] = useState('ABC Roofing');
+  const [clientName, setClientName] = useState('');
+  const [companyName, setCompanyName] = useState('');
   const [videoPreference, setVideoPreference] = useState<'ai_video' | 'self_filmed'>('ai_video');
   const [isSavingPref, setIsSavingPref] = useState(false);
   const [prefSaveNotice, setPrefSaveNotice] = useState('');
@@ -28,8 +28,8 @@ export default function VideoScriptsPage() {
         if (portalRes.ok) {
           const pData = await portalRes.json();
           if (isMounted && pData.tenant) {
-            setClientName(pData.tenant.primary_contact_name || 'John Smith');
-            setCompanyName(pData.tenant.name || 'ABC Roofing');
+            setClientName(pData.tenant.primary_contact_name || '');
+            setCompanyName(pData.tenant.name || '');
           }
         }
 

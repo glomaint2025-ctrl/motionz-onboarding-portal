@@ -106,6 +106,8 @@ export const assertPermission = (role: UserRole, capability: Capability): void =
   }
 };
 
+import { resolveTenantId } from '../db/supabase-client';
+
 /**
  * Asserts that a user has access to a target tenant ID.
  * Admins and CSMs have access to all client tenants.
@@ -119,7 +121,11 @@ export const assertTenantAccess = (
     return; // Internal staff authorized
   }
 
-  if (!user.tenantId || user.tenantId !== targetTenantId) {
+  const normalizedUserTenant = resolveTenantId(user.tenantId || '');
+  const normalizedTargetTenant = resolveTenantId(targetTenantId || '');
+
+  if (!normalizedUserTenant || normalizedUserTenant !== normalizedTargetTenant) {
     throw new Error('Forbidden: Unauthorized cross-tenant access attempt');
   }
 };
+

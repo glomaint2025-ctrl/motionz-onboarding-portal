@@ -1,5 +1,5 @@
 import assert from 'assert';
-import { getSupabaseServiceClient } from '../../src/lib/db/supabase-client';
+import { getSupabaseServiceClient, DEMO_TENANT_UUID } from '../../src/lib/db/supabase-client';
 import { tenantService } from '../../src/lib/services/tenant.service';
 import { invitationService } from '../../src/lib/services/invitation.service';
 import { tenantRepository, clientSetupStepRepository, invitationRepository, leadRepository } from '../../src/lib/db/repositories';
@@ -65,7 +65,7 @@ async function runRealDatabaseSmokeTest() {
 
     // 5. Verify Multi-Tenant Isolation
     console.log(' [5/6] Verifying strict cross-tenant data isolation...');
-    const demoLeads = await leadRepository.listByTenant('d0000000-0000-0000-0000-000000000001');
+    const demoLeads = await leadRepository.listByTenant(DEMO_TENANT_UUID);
     const smokeLeads = await leadRepository.listByTenant(createdTenantId);
     assert.strictEqual(smokeLeads.length, 0, 'New smoke tenant must not see Demo tenant leads');
     console.log('  PASS: Zero cross-tenant data leakage confirmed.');

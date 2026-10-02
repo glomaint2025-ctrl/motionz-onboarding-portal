@@ -1,44 +1,35 @@
 'use client';
 
 import React, { useState } from 'react';
-import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
-import { Card, CardHeader, Input, Button, StatusBadge } from '@/components/ui';
+import { useRouter, useSearchParams } from 'next/navigation';
+import { Card, Input, Button } from '@/components/ui';
 
 function LoginForm() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const initialError = searchParams.get('error');
+  const redirectParam = searchParams.get('redirect') || '';
 
-  const [activeTab, setActiveTab] = useState<'staff' | 'client'>('staff');
   const [email, setEmail] = useState('');
-  const [staffRole, setStaffRole] = useState<'admin' | 'csm'>('admin');
+  const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
-  const [message, setMessage] = useState<string | null>(null);
-  const [errorMessage, setErrorMessage] = useState<string | null>(
-    initialError === 'admin_required'
-      ? 'Administrator privileges required for that section.'
-      : initialError === 'csm_required'
-      ? 'CSM credentials required for that section.'
-      : null
-  );
-  const [demoLink, setDemoLink] = useState<string | null>(null);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
     setErrorMessage(null);
-    setMessage(null);
-    setDemoLink(null);
+
+    const normalizedEmail = email.trim();
 
     try {
       const res = await fetch('/api/auth/login', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          email,
-          role: staffRole,
-          action: activeTab === 'staff' ? 'staff' : 'magic_link',
+          email: normalizedEmail,
+          password: password,
+          redirect: redirectParam || undefined,
         }),
       });
 
@@ -51,15 +42,28 @@ function LoginForm() {
       }
 
       if (!res.ok) {
+        if (data?.suspended) {
+          const reasonQuery = encodeURIComponent(data?.reason || data?.error || 'Account suspended');
+          router.push(`/auth/suspended?reason=${reasonQuery}`);
+          return;
+        }
         setErrorMessage(data?.error || 'Authentication failed.');
       } else {
-        if (activeTab === 'staff' && data?.redirectTo) {
-          router.push(data.redirectTo);
-        } else {
-          setMessage(data?.message || 'Magic link generated successfully.');
-          if (data?.demoMagicLink) {
-            setDemoLink(data.demoMagicLink);
+        if (data?.redirectTo) {
+          // Explicitly trigger browser credential manager save prompt
+          if (typeof window !== 'undefined' && 'PasswordCredential' in window && (window as any).PasswordCredential) {
+            try {
+              const cred = new (window as any).PasswordCredential({
+                id: normalizedEmail,
+                password: password,
+                name: normalizedEmail.split('@')[0],
+              });
+              await navigator.credentials?.store?.(cred);
+            } catch {
+              // Best effort; browser will also save via form semantics
+            }
           }
+          router.push(data.redirectTo);
         }
       }
     } catch (err: any) {
@@ -70,57 +74,43 @@ function LoginForm() {
   };
 
   return (
-    <div style={{ minHeight: '100vh', display: 'flex', flexDirection: 'column', justifyContent: 'center', alignItems: 'center', padding: 'var(--space-4)' }}>
+    <div
+      style={{
+        minHeight: '100vh',
+        display: 'flex',
+        flexDirection: 'column',
+        justifyContent: 'center',
+        alignItems: 'center',
+        padding: 'var(--space-4)',
+        backgroundColor: 'var(--color-bg-base)',
+      }}
+    >
       <div style={{ width: '100%', maxWidth: '440px' }}>
         <div style={{ textAlign: 'center', marginBottom: 'var(--space-6)' }}>
-          <span style={{ fontSize: 'var(--font-size-2xl)', fontWeight: 'bold', color: 'var(--color-primary)' }}>
+          <span
+            style={{
+              fontSize: 'var(--font-size-2xl)',
+              fontWeight: '700',
+              color: 'var(--color-primary)',
+              letterSpacing: '-0.02em',
+            }}
+          >
             Motionz
           </span>
-          <p style={{ marginTop: 'var(--space-1)' }}>Secure Portal Authentication</p>
         </div>
 
         <Card>
-          <div style={{ display: 'flex', borderBottom: '1px solid var(--color-border-subtle)', marginBottom: 'var(--space-5)' }}>
-            <button
-              type="button"
-              onClick={() => {
-                setActiveTab('staff');
-                setErrorMessage(null);
-                setMessage(null);
-              }}
+          <div style={{ marginBottom: 'var(--space-5)' }}>
+            <h2
               style={{
-                flex: 1,
-                padding: 'var(--space-3)',
-                background: 'none',
-                border: 'none',
-                borderBottom: activeTab === 'staff' ? '2px solid var(--color-primary)' : 'none',
-                color: activeTab === 'staff' ? 'var(--color-primary)' : 'var(--color-text-secondary)',
-                fontWeight: activeTab === 'staff' ? 'bold' : 'normal',
-                cursor: 'pointer',
+                fontSize: 'var(--font-size-lg)',
+                fontWeight: '600',
+                color: 'var(--color-text-primary)',
+                letterSpacing: '-0.01em',
               }}
             >
-              Motionz Staff
-            </button>
-            <button
-              type="button"
-              onClick={() => {
-                setActiveTab('client');
-                setErrorMessage(null);
-                setMessage(null);
-              }}
-              style={{
-                flex: 1,
-                padding: 'var(--space-3)',
-                background: 'none',
-                border: 'none',
-                borderBottom: activeTab === 'client' ? '2px solid var(--color-primary)' : 'none',
-                color: activeTab === 'client' ? 'var(--color-primary)' : 'var(--color-text-secondary)',
-                fontWeight: activeTab === 'client' ? 'bold' : 'normal',
-                cursor: 'pointer',
-              }}
-            >
-              Client Magic Link
-            </button>
+              Sign In
+            </h2>
           </div>
 
           {errorMessage && (
@@ -132,6 +122,7 @@ function LoginForm() {
                 borderRadius: 'var(--radius-md)',
                 color: 'var(--color-status-danger-text)',
                 fontSize: 'var(--font-size-xs)',
+                lineHeight: '1.4',
                 marginBottom: 'var(--space-4)',
               }}
             >
@@ -139,111 +130,59 @@ function LoginForm() {
             </div>
           )}
 
-          {message && (
-            <div
-              style={{
-                padding: 'var(--space-3)',
-                backgroundColor: 'var(--color-status-done-bg)',
-                border: '1px solid var(--color-status-done-border)',
-                borderRadius: 'var(--radius-md)',
-                color: 'var(--color-status-done-text)',
-                fontSize: 'var(--font-size-xs)',
-                marginBottom: 'var(--space-4)',
-              }}
-            >
-              {message}
+          <form
+            onSubmit={handleSubmit}
+            method="POST"
+            action="/api/auth/login"
+            autoComplete="on"
+          >
+            <Input
+              id="login-email"
+              name="username"
+              label="Email"
+              type="email"
+              autoComplete="username"
+              placeholder="name@company.com"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              required
+            />
+            <div style={{ marginTop: 'var(--space-3)' }}>
+              <Input
+                id="login-password"
+                name="password"
+                label="Password"
+                type="password"
+                autoComplete="current-password"
+                placeholder="Enter your password"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                required
+              />
+              <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 'var(--space-1)' }}>
+                <Link
+                  href="/auth/forgot-password"
+                  style={{
+                    fontSize: 'var(--font-size-xs)',
+                    color: 'var(--color-primary, #34A5CB)',
+                    textDecoration: 'none',
+                  }}
+                >
+                  Forgot password?
+                </Link>
+              </div>
             </div>
-          )}
-
-          {demoLink && (
-            <div
-              style={{
-                padding: 'var(--space-3)',
-                backgroundColor: 'var(--color-bg-surface)',
-                border: '1px solid var(--color-primary-border)',
-                borderRadius: 'var(--radius-md)',
-                fontSize: 'var(--font-size-xs)',
-                marginBottom: 'var(--space-4)',
-              }}
+            <Button
+              type="submit"
+              variant="primary"
+              fullWidth
+              disabled={loading}
+              style={{ marginTop: 'var(--space-4)' }}
             >
-              <span style={{ display: 'block', color: 'var(--color-text-muted)', marginBottom: 'var(--space-1)' }}>
-                Demo Direct Access:
-              </span>
-              <a href={demoLink} style={{ wordBreak: 'break-all' }}>
-                Activate Magic Link Session
-              </a>
-            </div>
-          )}
-
-          <form onSubmit={handleSubmit}>
-            {activeTab === 'staff' ? (
-              <>
-                <Input
-                  label="Internal Staff Email (@motionz.ai)"
-                  type="email"
-                  placeholder="name@motionz.ai"
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  required
-                />
-                <div style={{ marginBottom: 'var(--space-4)' }}>
-                  <label style={{ fontSize: 'var(--font-size-xs)', color: 'var(--color-text-secondary)', display: 'block', marginBottom: 'var(--space-1)' }}>
-                    Staff Role
-                  </label>
-                  <div style={{ display: 'flex', gap: 'var(--space-2)' }}>
-                    <Button
-                      type="button"
-                      variant={staffRole === 'admin' ? 'primary' : 'secondary'}
-                      size="sm"
-                      onClick={() => setStaffRole('admin')}
-                      style={{ flex: 1 }}
-                    >
-                      Admin
-                    </Button>
-                    <Button
-                      type="button"
-                      variant={staffRole === 'csm' ? 'primary' : 'secondary'}
-                      size="sm"
-                      onClick={() => setStaffRole('csm')}
-                      style={{ flex: 1 }}
-                    >
-                      CSM
-                    </Button>
-                  </div>
-                </div>
-                <Button type="submit" variant="primary" fullWidth disabled={loading}>
-                  {loading ? 'Authenticating...' : 'Sign In as Staff'}
-                </Button>
-                <p style={{ fontSize: 'var(--font-size-xs)', color: 'var(--color-text-muted)', marginTop: 'var(--space-3)', textAlign: 'center' }}>
-                  Restricted domain access. Unauthorized attempts are logged.
-                </p>
-              </>
-            ) : (
-              <>
-                <Input
-                  label="Client Organization Email"
-                  type="email"
-                  placeholder="john@abcroofing.com"
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  required
-                />
-                <Button type="submit" variant="primary" fullWidth disabled={loading}>
-                  {loading ? 'Sending...' : 'Send Magic Link'}
-                </Button>
-                <p style={{ fontSize: 'var(--font-size-xs)', color: 'var(--color-text-muted)', marginTop: 'var(--space-3)', textAlign: 'center' }}>
-                  We will send a single-use expiring link to access your portal.
-                </p>
-              </>
-            )}
+              {loading ? 'Signing in...' : 'Sign In'}
+            </Button>
           </form>
         </Card>
-
-        <div style={{ textAlign: 'center', marginTop: 'var(--space-4)' }}>
-          <Link href="/" style={{ fontSize: 'var(--font-size-xs)', color: 'var(--color-text-muted)' }}>
-            Return to Homepage
-          </Link>
-        </div>
       </div>
     </div>
   );
@@ -251,7 +190,20 @@ function LoginForm() {
 
 export default function LoginPage() {
   return (
-    <React.Suspense fallback={<div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>Loading...</div>}>
+    <React.Suspense
+      fallback={
+        <div
+          style={{
+            minHeight: '100vh',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+          }}
+        >
+          Loading...
+        </div>
+      }
+    >
       <LoginForm />
     </React.Suspense>
   );

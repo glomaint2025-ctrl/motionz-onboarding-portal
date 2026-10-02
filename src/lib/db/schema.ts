@@ -13,10 +13,13 @@ export interface Tenant {
   primary_contact_name?: string;
   phone?: string;
   logo_url?: string;
-  status: 'active' | 'onboarding' | 'cancelled';
+  status: 'active' | 'onboarding' | 'cancelled' | 'suspended';
   template_id?: string;
   ghl_location_id?: string;
   settings?: Record<string, any>;
+  suspended_at?: string;
+  suspended_reason?: string;
+  suspended_by?: string;
   created_at: string;
   updated_at: string;
   deleted_at?: string;
@@ -31,8 +34,25 @@ export interface User {
   phone?: string;
   avatar_url?: string;
   two_factor_enabled?: boolean;
+  status?: 'active' | 'suspended';
+  suspended_at?: string;
+  suspended_reason?: string;
+  suspended_by?: string;
+  suspended_by_role?: 'admin' | 'csm' | 'client';
+  cascade_suspended?: boolean; // True when disabled automatically due to main client suspension
+  allowed_modules?: string[]; // Specific portal module keys permitted for this user
+  password_hash?: string;
   created_at: string;
   updated_at: string;
+}
+
+export interface PasswordResetToken {
+  id: string;
+  email: string;
+  token_hash: string;
+  expires_at: string;
+  used_at?: string;
+  created_at: string;
 }
 
 export interface CsmAssignment {
@@ -51,6 +71,7 @@ export interface UserInvitation {
   expires_at: string;
   phone?: string;
   full_name?: string;
+  allowed_modules?: string[]; // Module keys granted to the invitee upon acceptance
   accepted_at?: string;
   revoked_at?: string;
   created_by?: string;
