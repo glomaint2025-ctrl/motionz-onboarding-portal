@@ -29,12 +29,15 @@ export const SESSION_COOKIE_NAME = 'motionz_session';
 export const DEMO_TENANT_UUID = '4f3c7e8a-92b1-4d3a-8f5c-1a2b3c4d5e6f';
 export const LEGACY_DEMO_TENANT_UUID = 'd0000000-0000-0000-0000-000000000001';
 
+/**
+ * Maps demo aliases to the demo tenant. Real tenant UUIDs (including databases seeded with the
+ * older LEGACY_DEMO_TENANT_UUID) are never rewritten.
+ */
 export const resolveTenantId = (tenantId: string): string => {
   if (
     tenantId === 'demo' ||
     tenantId === 'tenant-demo-abc-roofing' ||
-    tenantId === 'abc-roofing' ||
-    tenantId === LEGACY_DEMO_TENANT_UUID
+    tenantId === 'abc-roofing'
   ) {
     return DEMO_TENANT_UUID;
   }

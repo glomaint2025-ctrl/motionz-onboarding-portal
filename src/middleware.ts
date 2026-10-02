@@ -185,11 +185,8 @@ export async function middleware(request: NextRequest) {
     const parts = pathname.split('/');
     const requestedTenantId = parts[2];
 
-    // Canonical redirect if accessing via legacy dummy ID (d0000000-0000-0000-0000-000000000001 or tenant-demo-abc-roofing)
-    if (
-      requestedTenantId === 'd0000000-0000-0000-0000-000000000001' ||
-      requestedTenantId === 'tenant-demo-abc-roofing'
-    ) {
+    // Canonical redirect for the legacy demo alias
+    if (requestedTenantId === 'tenant-demo-abc-roofing') {
       const canonicalTenantId = resolveTenantId(requestedTenantId);
       const canonicalPath = pathname.replace(requestedTenantId, canonicalTenantId);
       return secureResponse(NextResponse.redirect(new URL(canonicalPath, request.url)));
