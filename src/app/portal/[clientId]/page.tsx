@@ -318,11 +318,11 @@ export default function ClientOverviewPage() {
         </div>
       )}
 
-      {/* 4. Campaign Telemetry Summary Cards */}
+      {/* 4. At a glance Summary Cards */}
       {(featureToggles?.leads !== false || featureToggles?.tracking !== false || showContractCard) && (
         <div style={{ marginBottom: 'var(--space-6)' }}>
           <h2 style={{ fontSize: '1.15rem', fontWeight: 600, color: 'var(--color-text-primary)', marginBottom: 'var(--space-4)' }}>
-            Campaign Telemetry
+            At a glance
           </h2>
           <div className="ui-stats-grid">
             {/* Total Leads */}
@@ -664,7 +664,7 @@ function ClientOverviewSkeleton() {
         </Card>
       </div>
 
-      {/* Campaign Telemetry Cards Skeleton */}
+      {/* At a glance Cards Skeleton */}
       <div style={{ marginBottom: 'var(--space-6)' }}>
         <Skeleton width="170px" height="22px" style={{ marginBottom: 'var(--space-3)' }} />
         <div
