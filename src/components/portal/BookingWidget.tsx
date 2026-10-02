@@ -2,20 +2,34 @@
 
 import React, { useState } from 'react';
 import { Card, CardHeader, Button } from '@/components/ui';
+import { PORTAL_LINKS } from '@/lib/portal-links';
 
 export interface BookingWidgetProps {
   calendarId?: string;
   title?: string;
   subtitle?: string;
+  /** Prefilled on the GHL booking form: CSM calls are matched to the client by email. */
+  prefillEmail?: string;
+  prefillName?: string;
+}
+
+/** GHL booking widget URL with optional contact prefill (?email=...&name=...). */
+export function ghlBookingUrl(calendarId: string, prefill: { email?: string; name?: string } = {}): string {
+  const url = new URL(`https://api.leadconnectorhq.com/widget/booking/${encodeURIComponent(calendarId)}`);
+  if (prefill.email) url.searchParams.set('email', prefill.email);
+  if (prefill.name) url.searchParams.set('name', prefill.name);
+  return url.toString();
 }
 
 export const BookingWidget: React.FC<BookingWidgetProps> = ({
-  calendarId = 'SRn2ONyB295xnnPR5JwR',
-  title = 'Schedule Onboarding & Strategy Call',
-  subtitle = 'Connect 1-on-1 with your dedicated Motionz Customer Success Manager',
+  calendarId = PORTAL_LINKS.csmBookingCalendarId,
+  title = 'Book a Call With Your CSM',
+  subtitle = 'Pick a time that works for you',
+  prefillEmail,
+  prefillName,
 }) => {
   const [iframeLoaded, setIframeLoaded] = useState(false);
-  const bookingUrl = `https://api.leadconnectorhq.com/widget/booking/${calendarId}`;
+  const bookingUrl = ghlBookingUrl(calendarId, { email: prefillEmail, name: prefillName });
 
   return (
     <Card>
@@ -25,14 +39,15 @@ export const BookingWidget: React.FC<BookingWidgetProps> = ({
         action={
           <a href={bookingUrl} target="_blank" rel="noopener noreferrer">
             <Button variant="outline" size="sm">
-              Open Fullscreen Tab
+              Open in New Tab
             </Button>
           </a>
         }
       />
 
       <div style={{ marginBottom: 'var(--space-4)', color: 'var(--color-text-secondary)', fontSize: 'var(--font-size-sm)' }}>
-        Select an available 30-minute timeslot below to review campaign progress, marketing deliverables, or technical integrations.
+        Choose an available time below. Please book with{' '}
+        {prefillEmail ? <strong>{prefillEmail}</strong> : 'your portal email address'} so the call shows up in your portal.
       </div>
 
       <div
@@ -64,15 +79,12 @@ export const BookingWidget: React.FC<BookingWidgetProps> = ({
               textAlign: 'center',
             }}
           >
-            <div style={{ fontWeight: 'var(--font-weight-medium)', marginBottom: 'var(--space-2)' }}>
-              Loading GoHighLevel Scheduling Engine...
+            <div style={{ fontWeight: 'var(--font-weight-medium)', marginBottom: 'var(--space-4)' }}>
+              Loading the booking calendar...
             </div>
-            <span style={{ fontSize: 'var(--font-size-xs)', color: 'var(--color-text-muted)', marginBottom: 'var(--space-4)' }}>
-              Connecting to secure calendar instance ({calendarId})
-            </span>
             <a href={bookingUrl} target="_blank" rel="noopener noreferrer">
               <Button variant="secondary" size="sm">
-                Open in Separate Window
+                Open in New Tab
               </Button>
             </a>
           </div>
@@ -80,16 +92,17 @@ export const BookingWidget: React.FC<BookingWidgetProps> = ({
 
         <iframe
           src={bookingUrl}
+          title="Book a call with your Motionz CSM"
+          loading="lazy"
+          sandbox="allow-scripts allow-same-origin allow-forms allow-popups allow-popups-to-escape-sandbox"
           style={{
             width: '100%',
             height: '700px',
             border: 'none',
             display: 'block',
           }}
-          scrolling="yes"
           id={`msgsndr-calendar-${calendarId}`}
           onLoad={() => setIframeLoaded(true)}
-          title="GoHighLevel Appointment Scheduling"
         />
       </div>
     </Card>

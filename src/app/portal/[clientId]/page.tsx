@@ -26,7 +26,10 @@ export default function ClientOverviewPage() {
   const [nextCall, setNextCall] = useState<string | null>(null);
   const [sheetUrl, setSheetUrl] = useState<string | null>(null);
   const [csm, setCsm] = useState<{ name?: string; email: string } | null>(null);
-  const [hasSignedContract, setHasSignedContract] = useState(false);
+  // 'signed' only when a contract row carries a signed_at timestamp; 'sent' when a contract exists but is unsigned.
+  const [contractState, setContractState] = useState<'signed' | 'sent' | 'none'>('none');
+  const [viewerRole, setViewerRole] = useState<string | null>(null);
+  const [loadError, setLoadError] = useState('');
   const [companyName, setCompanyName] = useState('');
   const [featureToggles, setFeatureToggles] = useState<Record<string, boolean>>({});
 
@@ -35,7 +38,7 @@ export default function ClientOverviewPage() {
   const [changeDesc, setChangeDesc] = useState('');
   const [changeUrl, setChangeUrl] = useState('');
   const [isSubmittingChange, setIsSubmittingChange] = useState(false);
-  const [changeSuccessMessage, setChangeSuccessMessage] = useState('');
+  const [changeNotice, setChangeNotice] = useState<{ text: string; isError: boolean } | null>(null);
 
   useEffect(() => {
     let isMounted = true;
@@ -49,7 +52,10 @@ export default function ClientOverviewPage() {
             return;
           }
         }
-        if (res.ok) {
+        if (!res.ok) {
+          const data = await res.json().catch(() => ({}));
+          if (isMounted) setLoadError(data.error || 'Your portal data could not be loaded. Please refresh the page.');
+        } else {
           const data = await res.json();
           if (isMounted) {
             if (data.tenant?.name) setCompanyName(data.tenant.name);
@@ -64,12 +70,14 @@ export default function ClientOverviewPage() {
             const sheet = (data.integrations || []).find((i: any) => i.integration_type === 'google_sheets' && i.is_active);
             setSheetUrl(sheet?.config_data?.sheet_url || null);
             setCsm(data.csm || null);
-            if (data.contracts) setHasSignedContract(data.contracts.length > 0);
+            const contracts: any[] = Array.isArray(data.contracts) ? data.contracts : [];
+            setContractState(contracts.some((c) => Boolean(c.signed_at)) ? 'signed' : contracts.length > 0 ? 'sent' : 'none');
+            setViewerRole(data.viewer?.role || null);
             if (data.featureToggles) setFeatureToggles(data.featureToggles);
           }
         }
-      } catch (err) {
-        // Fallback to default state
+      } catch {
+        if (isMounted) setLoadError('Could not reach the server. Please check your connection and refresh the page.');
       } finally {
         if (isMounted) setLoading(false);
       }
@@ -94,6 +102,7 @@ export default function ClientOverviewPage() {
     if (!changeTitle.trim() || !changeDesc.trim()) return;
 
     setIsSubmittingChange(true);
+    setChangeNotice(null);
     try {
       const res = await fetch(`/api/portal/${clientId}/website-update`, {
         method: 'POST',
@@ -106,16 +115,17 @@ export default function ClientOverviewPage() {
         }),
       });
 
-      if (res.ok) {
-        setChangeSuccessMessage('Change request submitted to Motionz CSM queue.');
+      const data = await res.json().catch(() => ({}));
+      if (res.ok && data.success) {
+        setChangeNotice({ text: data.message || 'Your request was recorded.', isError: false });
         setChangeTitle('');
         setChangeDesc('');
         setChangeUrl('');
       } else {
-        setChangeSuccessMessage('Request submitted successfully.');
+        setChangeNotice({ text: data.error || 'Your request could not be submitted. Please try again.', isError: true });
       }
     } catch {
-      setChangeSuccessMessage('Request submitted.');
+      setChangeNotice({ text: 'Could not reach the server. Your request was not submitted.', isError: true });
     } finally {
       setIsSubmittingChange(false);
     }
@@ -124,6 +134,22 @@ export default function ClientOverviewPage() {
   if (loading) {
     return <ClientOverviewSkeleton />;
   }
+
+  if (loadError) {
+    return (
+      <div>
+        <h1 style={{ marginBottom: 'var(--space-4)' }}>Overview</h1>
+        <Card>
+          <p role="alert" style={{ margin: 0, color: 'var(--color-status-danger-text)' }}>
+            {loadError}
+          </p>
+        </Card>
+      </div>
+    );
+  }
+
+  // Contract details are only shown to roles allowed to see them (the API hides them from team members).
+  const showContractCard = featureToggles?.contracts !== false && viewerRole !== 'client_member';
 
   return (
     <div>
@@ -140,7 +166,13 @@ export default function ClientOverviewPage() {
           Overview
         </h1>
         <p style={{ color: 'var(--color-text-secondary)', fontSize: 'var(--font-size-sm)', margin: 0 }}>
-          Welcome back to <strong style={{ color: 'var(--color-text-primary)' }}>{companyName}</strong> operations and onboarding dashboard.
+          {companyName ? (
+            <>
+              Welcome back to the <strong style={{ color: 'var(--color-text-primary)' }}>{companyName}</strong> onboarding dashboard.
+            </>
+          ) : (
+            'Welcome back to your onboarding dashboard.'
+          )}
         </p>
       </div>
 
@@ -203,8 +235,18 @@ export default function ClientOverviewPage() {
             </div>
 
             <p style={{ marginBottom: 'var(--space-4)', color: 'var(--color-text-secondary)', fontSize: 'var(--font-size-sm)', lineHeight: 1.5 }}>
-              {completedSteps} of {totalSteps} onboarding milestones completed. Current active milestone:{' '}
-              <strong style={{ color: '#38bdf8' }}>{currentStep?.name}</strong>.
+              {totalSteps === 0 ? (
+                'Your onboarding checklist has not been set up yet.'
+              ) : (
+                <>
+                  {completedSteps} of {totalSteps} onboarding milestones completed.
+                  {currentStep && currentStep.status !== 'done' && (
+                    <>
+                      {' '}Current milestone: <strong style={{ color: '#38bdf8' }}>{currentStep.name}</strong>.
+                    </>
+                  )}
+                </>
+              )}
             </p>
 
             <Link href={`/portal/${clientId}/onboarding`} style={{ width: '100%', textDecoration: 'none' }}>
@@ -226,19 +268,22 @@ export default function ClientOverviewPage() {
                   Current Action Step
                 </h2>
                 <p style={{ fontSize: 'var(--font-size-xs)', color: '#38bdf8', margin: '2px 0 0 0', fontWeight: 500 }}>
-                  {currentStep?.name || 'Onboarding In Progress'}
+                  {currentStep?.name || 'No steps yet'}
                 </p>
               </div>
-              <span className={`ui-pill-status ${currentStep?.status === 'done' ? 'ui-pill-status-active' : 'ui-pill-status-onboarding'}`}>
-                <span className="ui-pill-status-dot" />
-                {currentStep?.status === 'done' ? 'Done' : currentStep?.status === 'in_progress' ? 'In Progress' : 'Not Started'}
-              </span>
+              {currentStep && (
+                <span className={`ui-pill-status ${currentStep.status === 'done' ? 'ui-pill-status-active' : 'ui-pill-status-onboarding'}`}>
+                  <span className="ui-pill-status-dot" />
+                  {currentStep.status === 'done' ? 'Done' : currentStep.status === 'in_progress' ? 'In Progress' : 'Not Started'}
+                </span>
+              )}
             </div>
 
             <p style={{ marginBottom: 'var(--space-3)', color: 'var(--color-text-secondary)', fontSize: 'var(--font-size-sm)', lineHeight: 1.4 }}>
-              {currentStep?.what_it_is}
+              {currentStep?.what_it_is || 'Your Motionz team will add your onboarding steps here.'}
             </p>
 
+            {currentStep?.right_now && (
             <div
               style={{
                 width: '100%',
@@ -251,8 +296,9 @@ export default function ClientOverviewPage() {
                 color: 'var(--color-text-secondary)',
               }}
             >
-              <strong style={{ color: 'var(--color-text-primary)' }}>Right Now:</strong> {currentStep?.right_now}
+              <strong style={{ color: 'var(--color-text-primary)' }}>Right Now:</strong> {currentStep.right_now}
             </div>
+            )}
 
             <div style={{ display: 'flex', gap: 'var(--space-2)', width: '100%', flexWrap: 'wrap' }}>
               <Link href={`/portal/${clientId}/onboarding`} style={{ flex: 1, minWidth: '130px', textDecoration: 'none' }}>
@@ -273,7 +319,7 @@ export default function ClientOverviewPage() {
       )}
 
       {/* 4. Campaign Telemetry Summary Cards */}
-      {(featureToggles?.leads !== false || featureToggles?.tracking !== false || featureToggles?.contracts !== false) && (
+      {(featureToggles?.leads !== false || featureToggles?.tracking !== false || showContractCard) && (
         <div style={{ marginBottom: 'var(--space-6)' }}>
           <h2 style={{ fontSize: '1.15rem', fontWeight: 600, color: 'var(--color-text-primary)', marginBottom: 'var(--space-4)' }}>
             Campaign Telemetry
@@ -344,13 +390,13 @@ export default function ClientOverviewPage() {
                   </div>
                   <div className="ui-stat-info">
                     <span className="ui-stat-label">Tracking Sheet</span>
-                    <span className="ui-stat-value">{sheetUrl ? 'Ready' : 'Setting up'}</span>
+                    <span className="ui-stat-value">{sheetUrl ? 'Ready' : 'Not ready yet'}</span>
                     {sheetUrl ? (
                       <a href={sheetUrl} target="_blank" rel="noopener noreferrer" style={{ fontSize: '0.72rem', color: '#fbbf24', textDecoration: 'none' }}>
                         Open my tracking sheet →
                       </a>
                     ) : (
-                      <span className="ui-stat-meta-text">Your sheet is being created</span>
+                      <span className="ui-stat-meta-text">The link will appear here once your sheet is connected</span>
                     )}
                   </div>
                 </div>
@@ -358,7 +404,7 @@ export default function ClientOverviewPage() {
             )}
 
             {/* Signed Contract */}
-            {featureToggles?.contracts !== false && (
+            {showContractCard && (
               <div className="ui-stat-card">
                 <div className="ui-stat-card-body">
                   <div className="ui-stat-icon-wrapper ui-stat-icon-slate">
@@ -369,8 +415,8 @@ export default function ClientOverviewPage() {
                   </div>
                   <div className="ui-stat-info">
                     <span className="ui-stat-label">Signed Contract</span>
-                    <span className="ui-stat-value" style={{ color: hasSignedContract ? '#34d399' : '#fbbf24' }}>
-                      {hasSignedContract ? 'Verified' : 'Pending'}
+                    <span className="ui-stat-value" style={{ color: contractState === 'signed' ? '#34d399' : '#fbbf24' }}>
+                      {contractState === 'signed' ? 'Signed' : contractState === 'sent' ? 'Awaiting signature' : 'Not available yet'}
                     </span>
                     <Link href={`/portal/${clientId}/contract`} style={{ fontSize: '0.72rem', color: 'var(--color-text-muted)', textDecoration: 'none' }}>
                       View Agreement →
@@ -451,18 +497,19 @@ export default function ClientOverviewPage() {
             title="Website Change Request"
             subtitle="Submit copy or image revisions to your CSM"
           />
-          {changeSuccessMessage && (
+          {changeNotice && (
             <div
+              role={changeNotice.isError ? 'alert' : 'status'}
               style={{
                 padding: 'var(--space-3)',
-                backgroundColor: 'var(--color-status-done-bg)',
-                color: 'var(--color-status-done-text)',
+                backgroundColor: changeNotice.isError ? 'var(--color-status-blocked-bg)' : 'var(--color-status-done-bg)',
+                color: changeNotice.isError ? 'var(--color-status-blocked-text)' : 'var(--color-status-done-text)',
                 borderRadius: 'var(--radius-md)',
                 marginBottom: 'var(--space-4)',
                 fontSize: 'var(--font-size-sm)',
               }}
             >
-              {changeSuccessMessage}
+              {changeNotice.text}
             </div>
           )}
           <form onSubmit={handleWebsiteChangeSubmit} style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-3)' }}>
@@ -471,11 +518,14 @@ export default function ClientOverviewPage() {
               placeholder="e.g. Update phone number on header"
               value={changeTitle}
               onChange={(e) => setChangeTitle(e.target.value)}
+              maxLength={200}
               required
             />
             <Input
-              label="Page URL or Section"
-              placeholder="e.g. /about or Homepage hero"
+              label="Page URL (optional)"
+              type="url"
+              placeholder="e.g. https://yourcompany.com/about"
+              helperText="Mention the section (for example, the homepage banner) in the description."
               value={changeUrl}
               onChange={(e) => setChangeUrl(e.target.value)}
             />
@@ -505,6 +555,7 @@ export default function ClientOverviewPage() {
                 placeholder="Explain the changes you would like us to make..."
                 value={changeDesc}
                 onChange={(e) => setChangeDesc(e.target.value)}
+                maxLength={5000}
                 required
               />
             </div>
@@ -528,7 +579,7 @@ export default function ClientOverviewPage() {
             (!featureToggles || featureToggles.book_call !== false) ? (
               <Link href={`/portal/${clientId}/book-call`}>
                 <Button variant="secondary" size="sm">
-                  Schedule Strategy Call
+                  Book CSM Call
                 </Button>
               </Link>
             ) : undefined
@@ -546,7 +597,7 @@ export default function ClientOverviewPage() {
                   <a href={`mailto:${csm.email}`}>{csm.email}</a>
                 </>
               ) : (
-                'Being assigned'
+                'Not assigned yet'
               )}
             </div>
           </div>

@@ -89,14 +89,13 @@ export async function POST(
     // Enforce active account, tenant suspension, and tenant isolation
     const session = await assertPortalAccess(request, targetTenant, rawClientId);
 
-    let actorRole: any = 'client';
-    let actorEmail = 'john@abcroofing.com';
-
-    if (session) {
-      assertPermission(session.role, 'team:invite');
-      actorRole = session.role;
-      actorEmail = session.email;
+    // Writes always require a signed-in user; there is no anonymous fallback actor.
+    if (!session) {
+      return NextResponse.json({ error: 'Authentication required. Please sign in.', code: 'UNAUTHENTICATED' }, { status: 401 });
     }
+    assertPermission(session.role, 'team:invite');
+    const actorRole: any = session.role;
+    const actorEmail = session.email;
 
     const body = await request.json();
     const { email, phone, allowed_modules } = body;
@@ -203,14 +202,13 @@ export async function DELETE(
     // Enforce active account, tenant suspension, and tenant isolation
     const session = await assertPortalAccess(request, targetTenant, rawClientId);
 
-    let actorRole: any = 'client';
-    let actorEmail = 'john@abcroofing.com';
-
-    if (session) {
-      assertPermission(session.role, 'team:remove');
-      actorRole = session.role;
-      actorEmail = session.email;
+    // Writes always require a signed-in user; there is no anonymous fallback actor.
+    if (!session) {
+      return NextResponse.json({ error: 'Authentication required. Please sign in.', code: 'UNAUTHENTICATED' }, { status: 401 });
     }
+    assertPermission(session.role, 'team:remove');
+    const actorRole: any = session.role;
+    const actorEmail = session.email;
 
     const { searchParams } = new URL(request.url);
     let invitationId = searchParams.get('invitationId');
@@ -288,14 +286,13 @@ export async function PATCH(
     // Enforce active account, tenant suspension, and tenant isolation
     const session = await assertPortalAccess(request, targetTenant, rawClientId);
 
-    let actorRole: any = 'client';
-    let actorEmail = 'john@abcroofing.com';
-
-    if (session) {
-      assertPermission(session.role, 'team:invite');
-      actorRole = session.role;
-      actorEmail = session.email;
+    // Writes always require a signed-in user; there is no anonymous fallback actor.
+    if (!session) {
+      return NextResponse.json({ error: 'Authentication required. Please sign in.', code: 'UNAUTHENTICATED' }, { status: 401 });
     }
+    assertPermission(session.role, 'team:invite');
+    const actorRole: any = session.role;
+    const actorEmail = session.email;
 
     const body = await request.json().catch(() => ({}));
     const invitationId = body?.invitationId;
@@ -361,15 +358,14 @@ export async function PUT(
 
     const tenantId = targetTenant ? targetTenant.id : DEMO_TENANT_UUID;
 
-    let actorRole: any = 'client';
-    let actorEmail = 'john@abcroofing.com';
-
     // Enforce active account, tenant suspension, and tenant isolation
     const session = await assertPortalAccess(request, targetTenant, rawClientId);
-    if (session) {
-      actorRole = session.role;
-      actorEmail = session.email;
+    // Writes always require a signed-in user; there is no anonymous fallback actor.
+    if (!session) {
+      return NextResponse.json({ error: 'Authentication required. Please sign in.', code: 'UNAUTHENTICATED' }, { status: 401 });
     }
+    const actorRole: any = session.role;
+    const actorEmail = session.email;
 
     const body = await request.json().catch(() => ({}));
     const { action, memberId, reason } = body;

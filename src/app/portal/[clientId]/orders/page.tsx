@@ -9,10 +9,11 @@ interface OrderRecord {
   order_number: string;
   label: string;
   stage: 'ordered' | 'packaged' | 'shipped' | 'delivered' | 'issue';
-  carrier: string;
-  tracking_number: string;
-  tracking_url?: string;
-  batch_info?: string;
+  carrier?: string | null;
+  tracking_number?: string | null;
+  tracking_url?: string | null;
+  batch_info?: string | null;
+  issue_notes?: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -24,26 +25,35 @@ const STAGES = [
   { key: 'delivered', label: 'Delivered' },
 ];
 
+const STAGE_LABELS: Record<string, string> = {
+  ordered: 'Ordered',
+  packaged: 'Packaged',
+  shipped: 'Shipped',
+  delivered: 'Delivered',
+  issue: 'Issue',
+};
+
 export default function OrdersAndShippingPage() {
   const params = useParams();
   const clientId = (params?.clientId as string) || 'demo';
 
   const [orders, setOrders] = useState<OrderRecord[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [loadError, setLoadError] = useState('');
 
   useEffect(() => {
     let isMounted = true;
     async function loadOrders() {
       try {
         const res = await fetch(`/api/portal/${clientId}/data`);
-        if (res.ok) {
-          const data = await res.json();
-          if (isMounted && data.orders && data.orders.length > 0) {
-            setOrders(data.orders);
-          }
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) {
+          if (isMounted) setLoadError(data.error || 'Your orders could not be loaded. Please refresh the page.');
+          return;
         }
+        if (isMounted) setOrders(Array.isArray(data.orders) ? data.orders : []);
       } catch {
-        // Fallback remains active
+        if (isMounted) setLoadError('Could not reach the server. Please check your connection and refresh the page.');
       } finally {
         if (isMounted) setIsLoading(false);
       }
@@ -56,10 +66,27 @@ export default function OrdersAndShippingPage() {
 
   const activeOrders: OrderRecord[] = orders;
 
-  const getStageIndex = (stage: string) => {
-    const idx = STAGES.findIndex((s) => s.key === stage);
-    return idx >= 0 ? idx : 0;
-  };
+  /** Index on the ordered -> delivered tracker, or -1 when the order is not on it (e.g. an issue). */
+  const getStageIndex = (stage: string) => STAGES.findIndex((s) => s.key === stage);
+
+  const detail = (label: string, value: string | null | undefined, mono = false) => (
+    <div>
+      <span style={{ fontSize: 'var(--font-size-xs)', color: 'var(--color-text-muted)', display: 'block' }}>{label}</span>
+      {value ? (
+        <span
+          style={{
+            fontWeight: 'var(--font-weight-medium)',
+            fontSize: 'var(--font-size-sm)',
+            ...(mono ? { fontFamily: 'monospace' } : {}),
+          }}
+        >
+          {value}
+        </span>
+      ) : (
+        <span style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-muted)' }}>Not available yet</span>
+      )}
+    </div>
+  );
 
   return (
     <div>
@@ -99,6 +126,12 @@ export default function OrdersAndShippingPage() {
               ))}
             </div>
           </Card>
+        ) : loadError ? (
+          <Card>
+            <p role="alert" style={{ color: 'var(--color-status-danger-text)', margin: 0 }}>
+              {loadError}
+            </p>
+          </Card>
         ) : activeOrders.length === 0 ? (
           <Card>
             <p style={{ color: 'var(--color-text-secondary)', margin: 0 }}>
@@ -108,6 +141,7 @@ export default function OrdersAndShippingPage() {
         ) : (
           activeOrders.map((order) => {
           const currentStageIdx = getStageIndex(order.stage);
+          const hasIssue = order.stage === 'issue';
 
           return (
             <Card key={order.id}>
@@ -116,14 +150,31 @@ export default function OrdersAndShippingPage() {
                 subtitle={`Order #${order.order_number} | Placed on ${new Date(order.created_at).toLocaleDateString()}`}
                 action={
                   <StatusBadge
-                    status={order.stage.toUpperCase()}
+                    status={(STAGE_LABELS[order.stage] || order.stage).toUpperCase()}
                     variant={order.stage === 'delivered' ? 'done' : order.stage === 'issue' ? 'danger' : 'progress'}
                   />
                 }
               />
 
-              {/* Progress Pipeline Stages */}
-              <div style={{ margin: 'var(--space-4) 0 var(--space-6) 0' }}>
+              {hasIssue && (
+                <div
+                  role="alert"
+                  style={{
+                    padding: 'var(--space-3)',
+                    backgroundColor: 'var(--color-status-blocked-bg)',
+                    color: 'var(--color-status-blocked-text)',
+                    borderRadius: 'var(--radius-md)',
+                    margin: 'var(--space-4) 0 0',
+                    fontSize: 'var(--font-size-sm)',
+                  }}
+                >
+                  <strong>There is an issue with this order.</strong>{' '}
+                  {order.issue_notes ? order.issue_notes : 'Contact your CSM for details.'}
+                </div>
+              )}
+
+              {/* Progress Pipeline Stages (no stage is marked complete while an issue is open) */}
+              <div style={{ margin: 'var(--space-4) 0 var(--space-6) 0', opacity: hasIssue ? 0.5 : 1 }}>
                 <div
                   style={{
                     display: 'grid',
@@ -133,8 +184,8 @@ export default function OrdersAndShippingPage() {
                   }}
                 >
                   {STAGES.map((s, idx) => {
-                    const isCompleted = idx <= currentStageIdx;
-                    const isCurrent = idx === currentStageIdx;
+                    const isCompleted = currentStageIdx >= 0 && idx <= currentStageIdx;
+                    const isCurrent = currentStageIdx >= 0 && idx === currentStageIdx;
 
                     return (
                       <div key={s.key} style={{ textAlign: 'center' }}>
@@ -179,33 +230,9 @@ export default function OrdersAndShippingPage() {
                   marginBottom: 'var(--space-4)',
                 }}
               >
-                <div>
-                  <span style={{ fontSize: 'var(--font-size-xs)', color: 'var(--color-text-muted)', display: 'block' }}>
-                    Fulfillment Carrier
-                  </span>
-                  <span style={{ fontWeight: 'var(--font-weight-medium)', fontSize: 'var(--font-size-sm)' }}>
-                    {order.carrier}
-                  </span>
-                </div>
-
-                <div>
-                  <span style={{ fontSize: 'var(--font-size-xs)', color: 'var(--color-text-muted)', display: 'block' }}>
-                    Tracking Number
-                  </span>
-                  <span style={{ fontWeight: 'var(--font-weight-medium)', fontSize: 'var(--font-size-sm)', fontFamily: 'monospace' }}>
-                    {order.tracking_number}
-                  </span>
-                </div>
-
-                <div>
-                  <span style={{ fontSize: 'var(--font-size-xs)', color: 'var(--color-text-muted)', display: 'block' }}>
-                    Logistics Origin
-                  </span>
-                  <span style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-secondary)' }}>
-                    {order.batch_info || 'Motionz Central Depot'}
-                  </span>
-                </div>
-
+                {detail('Carrier', order.carrier)}
+                {detail('Tracking Number', order.tracking_number, true)}
+                {order.batch_info ? detail('Batch', order.batch_info) : null}
               </div>
 
               {/* Actions */}
