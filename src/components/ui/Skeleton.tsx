@@ -9,7 +9,7 @@ export interface SkeletonProps extends React.HTMLAttributes<HTMLDivElement> {
 export const Skeleton: React.FC<SkeletonProps> = ({
   width = '100%',
   height = '1rem',
-  borderRadius = 'var(--radius-sm, 4px)',
+  borderRadius = 'var(--radius-sm, 6px)',
   className = '',
   style,
   ...props
@@ -17,6 +17,7 @@ export const Skeleton: React.FC<SkeletonProps> = ({
   return (
     <div
       className={`ui-skeleton ${className}`.trim()}
+      aria-hidden="true"
       style={{
         width,
         height,
@@ -35,15 +36,7 @@ export interface TableSkeletonProps {
 
 export const TableSkeleton: React.FC<TableSkeletonProps> = ({ rows = 5, columns = 5 }) => {
   return (
-    <div
-      style={{
-        width: '100%',
-        backgroundColor: 'var(--color-bg-card, #0f172a)',
-        border: '1px solid var(--color-border-subtle, rgba(255, 255, 255, 0.08))',
-        borderRadius: 'var(--radius-md, 8px)',
-        overflow: 'hidden',
-      }}
-    >
+    <div className="ui-skeleton-table" aria-busy="true" aria-label="Loading">
       {/* Header bar skeleton */}
       <div
         style={{
@@ -51,8 +44,8 @@ export const TableSkeleton: React.FC<TableSkeletonProps> = ({ rows = 5, columns 
           gridTemplateColumns: `repeat(${columns}, 1fr)`,
           gap: 'var(--space-4)',
           padding: 'var(--space-4)',
-          borderBottom: '1px solid var(--color-border-subtle, rgba(255, 255, 255, 0.08))',
-          backgroundColor: 'var(--color-bg-surface, #0b1120)',
+          borderBottom: '1px solid var(--color-border-subtle)',
+          backgroundColor: 'var(--color-bg-surface)',
         }}
       >
         {Array.from({ length: columns }).map((_, i) => (
@@ -71,7 +64,7 @@ export const TableSkeleton: React.FC<TableSkeletonProps> = ({ rows = 5, columns 
               gap: 'var(--space-4)',
               padding: 'var(--space-4)',
               alignItems: 'center',
-              borderBottom: r < rows - 1 ? '1px solid var(--color-border-subtle, rgba(255, 255, 255, 0.05))' : 'none',
+              borderBottom: r < rows - 1 ? '1px solid var(--color-border-subtle)' : 'none',
             }}
           >
             {Array.from({ length: columns }).map((_, c) => (
@@ -93,18 +86,7 @@ export interface CardSkeletonProps {
 
 export const CardSkeleton: React.FC<CardSkeletonProps> = ({ height = '140px' }) => {
   return (
-    <div
-      style={{
-        backgroundColor: 'var(--color-bg-card, #0f172a)',
-        border: '1px solid var(--color-border-subtle, rgba(255, 255, 255, 0.08))',
-        borderRadius: 'var(--radius-md, 8px)',
-        padding: 'var(--space-5)',
-        height,
-        display: 'flex',
-        flexDirection: 'column',
-        gap: 'var(--space-3)',
-      }}
-    >
+    <div className="ui-skeleton-card" style={{ height }} aria-busy="true" aria-label="Loading">
       <Skeleton width="40%" height="20px" />
       <Skeleton width="70%" height="14px" />
       <div style={{ marginTop: 'auto' }}>

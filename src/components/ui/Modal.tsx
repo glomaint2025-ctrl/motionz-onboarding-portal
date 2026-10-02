@@ -1,7 +1,6 @@
 'use client';
 
-import React, { useEffect } from 'react';
-import { Button } from './Button';
+import React, { useEffect, useId } from 'react';
 
 export interface ModalProps {
   isOpen: boolean;
@@ -9,6 +8,8 @@ export interface ModalProps {
   title: string;
   children: React.ReactNode;
   footer?: React.ReactNode;
+  /** Optional max width of the dialog (e.g. 720 or '48rem'). */
+  maxWidth?: number | string;
 }
 
 export const Modal: React.FC<ModalProps> = ({
@@ -17,7 +18,10 @@ export const Modal: React.FC<ModalProps> = ({
   title,
   children,
   footer,
+  maxWidth,
 }) => {
+  const titleId = useId();
+
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'Escape' && isOpen) {
@@ -31,13 +35,22 @@ export const Modal: React.FC<ModalProps> = ({
   if (!isOpen) return null;
 
   return (
-    <div className="ui-modal-overlay" role="dialog" aria-modal="true" onClick={onClose}>
-      <div className="ui-modal-dialog" onClick={(e) => e.stopPropagation()}>
+    <div className="ui-modal-overlay" onClick={onClose}>
+      <div
+        className="ui-modal-dialog"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby={titleId}
+        style={maxWidth !== undefined ? { maxWidth } : undefined}
+        onClick={(e) => e.stopPropagation()}
+      >
         <div className="ui-modal-header">
-          <h3 className="ui-modal-title">{title}</h3>
-          <Button variant="secondary" size="sm" onClick={onClose}>
-            Close
-          </Button>
+          <h3 className="ui-modal-title" id={titleId}>{title}</h3>
+          <button type="button" className="ui-modal-close" onClick={onClose} aria-label="Close dialog">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" aria-hidden="true">
+              <path d="M6 6l12 12M18 6 6 18" />
+            </svg>
+          </button>
         </div>
         <div className="ui-modal-body">{children}</div>
         {footer && <div className="ui-modal-footer">{footer}</div>}

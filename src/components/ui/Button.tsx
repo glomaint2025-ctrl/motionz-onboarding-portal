@@ -1,10 +1,29 @@
 import React from 'react';
 
+export type ButtonVariant = 'primary' | 'secondary' | 'outline' | 'danger' | 'ghost';
+export type ButtonSize = 'sm' | 'md' | 'lg';
+
 export interface ButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElement> {
-  variant?: 'primary' | 'secondary' | 'outline' | 'danger';
-  size?: 'sm' | 'md' | 'lg';
+  variant?: ButtonVariant;
+  size?: ButtonSize;
   fullWidth?: boolean;
   children: React.ReactNode;
+}
+
+/**
+ * Class names for something that should look like a button but is not a <button>,
+ * e.g. a Next <Link> or an external <a>. Avoids nesting a button inside a link.
+ */
+export function buttonClasses({
+  variant = 'primary',
+  size = 'md',
+  fullWidth = false,
+  className = '',
+}: { variant?: ButtonVariant; size?: ButtonSize; fullWidth?: boolean; className?: string } = {}): string {
+  const sizeClass = size === 'sm' ? 'ui-btn-sm' : size === 'lg' ? 'ui-btn-lg' : '';
+  return ['ui-btn', `ui-btn-${variant}`, sizeClass, fullWidth ? 'ui-btn-full' : '', className]
+    .filter(Boolean)
+    .join(' ');
 }
 
 export const Button: React.FC<ButtonProps> = ({
@@ -16,13 +35,9 @@ export const Button: React.FC<ButtonProps> = ({
   children,
   ...props
 }) => {
-  const variantClass = `ui-btn-${variant}`;
-  const sizeClass = size === 'sm' ? 'ui-btn-sm' : size === 'lg' ? 'ui-btn-lg' : '';
-  const fullWidthClass = fullWidth ? 'ui-btn-full' : '';
-
   return (
     <button
-      className={`ui-btn ${variantClass} ${sizeClass} ${fullWidthClass} ${className}`.trim()}
+      className={buttonClasses({ variant, size, fullWidth, className })}
       disabled={disabled}
       {...props}
     >

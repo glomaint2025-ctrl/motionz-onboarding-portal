@@ -2,8 +2,10 @@
 
 import React from 'react';
 import Link from 'next/link';
-import { Button } from '@/components/ui';
 import { PORTAL_LINKS } from '@/lib/portal-links';
+import { Icon } from '@/components/brand/Icon';
+import { SlackLogo } from '@/components/brand/SlackLogo';
+import { SkoolLogo } from '@/components/brand/SkoolLogo';
 
 export interface QuickLinksBarProps {
   clientId: string;
@@ -17,64 +19,72 @@ export const QuickLinksBar: React.FC<QuickLinksBarProps> = ({
   onOpenA2PForm,
 }) => {
   return (
-    <div
-      style={{
-        padding: 'var(--space-4)',
-        backgroundColor: 'var(--color-bg-surface)',
-        borderRadius: 'var(--radius-md)',
-        border: '1px solid var(--color-border-subtle)',
-        marginBottom: 'var(--space-6)',
-        display: 'flex',
-        flexWrap: 'wrap',
-        gap: 'var(--space-3)',
-        alignItems: 'center',
-        justifyContent: 'space-between',
-      }}
-    >
-      <div>
-        <span style={{ fontWeight: 'var(--font-weight-semibold)', fontSize: 'var(--font-size-sm)', display: 'block' }}>
-          Onboarding Resources & Hub
-        </span>
-        <span style={{ fontSize: 'var(--font-size-xs)', color: 'var(--color-text-muted)' }}>
-          Quick access to external training, communities, and carrier compliance forms
-        </span>
+    <section className="quick-links" aria-labelledby="quick-links-title">
+      <div className="quick-links-head">
+        <div>
+          <h2 className="quick-links-title" id="quick-links-title">Quick links</h2>
+          <p className="quick-links-sub">Your forms, community and a direct line to your CSM.</p>
+        </div>
       </div>
 
-      <div style={{ display: 'flex', gap: 'var(--space-2)', flexWrap: 'wrap' }}>
-        <a
-          href={PORTAL_LINKS.slackInvite}
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Button variant="secondary" size="sm">
-            Slack Community
-          </Button>
+      <div className="quick-links-grid">
+        <a href={PORTAL_LINKS.slackInvite} target="_blank" rel="noopener noreferrer" className="quick-link">
+          <span className="logo-tile logo-tile-sm" aria-hidden="true">
+            <SlackLogo size={16} title="" />
+          </span>
+          <span className="quick-link-text">
+            Join Slack
+            <span className="quick-link-hint">Chat with the Motionz team</span>
+          </span>
+          <Icon name="external" size={16} className="quick-link-arrow" />
+          <span className="sr-only">(opens in a new tab)</span>
         </a>
 
-        <a
-          href={PORTAL_LINKS.skoolCommunity}
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Button variant="secondary" size="sm">
-            Skool Training Hub
-          </Button>
+        <a href={PORTAL_LINKS.skoolCommunity} target="_blank" rel="noopener noreferrer" className="quick-link">
+          <span className="logo-tile logo-tile-sm" aria-hidden="true">
+            <SkoolLogo size={20} variant="mark" title="" />
+          </span>
+          <span className="quick-link-text">
+            Join Skool
+            <span className="quick-link-hint">Training and community</span>
+          </span>
+          <Icon name="external" size={16} className="quick-link-arrow" />
+          <span className="sr-only">(opens in a new tab)</span>
         </a>
 
-        <Button variant="outline" size="sm" onClick={onOpenGHLForm}>
-          Onboarding Form
-        </Button>
+        <button type="button" className="quick-link" onClick={onOpenGHLForm}>
+          <span className="logo-tile logo-tile-sm logo-tile-icon" aria-hidden="true">
+            <Icon name="form" size={16} />
+          </span>
+          <span className="quick-link-text">
+            Onboarding form
+            <span className="quick-link-hint">About your business</span>
+          </span>
+          <Icon name="chevron-right" size={16} className="quick-link-arrow" />
+        </button>
 
-        <Button variant="outline" size="sm" onClick={onOpenA2PForm}>
-          A2P Carrier Form
-        </Button>
+        <button type="button" className="quick-link" onClick={onOpenA2PForm}>
+          <span className="logo-tile logo-tile-sm logo-tile-icon" aria-hidden="true">
+            <Icon name="message" size={16} />
+          </span>
+          <span className="quick-link-text">
+            A2P texting form
+            <span className="quick-link-hint">Carrier registration</span>
+          </span>
+          <Icon name="chevron-right" size={16} className="quick-link-arrow" />
+        </button>
 
-        <Link href={`/portal/${clientId}/book-call`}>
-          <Button variant="primary" size="sm">
-            Book CSM Call
-          </Button>
+        <Link href={`/portal/${clientId}/book-call`} className="quick-link quick-link-primary">
+          <span className="logo-tile logo-tile-sm logo-tile-warm" aria-hidden="true">
+            <Icon name="calendar" size={16} />
+          </span>
+          <span className="quick-link-text">
+            Book a CSM call
+            <span className="quick-link-hint">Pick a time that suits you</span>
+          </span>
+          <Icon name="arrow-right" size={16} className="quick-link-arrow" />
         </Link>
       </div>
-    </div>
+    </section>
   );
 };

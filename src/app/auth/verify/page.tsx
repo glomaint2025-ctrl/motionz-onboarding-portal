@@ -3,7 +3,9 @@
 import React, { useState, useEffect } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { Card, Input, Button } from '@/components/ui';
+import { Input, Button, buttonClasses } from '@/components/ui';
+import { Icon } from '@/components/brand/Icon';
+import { MotionzWordmark } from '@/components/brand/MotionzLogo';
 
 function VerifyContent() {
   const router = useRouter();
@@ -97,119 +99,64 @@ function VerifyContent() {
   };
 
   return (
-    <div
-      style={{
-        minHeight: '100vh',
-        display: 'flex',
-        flexDirection: 'column',
-        justifyContent: 'center',
-        alignItems: 'center',
-        padding: 'var(--space-4)',
-        backgroundColor: 'var(--color-bg-base)',
-      }}
-    >
-      <div style={{ width: '100%', maxWidth: '440px' }}>
-        <div style={{ textAlign: 'center', marginBottom: 'var(--space-6)' }}>
-          <span
-            style={{
-              fontSize: 'var(--font-size-2xl)',
-              fontWeight: '700',
-              color: 'var(--color-primary)',
-              letterSpacing: '-0.02em',
-            }}
-          >
-            Motionz
-          </span>
+    <div className="auth-page">
+      <div className="auth-container">
+        <div className="auth-brand">
+          <MotionzWordmark size={40} />
         </div>
 
-        <Card>
+        <div className="auth-card">
           {tokenStatus === 'checking' && (
-            <div style={{ textAlign: 'center', padding: 'var(--space-6) 0' }}>
-              <p style={{ color: 'var(--color-text-secondary)', fontSize: 'var(--font-size-sm)' }}>
-                Validating invitation link...
-              </p>
+            <div className="auth-card-center" role="status" style={{ padding: 'var(--space-6) 0' }}>
+              <div className="auth-icon">
+                <Icon name="mail" size={24} />
+              </div>
+              <p>Checking your invitation link...</p>
             </div>
           )}
 
           {tokenStatus === 'invalid' && (
-            <div>
-              <div style={{ marginBottom: 'var(--space-4)' }}>
-                <h2
-                  style={{
-                    fontSize: 'var(--font-size-lg)',
-                    fontWeight: '600',
-                    color: 'var(--color-text-primary)',
-                    letterSpacing: '-0.01em',
-                    marginBottom: 'var(--space-1)',
-                  }}
-                >
-                  Invalid or Expired Link
-                </h2>
+            <div className="auth-card-center">
+              <div className="auth-icon auth-icon-warning">
+                <Icon name="alert" size={24} />
+              </div>
+              <h1 className="auth-title">This link isn&apos;t working</h1>
+              <p className="auth-subtitle">
+                Invitation links expire and can only be used once. If you already set a password, just sign in.
+                Otherwise, ask your Motionz contact to send a new invite.
+              </p>
+
+              <div className="auth-alert auth-alert-danger" role="alert">
+                <Icon name="alert" size={18} />
+                <span>{error || 'This invitation is invalid or has expired.'}</span>
               </div>
 
-              <div
-                style={{
-                  padding: 'var(--space-3)',
-                  backgroundColor: 'var(--color-status-danger-bg)',
-                  border: '1px solid var(--color-status-danger-border)',
-                  borderRadius: 'var(--radius-md)',
-                  color: 'var(--color-status-danger-text)',
-                  fontSize: 'var(--font-size-xs)',
-                  lineHeight: '1.4',
-                  marginBottom: 'var(--space-4)',
-                }}
-              >
-                {error || 'This invitation is invalid or has expired.'}
-              </div>
-
-              <Link href="/auth/login">
-                <Button variant="primary" fullWidth>
-                  Go to Sign In
-                </Button>
+              <Link href="/auth/login" className={buttonClasses({ variant: 'primary', size: 'lg', fullWidth: true })}>
+                Go to sign in
               </Link>
             </div>
           )}
 
           {tokenStatus === 'valid' && (
             <div>
-              <div style={{ marginBottom: 'var(--space-4)' }}>
-                <h2
-                  style={{
-                    fontSize: 'var(--font-size-lg)',
-                    fontWeight: '600',
-                    color: 'var(--color-text-primary)',
-                    letterSpacing: '-0.01em',
-                    marginBottom: 'var(--space-1)',
-                  }}
-                >
-                  Complete Account Setup
-                </h2>
-                <p
-                  style={{
-                    fontSize: 'var(--font-size-xs)',
-                    color: 'var(--color-text-muted)',
-                  }}
-                >
-                  {invitedEmail
-                    ? `Set a password for ${invitedEmail} to complete registration.`
-                    : 'Choose a secure password to complete your registration.'}
-                </p>
+              <div className="auth-icon auth-icon-success">
+                <Icon name="key" size={24} />
               </div>
+              <h1 className="auth-title">Welcome to Motionz</h1>
+              <p className="auth-subtitle">
+                {invitedEmail ? (
+                  <>
+                    Create a password for <strong>{invitedEmail}</strong> and you&apos;re in.
+                  </>
+                ) : (
+                  'Create a password to finish setting up your account.'
+                )}
+              </p>
 
               {error && (
-                <div
-                  style={{
-                    padding: 'var(--space-3)',
-                    backgroundColor: 'var(--color-status-danger-bg)',
-                    border: '1px solid var(--color-status-danger-border)',
-                    borderRadius: 'var(--radius-md)',
-                    color: 'var(--color-status-danger-text)',
-                    fontSize: 'var(--font-size-xs)',
-                    lineHeight: '1.4',
-                    marginBottom: 'var(--space-4)',
-                  }}
-                >
-                  {error}
+                <div className="auth-alert auth-alert-danger" role="alert">
+                  <Icon name="alert" size={18} />
+                  <span>{error}</span>
                 </div>
               )}
 
@@ -217,40 +164,40 @@ function VerifyContent() {
                 <Input
                   id="setup-password"
                   name="new-password"
-                  label="Create Password"
+                  label="Create password"
                   type="password"
                   autoComplete="new-password"
                   placeholder="At least 8 characters"
+                  helperText="Use 8 or more characters."
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                   required
                 />
-                <div style={{ marginTop: 'var(--space-3)' }}>
-                  <Input
-                    id="confirm-password"
-                    name="confirm-password"
-                    label="Confirm Password"
-                    type="password"
-                    autoComplete="new-password"
-                    placeholder="Re-enter your password"
-                    value={confirmPassword}
-                    onChange={(e) => setConfirmPassword(e.target.value)}
-                    required
-                  />
-                </div>
+                <Input
+                  id="confirm-password"
+                  name="confirm-password"
+                  label="Confirm password"
+                  type="password"
+                  autoComplete="new-password"
+                  placeholder="Type it again"
+                  value={confirmPassword}
+                  onChange={(e) => setConfirmPassword(e.target.value)}
+                  required
+                />
                 <Button
                   type="submit"
                   variant="primary"
+                  size="lg"
                   fullWidth
                   disabled={submitting}
-                  style={{ marginTop: 'var(--space-4)' }}
+                  style={{ marginTop: 'var(--space-2)' }}
                 >
-                  {submitting ? 'Setting up...' : 'Save Password & Enter Portal'}
+                  {submitting ? 'Setting up...' : 'Save password and continue'}
                 </Button>
               </form>
             </div>
           )}
-        </Card>
+        </div>
       </div>
     </div>
   );
@@ -260,16 +207,7 @@ export default function VerifyPage() {
   return (
     <React.Suspense
       fallback={
-        <div
-          style={{
-            minHeight: '100vh',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-          }}
-        >
-          Loading...
-        </div>
+        <div className="auth-loading">Loading...</div>
       }
     >
       <VerifyContent />

@@ -3,7 +3,9 @@
 import React, { useState } from 'react';
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { Card, Input, Button } from '@/components/ui';
+import { Input, Button } from '@/components/ui';
+import { Icon } from '@/components/brand/Icon';
+import { MotionzWordmark } from '@/components/brand/MotionzLogo';
 
 function LoginForm() {
   const router = useRouter();
@@ -74,59 +76,20 @@ function LoginForm() {
   };
 
   return (
-    <div
-      style={{
-        minHeight: '100vh',
-        display: 'flex',
-        flexDirection: 'column',
-        justifyContent: 'center',
-        alignItems: 'center',
-        padding: 'var(--space-4)',
-        backgroundColor: 'var(--color-bg-base)',
-      }}
-    >
-      <div style={{ width: '100%', maxWidth: '440px' }}>
-        <div style={{ textAlign: 'center', marginBottom: 'var(--space-6)' }}>
-          <span
-            style={{
-              fontSize: 'var(--font-size-2xl)',
-              fontWeight: '700',
-              color: 'var(--color-primary)',
-              letterSpacing: '-0.02em',
-            }}
-          >
-            Motionz
-          </span>
+    <div className="auth-page">
+      <div className="auth-container">
+        <div className="auth-brand">
+          <MotionzWordmark size={40} />
         </div>
 
-        <Card>
-          <div style={{ marginBottom: 'var(--space-5)' }}>
-            <h2
-              style={{
-                fontSize: 'var(--font-size-lg)',
-                fontWeight: '600',
-                color: 'var(--color-text-primary)',
-                letterSpacing: '-0.01em',
-              }}
-            >
-              Sign In
-            </h2>
-          </div>
+        <div className="auth-card">
+          <h1 className="auth-title">Welcome back</h1>
+          <p className="auth-subtitle">Sign in to see your setup progress, leads and results.</p>
 
           {errorMessage && (
-            <div
-              style={{
-                padding: 'var(--space-3)',
-                backgroundColor: 'var(--color-status-danger-bg)',
-                border: '1px solid var(--color-status-danger-border)',
-                borderRadius: 'var(--radius-md)',
-                color: 'var(--color-status-danger-text)',
-                fontSize: 'var(--font-size-xs)',
-                lineHeight: '1.4',
-                marginBottom: 'var(--space-4)',
-              }}
-            >
-              {errorMessage}
+            <div className="auth-alert auth-alert-danger" role="alert">
+              <Icon name="alert" size={18} />
+              <span>{errorMessage}</span>
             </div>
           )}
 
@@ -142,47 +105,44 @@ function LoginForm() {
               label="Email"
               type="email"
               autoComplete="username"
-              placeholder="name@company.com"
+              placeholder="you@company.com"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               required
             />
-            <div style={{ marginTop: 'var(--space-3)' }}>
-              <Input
-                id="login-password"
-                name="password"
-                label="Password"
-                type="password"
-                autoComplete="current-password"
-                placeholder="Enter your password"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                required
-              />
-              <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 'var(--space-1)' }}>
-                <Link
-                  href="/auth/forgot-password"
-                  style={{
-                    fontSize: 'var(--font-size-xs)',
-                    color: 'var(--color-primary, #34A5CB)',
-                    textDecoration: 'none',
-                  }}
-                >
-                  Forgot password?
-                </Link>
-              </div>
+            <Input
+              id="login-password"
+              name="password"
+              label="Password"
+              type="password"
+              autoComplete="current-password"
+              placeholder="Enter your password"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              required
+            />
+            <div className="auth-row-end">
+              <Link href="/auth/forgot-password" className="auth-link">
+                Forgot password?
+              </Link>
             </div>
             <Button
               type="submit"
               variant="primary"
+              size="lg"
               fullWidth
               disabled={loading}
-              style={{ marginTop: 'var(--space-4)' }}
+              style={{ marginTop: 'var(--space-2)' }}
             >
-              {loading ? 'Signing in...' : 'Sign In'}
+              {loading ? 'Signing in...' : 'Sign in'}
             </Button>
           </form>
-        </Card>
+        </div>
+
+        <p className="auth-footnote">
+          <Icon name="lock" size={13} style={{ verticalAlign: '-2px', marginRight: 6 }} />
+          Private portal for Motionz clients and team. Need access? Ask your Motionz contact for an invite.
+        </p>
       </div>
     </div>
   );
@@ -192,16 +152,7 @@ export default function LoginPage() {
   return (
     <React.Suspense
       fallback={
-        <div
-          style={{
-            minHeight: '100vh',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-          }}
-        >
-          Loading...
-        </div>
+        <div className="auth-loading">Loading...</div>
       }
     >
       <LoginForm />
