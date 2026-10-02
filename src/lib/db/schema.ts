@@ -55,6 +55,22 @@ export interface PasswordResetToken {
   created_at: string;
 }
 
+export interface OnboardingSubmission {
+  id: string;
+  tenant_id: string | null;
+  submitter_email?: string;
+  ghl_contact_id?: string;
+  answers: Record<string, unknown>;
+  submitted_at: string;
+}
+
+export interface AppSetting {
+  key: string;
+  value: Record<string, any>;
+  updated_at: string;
+  updated_by?: string;
+}
+
 export interface CsmAssignment {
   id: string;
   csm_user_id: string;

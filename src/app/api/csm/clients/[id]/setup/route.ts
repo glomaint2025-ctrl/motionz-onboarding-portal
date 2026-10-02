@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { getTenantById, getClientSetupSteps, updateClientSetupStep, logAuditEvent } from '@/lib/db';
 import { requireAuth, handleAuthError, assertCsmAssigned } from '@/lib/auth/guard';
+import { onboardingSubmissionRepository } from '@/lib/db/repositories';
 
 export async function GET(
   request: Request,
@@ -24,6 +25,7 @@ export async function GET(
       tenant,
       steps,
       progressPercent,
+      onboardingSubmissions: await onboardingSubmissionRepository.listByTenant(tenant.id, 10),
     });
   } catch (err: any) {
     if (err.statusCode === 401 || err.statusCode === 403) {

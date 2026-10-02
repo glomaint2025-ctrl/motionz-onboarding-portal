@@ -2,22 +2,26 @@
 
 import React, { useState } from 'react';
 import { Card, CardHeader, Button, Modal } from '@/components/ui';
+import { PORTAL_LINKS, ghlFormUrl } from '@/lib/portal-links';
 
 export interface GHLOnboardingFormEmbedProps {
   formId?: string;
   isModal?: boolean;
   isOpen?: boolean;
   onClose?: () => void;
+  /** Pre-fills the form's email so the submission is matched to this client's portal. */
+  prefillEmail?: string;
 }
 
 export const GHLOnboardingFormEmbed: React.FC<GHLOnboardingFormEmbedProps> = ({
-  formId = 'wyM27h1ZCiwGoyXE03oC',
+  formId = PORTAL_LINKS.onboardingFormId,
   isModal = false,
   isOpen = false,
   onClose = () => {},
+  prefillEmail,
 }) => {
   const [iframeLoaded, setIframeLoaded] = useState(false);
-  const formUrl = `https://api.leadconnectorhq.com/widget/form/${formId}`;
+  const formUrl = ghlFormUrl(formId, prefillEmail);
 
   const renderContent = () => (
     <div>

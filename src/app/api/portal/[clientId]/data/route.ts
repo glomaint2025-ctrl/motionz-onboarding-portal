@@ -13,6 +13,7 @@ import {
   DEMO_TENANT_UUID,
 } from '@/lib/db';
 import { userRepository } from '@/lib/db/repositories/users.repository';
+import { csmAssignmentRepository } from '@/lib/db/repositories';
 import { assertPortalAccess, handleAuthError } from '@/lib/auth/guard';
 import { hasPermission } from '@/lib/auth/permissions';
 
@@ -73,6 +74,9 @@ export async function GET(
       }
     }
 
+    const assignment = await csmAssignmentRepository.findByTenant(tenantId);
+    const csmUser = assignment ? await userRepository.findById(assignment.csm_user_id) : null;
+
     const isClientRole = session?.role === 'client' || session?.role === 'client_member';
     const canSee = (moduleKey: string) => !isClientRole || effectiveFeatureToggles[moduleKey] !== false;
     const canSeeContracts =
@@ -100,6 +104,8 @@ export async function GET(
       integrations: publicIntegrations,
       teamMembers,
       invitations: session?.role === 'client_member' ? [] : invitations,
+      csm: csmUser ? { name: csmUser.full_name, email: csmUser.email } : null,
+      viewer: session ? { email: session.email, role: session.role } : null,
     });
   } catch (error: any) {
     if (

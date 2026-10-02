@@ -19,6 +19,7 @@ export default function OnboardingRoadmapPage() {
   const [filter, setFilter] = useState<'all' | 'action_required' | 'completed'>('all');
   const [isGHLFormOpen, setIsGHLFormOpen] = useState(false);
   const [isA2PFormOpen, setIsA2PFormOpen] = useState(false);
+  const [prefillEmail, setPrefillEmail] = useState<string | undefined>(undefined);
 
   useEffect(() => {
     let isMounted = true;
@@ -27,12 +28,14 @@ export default function OnboardingRoadmapPage() {
         const res = await fetch(`/api/portal/${clientId}/data`);
         if (res.ok) {
           const data = await res.json();
-          if (isMounted && data.setupSteps && data.setupSteps.length > 0) {
-            setSteps(data.setupSteps);
+          if (isMounted) {
+            setSteps(data.setupSteps || []);
+            const isClient = data.viewer?.role === 'client' || data.viewer?.role === 'client_member';
+            setPrefillEmail(isClient ? data.viewer.email : data.tenant?.primary_email);
           }
         }
       } catch {
-        // Fallback remains active
+        // Leave the list empty; the page shows its empty state
       }
     }
     loadSteps();
@@ -41,83 +44,7 @@ export default function OnboardingRoadmapPage() {
     };
   }, [clientId]);
 
-  // Baseline fallback steps matching confirmed 5 milestones
-  const activeSteps: ClientSetupStep[] = steps.length > 0 ? steps : [
-    {
-      id: 'c-step-1',
-      tenant_id: clientId,
-      template_step_id: 't-step-1',
-      step_key: 'google_sheet',
-      name: 'Google Sheet',
-      owner: 'we_handle',
-      status: 'done',
-      what_it_is: 'Setting up your campaign tracking sheet with automated lead and performance metrics.',
-      right_now: 'Tracking sheet provisioned and linked.',
-      unlocks: 'Live campaign tracking in the Tracking tab.',
-      sort_order: 1,
-      completed_at: '2026-09-11T00:00:00Z',
-      updated_at: '2026-09-11T00:00:00Z',
-    },
-    {
-      id: 'c-step-2',
-      tenant_id: clientId,
-      template_step_id: 't-step-2',
-      step_key: 'ghl_a2p',
-      name: 'GoHighLevel / A2P Verified',
-      owner: 'we_handle',
-      status: 'in_progress',
-      what_it_is: 'Configuring your GoHighLevel sub-account, pipelines, and carrier A2P 10DLC registration.',
-      right_now: 'Registration submitted to carrier networks for verification.',
-      we_need_from_you: 'Complete the A2P verification form with your official tax EIN and legal address.',
-      unlocks: 'Direct lead synchronization, SMS messaging, and appointment booking.',
-      sort_order: 2,
-      updated_at: '2026-09-12T00:00:00Z',
-    },
-    {
-      id: 'c-step-3',
-      tenant_id: clientId,
-      template_step_id: 't-step-3',
-      step_key: 'facebook',
-      name: 'Facebook',
-      owner: 'client_action',
-      status: 'done',
-      what_it_is: 'Connecting your business Facebook page and ad account access for lead generation.',
-      right_now: 'Business page connected and ad account access verified.',
-      unlocks: 'Targeted paid advertising and lead campaign launch.',
-      sort_order: 3,
-      completed_at: '2026-09-13T00:00:00Z',
-      updated_at: '2026-09-13T00:00:00Z',
-    },
-    {
-      id: 'c-step-4',
-      tenant_id: clientId,
-      template_step_id: 't-step-4',
-      step_key: 'domain_web',
-      name: 'Domain, email & website',
-      owner: 'we_handle',
-      status: 'done',
-      what_it_is: 'Provisioning your custom domain, business email accounts, and launching your company website.',
-      right_now: 'Domain active and verified with SSL.',
-      unlocks: 'Professional online web presence and verified email delivery.',
-      sort_order: 4,
-      completed_at: '2026-09-14T00:00:00Z',
-      updated_at: '2026-09-14T00:00:00Z',
-    },
-    {
-      id: 'c-step-5',
-      tenant_id: clientId,
-      template_step_id: 't-step-5',
-      step_key: 'phone_system',
-      name: 'Phone system & A2P texting',
-      owner: 'we_handle',
-      status: 'not_started',
-      what_it_is: 'Provisioning your local business phone number and configuring call forwarding and texting.',
-      right_now: 'Queued for phone number selection.',
-      unlocks: 'Direct two-way calling and carrier-compliant customer SMS.',
-      sort_order: 5,
-      updated_at: '2026-09-15T00:00:00Z',
-    },
-  ];
+  const activeSteps: ClientSetupStep[] = steps;
 
   const progress = calculateSetupProgress(activeSteps);
 
@@ -265,6 +192,7 @@ export default function OnboardingRoadmapPage() {
         isModal={true}
         isOpen={isGHLFormOpen}
         onClose={() => setIsGHLFormOpen(false)}
+        prefillEmail={prefillEmail}
       />
 
       {/* Embedded A2P Carrier Verification Form Modal */}

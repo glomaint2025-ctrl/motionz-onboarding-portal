@@ -4,6 +4,7 @@ import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
 import { Card, CardHeader, Button, StatusBadge, Input, Skeleton } from '@/components/ui';
+import { PORTAL_LINKS } from '@/lib/portal-links';
 
 interface SetupStep {
   name: string;
@@ -22,7 +23,9 @@ export default function ClientOverviewPage() {
   const [loading, setLoading] = useState(true);
   const [steps, setSteps] = useState<SetupStep[]>([]);
   const [leadCount, setLeadCount] = useState(0);
-  const [appointmentCount, setAppointmentCount] = useState(0);
+  const [nextCall, setNextCall] = useState<string | null>(null);
+  const [sheetUrl, setSheetUrl] = useState<string | null>(null);
+  const [csm, setCsm] = useState<{ name?: string; email: string } | null>(null);
   const [hasSignedContract, setHasSignedContract] = useState(false);
   const [companyName, setCompanyName] = useState('');
   const [featureToggles, setFeatureToggles] = useState<Record<string, boolean>>({});
@@ -52,7 +55,15 @@ export default function ClientOverviewPage() {
             if (data.tenant?.name) setCompanyName(data.tenant.name);
             if (data.setupSteps) setSteps(data.setupSteps);
             if (data.leads) setLeadCount(data.leads.length);
-            if (data.appointments) setAppointmentCount(data.appointments.length);
+            // Appointments are calls between the client and their CSM (client answer 2.1).
+            const now = Date.now();
+            const upcoming = (data.appointments || [])
+              .filter((a: any) => new Date(a.appointment_time).getTime() > now && !/cancel/i.test(a.status || ''))
+              .sort((a: any, b: any) => new Date(a.appointment_time).getTime() - new Date(b.appointment_time).getTime());
+            setNextCall(upcoming[0]?.appointment_time || null);
+            const sheet = (data.integrations || []).find((i: any) => i.integration_type === 'google_sheets' && i.is_active);
+            setSheetUrl(sheet?.config_data?.sheet_url || null);
+            setCsm(data.csm || null);
             if (data.contracts) setHasSignedContract(data.contracts.length > 0);
             if (data.featureToggles) setFeatureToggles(data.featureToggles);
           }
@@ -291,8 +302,8 @@ export default function ClientOverviewPage() {
               </div>
             )}
 
-            {/* Appointments */}
-            {featureToggles?.leads !== false && (
+            {/* Next CSM call */}
+            {featureToggles?.book_call !== false && (
               <div className="ui-stat-card">
                 <div className="ui-stat-card-body">
                   <div className="ui-stat-icon-wrapper ui-stat-icon-emerald">
@@ -304,9 +315,15 @@ export default function ClientOverviewPage() {
                     </svg>
                   </div>
                   <div className="ui-stat-info">
-                    <span className="ui-stat-label">Appointments</span>
-                    <span className="ui-stat-value">{appointmentCount}</span>
-                    <span className="ui-stat-meta-text" style={{ color: '#34d399' }}>Booked inspections</span>
+                    <span className="ui-stat-label">Next CSM Call</span>
+                    <span className="ui-stat-value" style={{ fontSize: nextCall ? '1rem' : undefined }}>
+                      {nextCall
+                        ? new Date(nextCall).toLocaleString(undefined, { weekday: 'short', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })
+                        : 'Not booked'}
+                    </span>
+                    <Link href={`/portal/${clientId}/book-call`} style={{ fontSize: '0.72rem', color: '#34d399', textDecoration: 'none' }}>
+                      {nextCall ? 'Book another call →' : 'Book a call →'}
+                    </Link>
                   </div>
                 </div>
               </div>
@@ -327,10 +344,14 @@ export default function ClientOverviewPage() {
                   </div>
                   <div className="ui-stat-info">
                     <span className="ui-stat-label">Tracking Sheet</span>
-                    <span className="ui-stat-value">Active</span>
-                    <Link href={`/portal/${clientId}/tracking`} style={{ fontSize: '0.72rem', color: '#fbbf24', textDecoration: 'none' }}>
-                      Google Sheets connected →
-                    </Link>
+                    <span className="ui-stat-value">{sheetUrl ? 'Ready' : 'Setting up'}</span>
+                    {sheetUrl ? (
+                      <a href={sheetUrl} target="_blank" rel="noopener noreferrer" style={{ fontSize: '0.72rem', color: '#fbbf24', textDecoration: 'none' }}>
+                        Open my tracking sheet →
+                      </a>
+                    ) : (
+                      <span className="ui-stat-meta-text">Your sheet is being created</span>
+                    )}
                   </div>
                 </div>
               </div>
@@ -502,7 +523,7 @@ export default function ClientOverviewPage() {
       <Card>
         <CardHeader
           title="Motionz Account Team"
-          subtitle="Dedicated Account Manager & Technical Support"
+          subtitle="Your CSM and the Motionz community"
           action={
             (!featureToggles || featureToggles.book_call !== false) ? (
               <Link href={`/portal/${clientId}/book-call`}>
@@ -516,18 +537,26 @@ export default function ClientOverviewPage() {
         <div style={{ display: 'flex', gap: 'var(--space-4)', flexWrap: 'wrap' }}>
           <div>
             <div style={{ fontWeight: 'var(--font-weight-semibold)', fontSize: 'var(--font-size-sm)' }}>
-              Dedicated CSM
+              Your CSM
             </div>
             <div style={{ color: 'var(--color-text-secondary)', fontSize: 'var(--font-size-sm)' }}>
-              csm@motionz.ai
+              {csm ? (
+                <>
+                  {csm.name ? `${csm.name} · ` : ''}
+                  <a href={`mailto:${csm.email}`}>{csm.email}</a>
+                </>
+              ) : (
+                'Being assigned'
+              )}
             </div>
           </div>
           <div>
             <div style={{ fontWeight: 'var(--font-weight-semibold)', fontSize: 'var(--font-size-sm)' }}>
-              Direct Community
+              Community
             </div>
-            <div style={{ color: 'var(--color-text-secondary)', fontSize: 'var(--font-size-sm)' }}>
-              Motionz Contractor Slack & Skool Training Hub
+            <div style={{ display: 'flex', gap: 'var(--space-3)', fontSize: 'var(--font-size-sm)' }}>
+              <a href={PORTAL_LINKS.slackInvite} target="_blank" rel="noopener noreferrer">Join Slack</a>
+              <a href={PORTAL_LINKS.skoolCommunity} target="_blank" rel="noopener noreferrer">Join Skool</a>
             </div>
           </div>
         </div>

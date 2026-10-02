@@ -5,6 +5,7 @@ import { useParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { Card, CardHeader, Input, Select, Button, StatusBadge, Modal, Skeleton } from '@/components/ui';
 import { PORTAL_MODULES } from '@/lib/portal-modules';
+import { OnboardingAnswers, OnboardingSubmissionView } from '@/components/onboarding/OnboardingAnswers';
 
 
 export default function ClientDetailPage() {
@@ -27,6 +28,7 @@ export default function ClientDetailPage() {
   const [trackingSheetUrl, setTrackingSheetUrl] = useState<string | null>(null);
   const [sheetBusy, setSheetBusy] = useState(false);
   const [sheetError, setSheetError] = useState('');
+  const [submissions, setSubmissions] = useState<OnboardingSubmissionView[]>([]);
   const [csmUserId, setCsmUserId] = useState('e0000000-0000-0000-0000-000000000002');
 
   const [saveSuccess, setSaveSuccess] = useState(false);
@@ -180,6 +182,7 @@ export default function ClientDetailPage() {
         setInvitations(data.invitations || []);
         setMembers(data.members || []);
         setTrackingSheetUrl(data.trackingSheetUrl || null);
+        setSubmissions(data.onboardingSubmissions || []);
         setCompanyName(data.tenant.name || '');
         setPhone(data.tenant.phone || '');
         setStatus(data.tenant.status || 'active');
@@ -869,6 +872,8 @@ export default function ClientDetailPage() {
             ))}
           </div>
         </Card>
+
+        <OnboardingAnswers submissions={submissions} />
 
         {/* Client Team Members & Admin Roster Oversight */}
         <Card style={{ marginBottom: 'var(--space-6)' }}>

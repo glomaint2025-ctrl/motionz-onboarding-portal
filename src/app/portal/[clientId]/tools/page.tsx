@@ -4,6 +4,7 @@ import React from 'react';
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
 import { Card, CardHeader, Button, StatusBadge } from '@/components/ui';
+import { PORTAL_LINKS } from '@/lib/portal-links';
 
 interface ToolItem {
   title: string;
@@ -21,27 +22,25 @@ export default function ToolsAndResourcesPage() {
 
   const tools: ToolItem[] = [
     {
-      title: 'Motionz Slack Community',
-      category: 'Community & Peer Network',
-      description: 'Private Slack community for contractor owners, operational discussions, and daily CSM support.',
-      actionText: 'Join Slack Community',
-      href: 'https://join.slack.com',
+      title: 'Motionz Slack',
+      category: 'Communication',
+      description: 'Join the Motionz Slack workspace to talk with your CSM and the Motionz team.',
+      actionText: 'Join Slack',
+      href: PORTAL_LINKS.slackInvite,
       isExternal: true,
-      badge: 'Live',
     },
     {
-      title: 'Skool Training Hub',
-      category: 'Education & Systems',
-      description: 'Comprehensive video library covering roofing sales scripts, estimating workflows, and marketing execution.',
-      actionText: 'Open Skool Hub',
-      href: 'https://skool.com',
+      title: 'Skool Community',
+      category: 'Training',
+      description: 'Motionz training, recordings and peer discussion. Request to join and Motionz will approve you.',
+      actionText: 'Join Skool',
+      href: PORTAL_LINKS.skoolCommunity,
       isExternal: true,
-      badge: 'Free Access',
     },
     {
       title: 'Client Onboarding Intake Form',
       category: 'Business Setup',
-      description: 'Official GoHighLevel form for submitting business legal profile, service zip codes, and website branding.',
+      description: 'Tell us about your business so we can set up your ads, website and campaigns.',
       actionText: 'Open Onboarding Form',
       href: `/portal/${clientId}/onboarding`,
       isExternal: false,
@@ -49,7 +48,7 @@ export default function ToolsAndResourcesPage() {
     {
       title: 'Carrier A2P 10DLC Verification Form',
       category: 'Carrier Compliance',
-      description: 'Required registration for carrier business texting networks to avoid carrier spam filtering.',
+      description: 'Business details we need to register your phone number for texting with US carriers (A2P 10DLC), so your texts are not blocked.',
       actionText: 'Open A2P Form',
       href: `/portal/${clientId}/onboarding`,
       isExternal: false,
@@ -70,12 +69,11 @@ export default function ToolsAndResourcesPage() {
       actionText: 'View Video Scripts',
       href: `/portal/${clientId}/video-scripts`,
       isExternal: false,
-      badge: '3 Scripts',
     },
     {
       title: 'Campaign Tracking Sheet',
       category: 'Performance Analytics',
-      description: 'Live synchronized Google Sheet tracking leads, bookings, ad spend, and cost per lead.',
+      description: 'Your Google Sheet for logging calls and outcomes and tracking leads, appointments, jobs won and revenue.',
       actionText: 'View Tracking Tab',
       href: `/portal/${clientId}/tracking`,
       isExternal: false,

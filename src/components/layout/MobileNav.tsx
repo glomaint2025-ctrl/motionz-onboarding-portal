@@ -67,7 +67,7 @@ export const MobileNav: React.FC<MobileNavProps> = ({
     { label: 'Admin Dashboard', href: '/admin' },
     { label: 'Client Management', href: '/admin/clients' },
     { label: 'Master Templates', href: '/admin/templates' },
-    { label: 'Integration Settings', href: '/admin/integrations' },
+    { label: 'Settings & Integrations', href: '/admin/integrations' },
     { label: 'Security & Audit Logs', href: '/admin/audit-logs' },
     { label: 'Security Alerts', href: '/admin/security-alerts' },
   ];

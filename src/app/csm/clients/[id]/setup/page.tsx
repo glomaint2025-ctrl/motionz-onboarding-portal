@@ -4,6 +4,7 @@ import React, { useState, useEffect } from 'react';
 import { useParams } from 'next/navigation';
 import Link from 'next/link';
 import { Card, CardHeader, Select, Button, StatusBadge } from '@/components/ui';
+import { OnboardingAnswers, OnboardingSubmissionView } from '@/components/onboarding/OnboardingAnswers';
 
 interface SetupStep {
   id: string;
@@ -26,6 +27,8 @@ export default function CSMClientSetupEditorPage() {
   const [tenant, setTenant] = useState<any | null>(null);
   const [steps, setSteps] = useState<SetupStep[]>([]);
   const [progressPercent, setProgressPercent] = useState(0);
+  const [submissions, setSubmissions] = useState<OnboardingSubmissionView[]>([]);
+  const [accessError, setAccessError] = useState('');
 
   const [editingKey, setEditingKey] = useState<string | null>(null);
   const [editStatus, setEditStatus] = useState<'not_started' | 'in_progress' | 'done'>('not_started');
@@ -41,9 +44,12 @@ export default function CSMClientSetupEditorPage() {
       setLoading(true);
       const res = await fetch(`/api/csm/clients/${clientId}/setup`);
       const data = await res.json();
-      if (data.success) {
+      if (res.status === 403) {
+        setAccessError(data.error || 'This client is not assigned to you.');
+      } else if (data.success) {
         setTenant(data.tenant);
         setSteps(data.steps || []);
+        setSubmissions(data.onboardingSubmissions || []);
         setProgressPercent(data.progressPercent || 0);
       }
     } catch (err) {
@@ -105,6 +111,17 @@ export default function CSMClientSetupEditorPage() {
     );
   }
 
+  if (accessError) {
+    return (
+      <Card style={{ textAlign: 'center', padding: 'var(--space-8)' }}>
+        <p style={{ marginBottom: 'var(--space-4)' }}>{accessError}</p>
+        <Link href="/csm/clients">
+          <Button variant="secondary">Back to my clients</Button>
+        </Link>
+      </Card>
+    );
+  }
+
   return (
     <div style={{ maxWidth: '840px', margin: '0 auto' }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 'var(--space-6)', flexWrap: 'wrap', gap: 'var(--space-3)' }}>
@@ -139,6 +156,8 @@ export default function CSMClientSetupEditorPage() {
           {feedbackMessage}
         </div>
       )}
+
+      <OnboardingAnswers submissions={submissions} />
 
       {/* Progress Bar Summary */}
       <Card style={{ marginBottom: 'var(--space-6)' }}>

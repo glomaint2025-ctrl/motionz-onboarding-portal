@@ -18,6 +18,8 @@ import {
   AuditLog,
   SecurityEvent,
   PasswordResetToken,
+  OnboardingSubmission,
+  AppSetting,
 } from './schema';
 
 export interface DatabaseStore {
@@ -26,6 +28,8 @@ export interface DatabaseStore {
   csmAssignments: CsmAssignment[];
   userInvitations: UserInvitation[];
   passwordResetTokens: PasswordResetToken[];
+  onboardingSubmissions: OnboardingSubmission[];
+  appSettings: AppSetting[];
   portalTemplates: PortalTemplate[];
   templateSteps: TemplateStep[];
   clientSetupSteps: ClientSetupStep[];
@@ -223,6 +227,8 @@ export const createInitialStore = (): DatabaseStore => {
 
     userInvitations: [],
     passwordResetTokens: [],
+    onboardingSubmissions: [],
+    appSettings: [],
 
     clientSetupSteps: [
       {

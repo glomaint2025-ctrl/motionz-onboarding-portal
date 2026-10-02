@@ -3,6 +3,7 @@
 import React from 'react';
 import Link from 'next/link';
 import { Button } from '@/components/ui';
+import { PORTAL_LINKS } from '@/lib/portal-links';
 
 export interface QuickLinksBarProps {
   clientId: string;
@@ -41,7 +42,7 @@ export const QuickLinksBar: React.FC<QuickLinksBarProps> = ({
 
       <div style={{ display: 'flex', gap: 'var(--space-2)', flexWrap: 'wrap' }}>
         <a
-          href="https://join.slack.com"
+          href={PORTAL_LINKS.slackInvite}
           target="_blank"
           rel="noopener noreferrer"
         >
@@ -51,7 +52,7 @@ export const QuickLinksBar: React.FC<QuickLinksBarProps> = ({
         </a>
 
         <a
-          href="https://skool.com"
+          href={PORTAL_LINKS.skoolCommunity}
           target="_blank"
           rel="noopener noreferrer"
         >

@@ -15,3 +15,5 @@ export * from './audit-logs.repository';
 export * from './security-events.repository';
 export * from './integration-configs.repository';
 export * from './password-reset.repository';
+export * from './onboarding-submissions.repository';
+export * from './app-settings.repository';

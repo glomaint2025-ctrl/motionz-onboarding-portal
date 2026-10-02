@@ -8,6 +8,7 @@ import {
   invitationRepository,
   auditLogRepository,
   integrationConfigRepository,
+  onboardingSubmissionRepository,
 } from '@/lib/db/repositories';
 import { requireAuth, handleAuthError } from '@/lib/auth/guard';
 import { provisionClientSheet } from '@/lib/integrations/sheets/provision';
@@ -25,13 +26,14 @@ export async function GET(
       return NextResponse.json({ error: 'Client portal not found.' }, { status: 404 });
     }
 
-    const [assignment, steps, toggles, members, invitations, integrations] = await Promise.all([
+    const [assignment, steps, toggles, members, invitations, integrations, onboardingSubmissions] = await Promise.all([
       csmAssignmentRepository.findByTenant(tenant.id),
       clientSetupStepRepository.listByTenant(tenant.id),
       featureToggleRepository.getTogglesForTenant(tenant.id),
       userRepository.listByTenant(tenant.id),
       invitationRepository.listByTenant(tenant.id, { pendingOnly: false, includeRevoked: true }),
       integrationConfigRepository.listByTenant(tenant.id),
+      onboardingSubmissionRepository.listByTenant(tenant.id, 10),
     ]);
 
     const sheetConfig = integrations.find((i) => i.integration_type === 'google_sheets');
@@ -47,6 +49,7 @@ export async function GET(
       members,
       invitations,
       trackingSheetUrl: sheetConfig?.config_data?.sheet_url || null,
+      onboardingSubmissions,
     });
   } catch (err: any) {
     if (err.statusCode === 401 || err.statusCode === 403) {
