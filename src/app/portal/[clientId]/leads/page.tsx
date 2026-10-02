@@ -15,7 +15,12 @@ interface Lead {
   created_at: string;
 }
 
-const WEEK_MS = 7 * 24 * 60 * 60 * 1000;
+const DAY_MS = 24 * 60 * 60 * 1000;
+const WEEK_MS = 7 * DAY_MS;
+
+/** Follow-up day since the lead arrived (client answer 1.4: Day 1 to Day 7, then replace). */
+const followUpDay = (createdAt: string) => Math.floor((Date.now() - new Date(createdAt).getTime()) / DAY_MS) + 1;
+const isEarlyStage = (stage?: string) => !stage || /new|contact|no answer|follow/i.test(stage);
 
 /**
  * Read-only view of the client's GoHighLevel leads (opportunities). Stages are changed in GHL,
@@ -79,8 +84,8 @@ export default function LeadsPage() {
       <div style={{ marginBottom: 'var(--space-6)' }}>
         <h1 style={{ marginBottom: 'var(--space-1)' }}>Leads</h1>
         <p style={{ color: 'var(--color-text-secondary)' }}>
-          Leads from your GoHighLevel account. To change a lead&apos;s stage, update it in GoHighLevel and it updates
-          here automatically.
+          Leads from your GoHighLevel account. Follow up with new leads from Day 1 to Day 7. To change a lead&apos;s
+          stage, update it in GoHighLevel and it updates here automatically.
         </p>
       </div>
 
@@ -142,7 +147,7 @@ export default function LeadsPage() {
             <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 'var(--font-size-sm)' }}>
               <thead>
                 <tr style={{ textAlign: 'left', color: 'var(--color-text-muted)', fontSize: 'var(--font-size-xs)' }}>
-                  {['Name', 'Phone', 'Email', 'Source', 'Stage', 'Added'].map((h) => (
+                  {['Name', 'Phone', 'Email', 'Source', 'Stage', 'Follow-up', 'Added'].map((h) => (
                     <th key={h} style={{ padding: 'var(--space-2)', borderBottom: '1px solid var(--color-border-subtle)' }}>
                       {h}
                     </th>
@@ -162,6 +167,13 @@ export default function LeadsPage() {
                     <td style={{ padding: 'var(--space-2)' }}>{l.source || '-'}</td>
                     <td style={{ padding: 'var(--space-2)' }}>
                       <StatusBadge status={l.status || 'New'} variant="progress" />
+                    </td>
+                    <td style={{ padding: 'var(--space-2)', whiteSpace: 'nowrap' }}>
+                      {followUpDay(l.created_at) > 7 && isEarlyStage(l.status) ? (
+                        <StatusBadge status="Past day 7" variant="warning" />
+                      ) : (
+                        `Day ${Math.min(followUpDay(l.created_at), 99)}`
+                      )}
                     </td>
                     <td style={{ padding: 'var(--space-2)', whiteSpace: 'nowrap' }}>
                       {new Date(l.created_at).toLocaleDateString()}

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getTenantById, getOrders, DEMO_TENANT_UUID } from '@/lib/db';
 import { assertPortalAccess, handleAuthError } from '@/lib/auth/guard';
+import { assertModuleEnabled } from '@/lib/auth/modules';
 
 export async function GET(
   request: NextRequest,
@@ -17,7 +18,8 @@ export async function GET(
     const tenantId = targetTenant ? targetTenant.id : DEMO_TENANT_UUID;
 
     // Enforce active account, tenant suspension, and tenant isolation
-    await assertPortalAccess(request, targetTenant, rawClientId);
+    const session = await assertPortalAccess(request, targetTenant, rawClientId);
+    await assertModuleEnabled(session, tenantId, 'orders');
 
     // Return strictly orders - no extraneous data
     const orders = await getOrders(tenantId);

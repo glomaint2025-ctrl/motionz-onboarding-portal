@@ -1,253 +1,159 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
 import Link from 'next/link';
-import { Button, StatusBadge, Skeleton } from '@/components/ui';
+import { Button, Card, CardHeader, Skeleton, StatusBadge } from '@/components/ui';
+
+interface ClientRef {
+  id: string;
+  name: string;
+}
+
+interface Dashboard {
+  clients: { total: number; active: number; onboarding: number; suspended: number; cancelledOrArchived: number; newLast30Days: number };
+  ghlNotConnected: ClientRef[];
+  withoutCsm: ClientRef[];
+  inSetup: number;
+  stuck: (ClientRef & { currentStep: string; daysOnStep: number })[];
+  security: { last7Days: number; highSeverity: number };
+  unmatchedSubmissions: number;
+  revenue: number | null;
+  churnRate: number | null;
+}
+
+function Metric({ label, value, hint, href }: { label: string; value: React.ReactNode; hint?: string; href?: string }) {
+  const body = (
+    <Card style={{ height: '100%' }}>
+      <span style={{ fontSize: 'var(--font-size-xs)', color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+        {label}
+      </span>
+      <div style={{ fontSize: '2rem', fontWeight: 700, margin: 'var(--space-1) 0', letterSpacing: '-0.02em' }}>{value}</div>
+      {hint && <span style={{ fontSize: 'var(--font-size-xs)', color: 'var(--color-text-secondary)' }}>{hint}</span>}
+    </Card>
+  );
+  return href ? (
+    <Link href={href} style={{ textDecoration: 'none', color: 'inherit' }}>
+      {body}
+    </Link>
+  ) : (
+    body
+  );
+}
+
+function ClientList({ items, empty, render }: { items: any[]; empty: string; render?: (item: any) => React.ReactNode }) {
+  if (items.length === 0) return <p style={{ color: 'var(--color-text-secondary)', margin: 0, fontSize: 'var(--font-size-sm)' }}>{empty}</p>;
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-2)' }}>
+      {items.slice(0, 8).map((c) => (
+        <Link
+          key={c.id}
+          href={`/admin/clients/${c.id}`}
+          style={{
+            display: 'flex',
+            justifyContent: 'space-between',
+            gap: 'var(--space-3)',
+            padding: 'var(--space-2) var(--space-3)',
+            border: '1px solid var(--color-border-subtle)',
+            borderRadius: 'var(--radius-md)',
+            textDecoration: 'none',
+            color: 'inherit',
+            fontSize: 'var(--font-size-sm)',
+          }}
+        >
+          <span>{c.name}</span>
+          {render && <span style={{ color: 'var(--color-text-muted)' }}>{render(c)}</span>}
+        </Link>
+      ))}
+      {items.length > 8 && (
+        <span style={{ fontSize: 'var(--font-size-xs)', color: 'var(--color-text-muted)' }}>and {items.length - 8} more</span>
+      )}
+    </div>
+  );
+}
 
 export default function AdminDashboardPage() {
-  const [loading, setLoading] = useState(true);
-  const [stats, setStats] = useState({
-    activeClients: 0,
-    totalProvisioned: 0,
-    ghlNotConnected: 0,
-    stuckInSetup: 0,
-    securityAlerts: 0,
-  });
+  const [data, setData] = useState<Dashboard | null>(null);
+  const [error, setError] = useState('');
 
   useEffect(() => {
-    fetch('/api/admin/clients?includeArchived=true')
+    fetch('/api/admin/dashboard')
       .then((res) => res.json())
-      .then((data) => {
-        if (data.success && data.tenants) {
-          const tenants: any[] = data.tenants;
-          const active = tenants.filter((t) => !t.deleted_at && t.status !== 'cancelled');
-          const notConnected = active.filter((t) => !t.ghl_location_id);
-          const stuck = active.filter((t) => t.progress_percent < 100);
-          setStats({
-            activeClients: active.length,
-            totalProvisioned: tenants.length,
-            ghlNotConnected: notConnected.length,
-            stuckInSetup: stuck.length,
-            securityAlerts: 0,
-          });
-        }
-      })
-      .catch((err) => console.error('Failed to load telemetry:', err))
-      .finally(() => setLoading(false));
+      .then((d) => (d.success ? setData(d) : setError(d.error || 'Could not load the dashboard.')))
+      .catch(() => setError('Network error while loading the dashboard.'));
   }, []);
-
-  const activePercent = stats.totalProvisioned > 0 ? Math.round((stats.activeClients / stats.totalProvisioned) * 100) : 0;
 
   return (
     <div>
-      {/* 1. Breadcrumb */}
-      <div className="ui-breadcrumb">
-        <Link href="/admin">Home</Link>
-        <span className="ui-breadcrumb-separator">&gt;</span>
-        <span className="ui-breadcrumb-current">Admin Command Center</span>
-      </div>
-
-      {/* 2. Header */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 'var(--space-6)', flexWrap: 'wrap', gap: 'var(--space-4)' }}>
         <div>
-          <h1 style={{ fontSize: '1.75rem', fontWeight: 700, color: 'var(--color-text-primary)', marginBottom: 'var(--space-1)', letterSpacing: '-0.02em' }}>
-            Admin Command Center
-          </h1>
-          <p style={{ color: 'var(--color-text-secondary)', fontSize: 'var(--font-size-sm)', margin: 0 }}>
-            Global multi-tenant platform telemetry, client lifecycle, and security oversight.
-          </p>
+          <h1 style={{ marginBottom: 'var(--space-1)' }}>Dashboard</h1>
+          <p style={{ color: 'var(--color-text-secondary)', margin: 0 }}>Where every client stands, and what needs attention.</p>
         </div>
-        <Link href="/admin/clients/new" style={{ textDecoration: 'none' }}>
-          <Button variant="primary" style={{ display: 'inline-flex', alignItems: 'center', gap: '8px', backgroundColor: '#2563eb', padding: '9px 18px', fontWeight: 600, borderRadius: 'var(--radius-md)' }}>
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-              <line x1="12" y1="5" x2="12" y2="19" />
-              <line x1="5" y1="12" x2="19" y2="12" />
-            </svg>
-            Add Client
-          </Button>
+        <Link href="/admin/clients/new">
+          <Button variant="primary">Add client</Button>
         </Link>
       </div>
 
-      {/* 3. 4 KPI Metric Cards */}
-      <div className="ui-stats-grid">
-        {/* Active Clients */}
-        <div className="ui-stat-card">
-          <div className="ui-stat-card-body">
-            <div className="ui-stat-icon-wrapper ui-stat-icon-blue">
-              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" />
-                <circle cx="9" cy="7" r="4" />
-                <path d="M23 21v-2a4 4 0 0 0-3-3.87" />
-                <path d="M16 3.13a4 4 0 0 1 0 7.75" />
-              </svg>
-            </div>
-            <div className="ui-stat-info">
-              <span className="ui-stat-label">Active Clients</span>
-              {loading ? (
-                <div style={{ margin: '4px 0' }}><Skeleton width="60px" height="28px" /></div>
-              ) : (
-                <span className="ui-stat-value">{stats.activeClients}</span>
-              )}
-              <span className="ui-stat-meta-badge">
-                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                  <line x1="7" y1="17" x2="17" y2="7" />
-                  <polyline points="7 7 17 7 17 17" />
-                </svg>
-                {stats.totalProvisioned} Total Provisioned
-              </span>
-            </div>
-          </div>
-          {!loading && (
-            <div className="ui-stat-gauge">
-              <svg viewBox="0 0 44 44">
-                <circle cx="22" cy="22" r="18" className="ui-stat-gauge-circle-bg" />
-                <circle
-                  cx="22"
-                  cy="22"
-                  r="18"
-                  className="ui-stat-gauge-circle-val"
-                  strokeDasharray="113.1"
-                  strokeDashoffset={113.1 - (113.1 * activePercent) / 100}
-                />
-              </svg>
-              <span className="ui-stat-gauge-text">{activePercent}%</span>
-            </div>
-          )}
-        </div>
+      {error && (
+        <Card style={{ marginBottom: 'var(--space-6)' }}>
+          <p style={{ margin: 0, color: 'var(--color-status-danger-text)' }}>{error}</p>
+        </Card>
+      )}
 
-        {/* In Onboarding Setup */}
-        <div className="ui-stat-card">
-          <div className="ui-stat-card-body">
-            <div className="ui-stat-icon-wrapper ui-stat-icon-emerald">
-              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                <line x1="12" y1="20" x2="12" y2="10" />
-                <line x1="18" y1="20" x2="18" y2="4" />
-                <line x1="6" y1="20" x2="6" y2="16" />
-              </svg>
-            </div>
-            <div className="ui-stat-info">
-              <span className="ui-stat-label">In Onboarding Setup</span>
-              {loading ? (
-                <div style={{ margin: '4px 0' }}><Skeleton width="40px" height="28px" /></div>
-              ) : (
-                <span className="ui-stat-value">{stats.stuckInSetup}</span>
-              )}
-              <span className="ui-stat-meta-text">Portals progressing</span>
-            </div>
-          </div>
+      {!data && !error ? (
+        <div style={{ display: 'grid', gap: 'var(--space-4)', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))' }}>
+          {[1, 2, 3, 4].map((i) => (
+            <Card key={i}>
+              <Skeleton height="72px" />
+            </Card>
+          ))}
         </div>
+      ) : data ? (
+        <>
+          <div style={{ display: 'grid', gap: 'var(--space-4)', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', marginBottom: 'var(--space-6)' }}>
+            <Metric label="Active clients" value={data.clients.active} hint={`${data.clients.onboarding} onboarding · ${data.clients.total} total`} href="/admin/clients" />
+            <Metric label="Still in setup" value={data.inSetup} hint={`${data.stuck.length} stuck 14+ days on one step`} />
+            <Metric label="GHL not connected" value={data.ghlNotConnected.length} hint="No Location ID set yet" />
+            <Metric
+              label="Security events (7 days)"
+              value={data.security.last7Days}
+              hint={data.security.highSeverity ? `${data.security.highSeverity} high severity` : 'None high severity'}
+              href="/admin/security-alerts"
+            />
+            <Metric label="New clients (30 days)" value={data.clients.newLast30Days} hint={`${data.clients.cancelledOrArchived} cancelled or archived`} />
+            <Metric label="Revenue & churn" value="Not connected" hint="Payments run through Stripe links outside the portal" />
+          </div>
 
-        {/* GHL Not Connected */}
-        <div className="ui-stat-card">
-          <div className="ui-stat-card-body">
-            <div className="ui-stat-icon-wrapper ui-stat-icon-amber">
-              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z" />
-                <line x1="12" y1="9" x2="12" y2="13" />
-                <line x1="12" y1="17" x2="12.01" y2="17" />
-              </svg>
-            </div>
-            <div className="ui-stat-info">
-              <span className="ui-stat-label">GHL Not Connected</span>
-              {loading ? (
-                <div style={{ margin: '4px 0' }}><Skeleton width="40px" height="28px" /></div>
-              ) : (
-                <span className="ui-stat-value" style={{ color: stats.ghlNotConnected > 0 ? '#fbbf24' : 'inherit' }}>
-                  {stats.ghlNotConnected}
+          {data.unmatchedSubmissions > 0 && (
+            <Card style={{ marginBottom: 'var(--space-6)' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 'var(--space-3)', flexWrap: 'wrap' }}>
+                <span>
+                  <StatusBadge status="Action needed" variant="warning" />{' '}
+                  {data.unmatchedSubmissions} onboarding form submission{data.unmatchedSubmissions === 1 ? '' : 's'} could not be matched to a client.
                 </span>
-              )}
-              <span className="ui-stat-meta-text">
-                {stats.ghlNotConnected > 0 ? 'Requires integration setup' : 'All accounts linked'}
-              </span>
-            </div>
-          </div>
-        </div>
+                <Link href="/admin/integrations">
+                  <Button variant="secondary" size="sm">Review</Button>
+                </Link>
+              </div>
+            </Card>
+          )}
 
-        {/* Security Alerts */}
-        <div className="ui-stat-card">
-          <div className="ui-stat-card-body">
-            <div className="ui-stat-icon-wrapper ui-stat-icon-slate">
-              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
-              </svg>
-            </div>
-            <div className="ui-stat-info">
-              <span className="ui-stat-label">Security Alerts</span>
-              {loading ? (
-                <div style={{ margin: '4px 0' }}><Skeleton width="40px" height="28px" /></div>
-              ) : (
-                <span className="ui-stat-value">{stats.securityAlerts}</span>
-              )}
-              <span className="ui-stat-meta-text" style={{ color: '#34d399' }}>All systems normal</span>
-            </div>
+          <div style={{ display: 'grid', gap: 'var(--space-4)', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))' }}>
+            <Card>
+              <CardHeader title="Stuck in setup" subtitle="Same onboarding step for 14+ days" />
+              <ClientList items={data.stuck} empty="Nobody is stuck." render={(c) => `${c.currentStep} · ${c.daysOnStep} days`} />
+            </Card>
+            <Card>
+              <CardHeader title="GoHighLevel not connected" subtitle="Add the sub-account Location ID" />
+              <ClientList items={data.ghlNotConnected} empty="All clients are connected." />
+            </Card>
+            <Card>
+              <CardHeader title="No CSM assigned" />
+              <ClientList items={data.withoutCsm} empty="Every client has a CSM." />
+            </Card>
           </div>
-        </div>
-      </div>
-
-      {/* 4. Quick Navigation Cards */}
-      <div style={{ display: 'grid', gap: 'var(--space-4)', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))' }}>
-        <div className="ui-stat-card" style={{ flexDirection: 'column', alignItems: 'flex-start', padding: '24px' }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', width: '100%', marginBottom: 'var(--space-3)' }}>
-            <div>
-              <h2 style={{ fontSize: '1.1rem', fontWeight: 600, color: 'var(--color-text-primary)', margin: 0 }}>
-                Client Management
-              </h2>
-              <p style={{ fontSize: 'var(--font-size-xs)', color: 'var(--color-text-muted)', margin: '4px 0 0 0' }}>
-                Provision and manage client portals
-              </p>
-            </div>
-            {loading ? (
-              <Skeleton width="70px" height="22px" borderRadius="9999px" />
-            ) : (
-              <span className="ui-pill-status ui-pill-status-active">
-                <span className="ui-pill-status-dot" />
-                {stats.activeClients} Active
-              </span>
-            )}
-          </div>
-          <p style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-secondary)', lineHeight: 1.5, marginBottom: 'var(--space-4)' }}>
-            Add new client organizations, assign CSMs, toggle feature modules, duplicate templates, and manage invitations.
-          </p>
-          <Link href="/admin/clients" style={{ width: '100%', textDecoration: 'none' }}>
-            <button type="button" className="ui-btn-action-portal" style={{ width: '100%', justifyContent: 'center', padding: '10px 16px', fontSize: 'var(--font-size-sm)' }}>
-              View Client Directory
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                <line x1="5" y1="12" x2="19" y2="12" />
-                <polyline points="12 5 19 12 12 19" />
-              </svg>
-            </button>
-          </Link>
-        </div>
-
-        <div className="ui-stat-card" style={{ flexDirection: 'column', alignItems: 'flex-start', padding: '24px' }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', width: '100%', marginBottom: 'var(--space-3)' }}>
-            <div>
-              <h2 style={{ fontSize: '1.1rem', fontWeight: 600, color: 'var(--color-text-primary)', margin: 0 }}>
-                Master Portal Templates
-              </h2>
-              <p style={{ fontSize: 'var(--font-size-xs)', color: 'var(--color-text-muted)', margin: '4px 0 0 0' }}>
-                Template governance & milestone blueprints
-              </p>
-            </div>
-            <span className="ui-pill-status ui-pill-status-onboarding">
-              <span className="ui-pill-status-dot" />
-              v1.0 Baseline
-            </span>
-          </div>
-          <p style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-secondary)', lineHeight: 1.5, marginBottom: 'var(--space-4)' }}>
-            Manage the default 5 setup steps, base video script templates, and default feature toggles inherited by new client portals.
-          </p>
-          <Link href="/admin/templates" style={{ width: '100%', textDecoration: 'none' }}>
-            <button type="button" className="ui-btn-action-portal" style={{ width: '100%', justifyContent: 'center', padding: '10px 16px', fontSize: 'var(--font-size-sm)' }}>
-              Manage Templates
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                <line x1="5" y1="12" x2="19" y2="12" />
-                <polyline points="12 5 19 12 12 19" />
-              </svg>
-            </button>
-          </Link>
-        </div>
-      </div>
+        </>
+      ) : null}
     </div>
   );
 }

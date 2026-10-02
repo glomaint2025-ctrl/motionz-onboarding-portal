@@ -45,8 +45,12 @@ export interface GuardOptions {
  * Throws AppError(403, 'ACCOUNT_SUSPENDED') if suspended.
  */
 export async function assertActiveAccount(session: SessionPayload): Promise<void> {
-  // Staff are exempt from tenant-level bans
+  // Staff are exempt from tenant-level bans, but a disabled staff account is blocked.
   if (session.role === 'admin' || session.role === 'csm') {
+    const staffUser = await userRepository.findById(session.userId);
+    if (staffUser?.status === 'suspended') {
+      throw new AppError('Your staff access has been disabled.', 403, 'ACCOUNT_SUSPENDED');
+    }
     return;
   }
 

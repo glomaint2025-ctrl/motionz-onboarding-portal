@@ -117,7 +117,8 @@ async function runDuplicateEmailTests() {
   const adminResCSM = await adminClientsPostHandler(adminReqDuplicateCSM);
   assert.strictEqual(adminResCSM.status, 400);
   const adminDataCSM = await adminResCSM.json();
-  assert.strictEqual(adminDataCSM.error, 'An account with this email already exists.');
+  // Staff emails are rejected outright for client accounts (client answer P1.1).
+  assert.match(adminDataCSM.error, /@motionz.ai addresses are for Motionz staff only/);
   console.log(' PASS: Admin cannot create client with email of existing user or tenant');
 
   // 4. POST /api/portal/[clientId]/team duplicate email rejection

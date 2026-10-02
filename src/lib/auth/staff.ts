@@ -5,11 +5,8 @@ import { getSupabaseServiceClient, getSupabaseBrowserClient } from '../db/supaba
 
 export const STAFF_EMAIL_DOMAIN = '@motionz.ai';
 
-const DEFAULT_ADMIN_EMAILS = [
-  'admin@motionz.ai',
-  'steve@motionz.ai',
-  'sarah.admin@motionz.ai',
-];
+// Bootstrap admin; further admins come from ADMIN_EMAILS or are created in Admin > Staff.
+const DEFAULT_ADMIN_EMAILS = ['admin@motionz.ai'];
 
 export const isStaffEmail = (email: string): boolean => {
   if (!email || typeof email !== 'string') return false;
@@ -129,6 +126,13 @@ export const authenticateStaff = async (
     return {
       success: false,
       error: 'This email is not registered as a Motionz staff account.',
+    };
+  }
+
+  if (user && user.status === 'suspended') {
+    return {
+      success: false,
+      error: 'Your staff access has been disabled. Contact a Motionz administrator.',
     };
   }
 

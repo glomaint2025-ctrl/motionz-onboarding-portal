@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getTenantById, getContracts, DEMO_TENANT_UUID } from '@/lib/db';
 import { assertPortalAccess, handleAuthError } from '@/lib/auth/guard';
+import { assertModuleEnabled } from '@/lib/auth/modules';
 import { hasPermission } from '@/lib/auth/permissions';
 
 export async function GET(
@@ -19,6 +20,7 @@ export async function GET(
 
     // Enforce active account, tenant suspension, and tenant isolation
     const session = await assertPortalAccess(request, targetTenant, rawClientId);
+    await assertModuleEnabled(session, tenantId, 'contracts');
     if (session && !hasPermission(session.role, 'client:view_contract')) {
       return NextResponse.json({ error: 'Forbidden: contracts are visible to the account owner only.' }, { status: 403 });
     }

@@ -42,8 +42,10 @@ export async function GET() {
         nodeEnv: sanitizedEnv.NODE_ENV,
         configuredAdapters: {
           database: sanitizedEnv.HAS_DATABASE_URL || sanitizedEnv.HAS_SUPABASE_URL ? 'configured' : 'in-memory-mock',
-          googleSheets: sanitizedEnv.HAS_GOOGLE_CREDS ? 'ready' : 'unconfigured',
-          slackWebhooks: sanitizedEnv.HAS_SLACK_WEBHOOK ? 'ready' : 'unconfigured',
+          email: process.env.RESEND_API_KEY || process.env.BREVO_API_KEY ? 'configured' : 'unconfigured',
+          trackingSheets: process.env.GOOGLE_SHEETS_SCRIPT_URL ? 'configured' : 'unconfigured',
+          ghlWebhooks: process.env.GHL_WEBHOOK_SECRET ? 'configured' : 'unconfigured',
+          roofMeasurement: process.env.GOOGLE_SOLAR_API_KEY ? 'configured' : 'unconfigured',
         },
       },
     },

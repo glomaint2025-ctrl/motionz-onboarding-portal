@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { getTenantById, getClientSetupSteps, updateClientSetupStep, logAuditEvent } from '@/lib/db';
 import { requireAuth, handleAuthError, assertCsmAssigned } from '@/lib/auth/guard';
 import { onboardingSubmissionRepository } from '@/lib/db/repositories';
+import { validateText } from '@/lib/validation';
 
 export async function GET(
   request: Request,
@@ -54,7 +55,7 @@ export async function PUT(
     await assertCsmAssigned(session, tenant.id);
 
     const body = await request.json();
-    const { stepKey, status, what_it_is, right_now, we_need_from_you, unlocks } = body;
+    const { stepKey, status } = body;
 
     if (!stepKey) {
       return NextResponse.json({ error: 'Step key is required.' }, { status: 400 });
@@ -68,12 +69,25 @@ export async function PUT(
       );
     }
 
+    // Only fields that were sent are changed; text is trimmed and length-limited.
+    const text = (key: string, label: string, max: number) =>
+      key in body ? { [key]: validateText(body[key], label, { max }) ?? '' } : {};
+    let textUpdates: Record<string, string>;
+    try {
+      textUpdates = {
+        ...text('what_it_is', 'What it is', 2000),
+        ...text('right_now', 'Right now', 2000),
+        ...text('we_need_from_you', 'What we need from you', 2000),
+        ...text('unlocks', 'Unlocks', 2000),
+      };
+      if ('name' in body) textUpdates.name = validateText(body.name, 'Step name', { required: true, max: 120 })!;
+    } catch (e: any) {
+      return NextResponse.json({ error: e.message }, { status: 400 });
+    }
+
     const updatedStep = await updateClientSetupStep(tenant.id, stepKey, {
-      status,
-      what_it_is,
-      right_now,
-      we_need_from_you,
-      unlocks,
+      ...(status ? { status } : {}),
+      ...textUpdates,
     });
 
     if (!updatedStep) {
@@ -87,7 +101,7 @@ export async function PUT(
       action: 'step.updated',
       resourceType: 'client_setup_step',
       resourceId: updatedStep.id,
-      details: { stepKey, status, rightNow: right_now },
+      details: { stepKey, status, changed: Object.keys(textUpdates) },
     });
 
     return NextResponse.json({ success: true, step: updatedStep });

@@ -873,7 +873,7 @@ export default function ClientDetailPage() {
                   style={{ accentColor: 'var(--color-primary)' }}
                 />
                 <span style={{ fontSize: 'var(--font-size-sm)', textTransform: 'capitalize' }}>
-                  {key.replace('_', ' ')}
+                  {PORTAL_MODULES.find((m) => m.key === key)?.label || key.replace(/_/g, ' ')}
                 </span>
               </label>
             ))}

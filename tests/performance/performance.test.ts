@@ -1,6 +1,5 @@
 import assert from 'assert';
 import { paginate, debounce } from '../../src/lib/utils/debounce';
-import { GoogleSheetsService } from '../../src/lib/integrations/sheets/client';
 
 async function runPerformanceOptimizationTests() {
   console.log('Running Performance Optimization Test Suite...');
@@ -43,20 +42,6 @@ async function runPerformanceOptimizationTests() {
   assert.strictEqual(executionCount, 1, 'Debounced function must execute exactly once for trailing input');
   assert.strictEqual(lastVal, 'roofing');
   console.log('PASS: Search input debouncing verified');
-
-  // Test 3: Integration Data Caching (Tenant-scoped TTL)
-  const sheetsService = new GoogleSheetsService();
-  const t0 = performance.now();
-  const freshData = await sheetsService.getCampaignData('sheet_perf_test');
-  const tFresh = performance.now() - t0;
-
-  const t1 = performance.now();
-  const cachedData = await sheetsService.getCampaignData('sheet_perf_test');
-  const tCached = performance.now() - t1;
-
-  assert.strictEqual(cachedData.syncedAt, freshData.syncedAt, 'Cached result returned with identical timestamp');
-  assert(tCached <= tFresh + 5, 'Cached read faster or equal to initial fetch');
-  console.log('PASS: Integration service TTL caching verified');
 
   console.log('ALL PERFORMANCE OPTIMIZATION TESTS PASSED CLEANLY.');
 }

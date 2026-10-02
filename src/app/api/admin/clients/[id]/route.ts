@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { validatePhone, validateText } from '@/lib/validation';
+import { isStaffEmail } from '@/lib/auth/staff';
 import {
   tenantRepository,
   csmAssignmentRepository,
@@ -353,6 +354,9 @@ export async function PATCH(
     if (action === 'create_invitation') {
       const { email, role, phone, allowed_modules } = body;
       const targetEmail = (email || tenant.primary_email).trim().toLowerCase();
+      if (isStaffEmail(targetEmail)) {
+        return NextResponse.json({ error: '@motionz.ai addresses are for Motionz staff only.' }, { status: 400 });
+      }
       if (role && role !== 'client' && role !== 'client_member') {
         return NextResponse.json({ error: 'Portal invitations can only be for client roles.' }, { status: 400 });
       }

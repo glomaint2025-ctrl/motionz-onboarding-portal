@@ -21,7 +21,7 @@ import type { Tenant } from '@/lib/db/schema';
  * - lead            Opportunity created / stage changed in a client's sub-account. Routed by location id.
  * - csm_call        Call booked with a CSM on the Motionz calendar. Routed by the client's email.
  * - onboarding_form Onboarding form submitted. Routed by the submitter's email.
- * - ContactCreate / ContactUpdate / AppointmentCreate / AppointmentUpdate (marketplace format).
+ * - ContactCreate / ContactUpdate (marketplace format). Other marketplace events are ignored.
  *
  * Authentication: the shared secret GHL_WEBHOOK_SECRET, sent either as the
  * `x-motionz-webhook-secret` header or as `customData.secret` (GHL's standard Webhook action
@@ -131,11 +131,22 @@ async function handleOnboardingForm(request: NextRequest, p: Payload) {
   const email = contactEmail(p);
   const tenant = await tenantByEmail(email);
   const answers = extractAnswers(p);
+  const contactId = str(p.contact_id) || str(p.contact?.id);
+
+  // GHL retries webhooks; skip an identical submission received in the last 10 minutes.
+  const recent = await onboardingSubmissionRepository.listByTenant(tenant?.id ?? null, 5);
+  const duplicate = recent.find(
+    (r) =>
+      r.submitter_email === email &&
+      Date.now() - new Date(r.submitted_at).getTime() < 10 * 60 * 1000 &&
+      JSON.stringify(r.answers) === JSON.stringify(answers)
+  );
+  if (duplicate) return { tenant: tenant || undefined, ignored: 'Duplicate submission.' };
 
   await onboardingSubmissionRepository.create({
     tenant_id: tenant?.id ?? null,
     submitter_email: email,
-    ghl_contact_id: str(p.contact_id) || str(p.contact?.id),
+    ghl_contact_id: contactId,
     answers,
   });
 
@@ -183,17 +194,10 @@ async function handleMarketplaceEvent(type: string, p: Payload) {
       source: str(contact.source),
       ...(str(contact.status) ? { status: str(contact.status)! } : {}),
     });
-  } else if (type === 'AppointmentCreate' || type === 'AppointmentUpdate') {
-    const appointment = p.appointment || p;
-    const appointmentId = str(appointment?.id);
-    const startTime = str(appointment?.startTime);
-    if (!appointmentId || !startTime) return { error: 'Appointment id and startTime are required.' };
-    await appointmentRepository.upsertByGhlAppointmentId(tenant.id, appointmentId, {
-      contact_name: str(appointment.contactName) || str(appointment.title) || 'Call',
-      appointment_time: startTime,
-      status: str(appointment.appointmentStatus) || str(appointment.status) || 'confirmed',
-      notes: str(appointment.notes),
-    });
+  } else {
+    // Appointments in a client's own sub-account are homeowner bookings, not CSM calls (client answer 2.1).
+    // CSM calls arrive as `csm_call` events from Motionz's own calendar.
+    return { ignored: `Event type ${type} is not used by the portal.` };
   }
   return { tenant };
 }
@@ -223,7 +227,7 @@ export async function POST(request: NextRequest) {
     if (result.error) {
       return NextResponse.json({ error: result.error }, { status: 400 });
     }
-    if (result.ignored && event !== 'onboarding_form') {
+    if (result.ignored) {
       // 200 so GHL does not retry an event we will never be able to place.
       return NextResponse.json({ received: true, ignored: true, reason: result.ignored });
     }

@@ -127,6 +127,17 @@ export class UserRepository {
     return store.users.find((u) => u.email.toLowerCase() === normalized) || null;
   }
 
+  /** All users of one staff role, including disabled ones (Admin > Staff). */
+  async listAllByRole(role: 'admin' | 'csm'): Promise<User[]> {
+    const supabase = getSupabaseServiceClient();
+    if (supabase) {
+      const { data, error } = await supabase.from('users').select('*').eq('role', role).order('created_at');
+      if (error) throw new DatabaseError(`Failed to list ${role} users: ${error.message}`, error);
+      return (data || []) as User[];
+    }
+    return getStore().users.filter((u) => u.role === role);
+  }
+
   /** Active staff users of one role (e.g. all CSMs for the assignment dropdown). */
   async listByRole(role: 'admin' | 'csm'): Promise<User[]> {
     const supabase = getSupabaseServiceClient();

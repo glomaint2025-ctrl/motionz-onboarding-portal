@@ -6,6 +6,7 @@ import { userRepository, tenantRepository, securityEventRepository } from '@/lib
 import { enforceRateLimit, getClientIp, sanitizeRedirectUrl } from '@/lib/auth/security-utils';
 import { resolveTenantId } from '@/lib/db/supabase-client';
 import { canExposeDevLinks } from '@/lib/email';
+import { logAuditEvent } from '@/lib/db';
 
 export async function POST(request: Request) {
   try {
@@ -150,6 +151,17 @@ export async function POST(request: Request) {
       }
 
       const resolvedTenantId = resolveTenantId(user.tenant_id || 'demo');
+
+      // Login activity is tracked for the admin dashboard (FR-501).
+      await logAuditEvent({
+        tenantId: user.tenant_id || undefined,
+        actorEmail: user.email,
+        actorRole: user.role,
+        actorUserId: user.id,
+        action: 'client.authenticated',
+        resourceType: 'user',
+        resourceId: user.id,
+      });
 
       const sessionToken = createSessionToken(
         user.id,

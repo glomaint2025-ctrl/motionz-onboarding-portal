@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { validatePhone } from '@/lib/validation';
+import { isStaffEmail } from '@/lib/auth/staff';
 import {
   tenantRepository,
   csmAssignmentRepository,
@@ -170,6 +171,12 @@ export async function POST(request: Request) {
     }
 
     const normalizedEmail = primary_email.trim().toLowerCase();
+    if (isStaffEmail(normalizedEmail)) {
+      return NextResponse.json(
+        { error: '@motionz.ai addresses are for Motionz staff only. Use the client’s own email.' },
+        { status: 400 }
+      );
+    }
     const existingUser = await userRepository.findByEmail(normalizedEmail);
     if (existingUser) {
       return NextResponse.json(

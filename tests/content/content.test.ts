@@ -9,7 +9,7 @@ import {
   getClientScriptPreference,
   setClientScriptPreference,
 } from '../../src/lib/db';
-import { roofMeasurementAdapter } from '../../src/lib/integrations/roof/adapter';
+import { degreesToPitch } from '../../src/lib/integrations/roof/solar';
 
 async function runContentAndToolsTests() {
   console.log('Running Content and Tools Integration Tests...');
@@ -72,14 +72,11 @@ async function runContentAndToolsTests() {
   console.log('PASS: Video preference state workflow persisted');
 
   // Test 5: Roof measurement pitch calculations
-  const est6_12 = await roofMeasurementAdapter.estimateRoofArea('123 Elm St', '6/12');
-  const est8_12 = await roofMeasurementAdapter.estimateRoofArea('123 Elm St', '8/12');
-  const est12_12 = await roofMeasurementAdapter.estimateRoofArea('123 Elm St', '12/12');
-
-  assert(est8_12.squareFootage > est6_12.squareFootage, 'Steeper pitch 8/12 must yield greater area than 6/12');
-  assert(est12_12.squareFootage > est8_12.squareFootage, 'Steeper pitch 12/12 must yield greater area than 8/12');
-  assert.strictEqual(est6_12.squares, Number((est6_12.squareFootage / 100).toFixed(1)));
-  console.log('PASS: Roof measurement pitch multiplier and squares calculation verified');
+  assert.strictEqual(degreesToPitch(0), '0/12');
+  assert.strictEqual(degreesToPitch(18.43), '4/12');
+  assert.strictEqual(degreesToPitch(33.69), '8/12');
+  assert.strictEqual(degreesToPitch(45), '12/12');
+  console.log('PASS: Roof pitch conversion (degrees to rise/12) verified');
 
   console.log('ALL CONTENT AND TOOLS INTEGRATION TESTS PASSED CLEANLY.');
 }

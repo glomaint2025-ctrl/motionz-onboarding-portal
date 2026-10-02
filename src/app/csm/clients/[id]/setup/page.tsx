@@ -36,6 +36,8 @@ export default function CSMClientSetupEditorPage() {
   const [editWeNeed, setEditWeNeed] = useState('');
   const [editWhatItIs, setEditWhatItIs] = useState('');
   const [editUnlocks, setEditUnlocks] = useState('');
+  const [editName, setEditName] = useState('');
+  const [saveError, setSaveError] = useState('');
   const [saving, setSaving] = useState(false);
   const [feedbackMessage, setFeedbackMessage] = useState<string | null>(null);
 
@@ -70,6 +72,8 @@ export default function CSMClientSetupEditorPage() {
     setEditWeNeed(step.we_need_from_you || '');
     setEditWhatItIs(step.what_it_is);
     setEditUnlocks(step.unlocks);
+    setEditName(step.name);
+    setSaveError('');
     setFeedbackMessage(null);
   };
 
@@ -81,6 +85,7 @@ export default function CSMClientSetupEditorPage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           stepKey,
+          name: editName,
           status: editStatus,
           right_now: editRightNow,
           we_need_from_you: editWeNeed,
@@ -95,9 +100,12 @@ export default function CSMClientSetupEditorPage() {
         setEditingKey(null);
         await fetchSetupData();
         setTimeout(() => setFeedbackMessage(null), 3000);
+      } else {
+        setSaveError(data.error || 'Could not save this step.');
       }
     } catch (err) {
       console.error('Failed to save step:', err);
+      setSaveError('Network error while saving.');
     } finally {
       setSaving(false);
     }
@@ -220,6 +228,13 @@ export default function CSMClientSetupEditorPage() {
               {isCurrentlyEditing ? (
                 /* Inline Editing Form for CSM */
                 <div style={{ borderTop: '1px solid var(--color-border-subtle)', paddingTop: 'var(--space-4)', marginTop: 'var(--space-3)' }}>
+                  {saveError && (
+                    <p style={{ color: 'var(--color-status-danger-text)', fontSize: 'var(--font-size-sm)', marginTop: 0 }}>{saveError}</p>
+                  )}
+                  <div className="ui-form-group">
+                    <label className="ui-label">Step name</label>
+                    <input className="ui-input" value={editName} maxLength={120} onChange={(e) => setEditName(e.target.value)} />
+                  </div>
                   <div style={{ marginBottom: 'var(--space-4)' }}>
                     <Select
                       label="Milestone Status"
