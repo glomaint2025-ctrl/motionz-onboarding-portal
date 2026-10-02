@@ -7,7 +7,7 @@ import {
   DEMO_TENANT_UUID,
 } from '@/lib/db';
 import { assertPortalAccess, handleAuthError } from '@/lib/auth/guard';
-import { assertPermission } from '@/lib/auth/permissions';
+import { hasPermission } from '@/lib/auth/permissions';
 
 export async function GET(
   request: NextRequest,
@@ -28,11 +28,12 @@ export async function GET(
 
     const pref = await getClientScriptPreference(tenantId);
     return NextResponse.json({
-      preference: pref || {
-        tenant_id: tenantId,
-        video_preference: 'ai_video',
-        custom_name: targetTenant?.primary_contact_name || 'John Smith',
-        custom_company: targetTenant?.name || 'ABC Roofing',
+      // No saved preference yet: report that honestly (null) and expose the tenant's real
+      // names so the page can personalise scripts without inventing anything.
+      preference: pref || null,
+      defaults: {
+        custom_name: targetTenant?.primary_contact_name || '',
+        custom_company: targetTenant?.name || '',
       },
     });
   } catch (error: any) {
@@ -68,14 +69,15 @@ export async function POST(
     // Enforce active account, tenant suspension, and tenant isolation
     const session = await assertPortalAccess(request, targetTenant, rawClientId);
 
-    let actorRole: any = 'client';
-    let actorEmail = 'john@abcroofing.com';
-
-    if (session) {
-      assertPermission(session.role, 'client:video_preference');
-      actorRole = session.role;
-      actorEmail = session.email;
+    // Writes always require a signed-in user; there is no anonymous fallback actor.
+    if (!session) {
+      return NextResponse.json({ error: 'Authentication required. Please sign in.', code: 'UNAUTHENTICATED' }, { status: 401 });
     }
+    if (!hasPermission(session.role, 'client:video_preference')) {
+      return NextResponse.json({ error: 'You do not have permission to make this change. Ask the account owner.', code: 'FORBIDDEN' }, { status: 403 });
+    }
+    const actorRole: any = session.role;
+    const actorEmail = session.email;
 
     const body = await request.json();
     const { video_preference, custom_name, custom_company } = body;

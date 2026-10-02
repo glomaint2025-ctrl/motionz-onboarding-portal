@@ -2,7 +2,7 @@ import { validatePhone, validateText } from '@/lib/validation';
 import { NextRequest, NextResponse } from 'next/server';
 import { getTenantById, updateTenantProfile, logAuditEvent, DEMO_TENANT_UUID } from '@/lib/db';
 import { assertPortalAccess, handleAuthError } from '@/lib/auth/guard';
-import { assertPermission } from '@/lib/auth/permissions';
+import { hasPermission } from '@/lib/auth/permissions';
 
 export async function PATCH(
   request: NextRequest,
@@ -21,14 +21,15 @@ export async function PATCH(
     // Enforce active account, tenant suspension, and tenant isolation
     const session = await assertPortalAccess(request, targetTenant, rawClientId);
 
-    let actorRole: any = 'client';
-    let actorEmail = 'john@abcroofing.com';
-
-    if (session) {
-      assertPermission(session.role, 'profile:update');
-      actorRole = session.role;
-      actorEmail = session.email;
+    // Writes always require a signed-in user; there is no anonymous fallback actor.
+    if (!session) {
+      return NextResponse.json({ error: 'Authentication required. Please sign in.', code: 'UNAUTHENTICATED' }, { status: 401 });
     }
+    if (!hasPermission(session.role, 'profile:update')) {
+      return NextResponse.json({ error: 'You do not have permission to make this change. Ask the account owner.', code: 'FORBIDDEN' }, { status: 403 });
+    }
+    const actorRole: any = session.role;
+    const actorEmail = session.email;
 
     const body = await request.json().catch(() => ({}));
     let changes: { name?: string; phone?: string; primary_contact_name?: string };

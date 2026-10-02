@@ -93,3 +93,34 @@ export function onboardingSubmittedEmail(params: { to: string; companyName: stri
     ['onboarding-submitted']
   );
 }
+
+export function websiteChangeRequestEmail(params: {
+  to: string;
+  toName?: string;
+  companyName: string;
+  requestedBy: string;
+  title: string;
+  description: string;
+  targetPageUrl?: string;
+  isUrgent?: boolean;
+  portalUrl: string;
+}): EmailMessage {
+  const paragraphs = [
+    `${params.requestedBy} from ${params.companyName} submitted a website change request through the client portal.`,
+    `Title: ${params.title}`,
+    ...(params.targetPageUrl ? [`Page: ${params.targetPageUrl}`] : []),
+    `Priority: ${params.isUrgent ? 'Urgent' : 'Normal'}`,
+    'Description:',
+    params.description,
+  ];
+  const message = build(
+    params.to,
+    `${params.isUrgent ? '[Urgent] ' : ''}Website change request: ${params.companyName}`,
+    `${params.companyName} requested a website change`,
+    paragraphs,
+    { label: 'Open client', url: params.portalUrl },
+    'Reply to the client once the change is scheduled or done.',
+    ['website-change-request']
+  );
+  return params.toName ? { ...message, toName: params.toName } : message;
+}
