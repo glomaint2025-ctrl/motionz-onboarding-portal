@@ -46,6 +46,21 @@ export const DEFAULT_SCRIPT_TEMPLATES = [
   },
 ];
 
+/**
+ * Interpolates a list of stored script templates (e.g. rows from script_templates) for one client.
+ */
+export function generateScriptsFromTemplates(
+  templates: { id: string; title: string; script_content: string }[],
+  context: ScriptVariableContext
+): GeneratedScript[] {
+  return templates.map((item) => ({
+    id: item.id,
+    title: item.title,
+    rawTemplate: item.script_content,
+    content: interpolateScript(item.script_content, context),
+  }));
+}
+
 export function generateAllScripts(context: ScriptVariableContext): GeneratedScript[] {
   return DEFAULT_SCRIPT_TEMPLATES.map((item) => ({
     id: item.id,

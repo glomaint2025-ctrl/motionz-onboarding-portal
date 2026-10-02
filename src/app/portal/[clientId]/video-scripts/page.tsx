@@ -3,7 +3,13 @@
 import React, { useState, useEffect } from 'react';
 import { useParams } from 'next/navigation';
 import { Card, CardHeader, Button, StatusBadge, Input } from '@/components/ui';
-import { generateAllScripts, GeneratedScript } from '@/lib/scripts/template-engine';
+import { generateScriptsFromTemplates, GeneratedScript } from '@/lib/scripts/template-engine';
+
+interface StoredScriptTemplate {
+  id: string;
+  title: string;
+  script_content: string;
+}
 
 export default function VideoScriptsPage() {
   const params = useParams();
@@ -15,15 +21,28 @@ export default function VideoScriptsPage() {
   const [isSavingPref, setIsSavingPref] = useState(false);
   const [prefSaveNotice, setPrefSaveNotice] = useState('');
   const [copyNotice, setCopyNotice] = useState('');
+  const [scriptTemplates, setScriptTemplates] = useState<StoredScriptTemplate[]>([]);
+  const [scriptsLoading, setScriptsLoading] = useState(true);
+  const [scriptsError, setScriptsError] = useState('');
 
   useEffect(() => {
     let isMounted = true;
     async function loadData() {
       try {
-        const [portalRes, prefRes] = await Promise.all([
+        const [portalRes, prefRes, scriptsRes] = await Promise.all([
           fetch(`/api/portal/${clientId}/data`),
           fetch(`/api/portal/${clientId}/video-preference`),
+          fetch(`/api/portal/${clientId}/script-templates`),
         ]);
+
+        if (isMounted) {
+          if (scriptsRes.ok) {
+            const sData = await scriptsRes.json();
+            setScriptTemplates(Array.isArray(sData.scripts) ? sData.scripts : []);
+          } else {
+            setScriptsError('Video scripts could not be loaded. Please refresh the page.');
+          }
+        }
 
         if (portalRes.ok) {
           const pData = await portalRes.json();
@@ -42,7 +61,9 @@ export default function VideoScriptsPage() {
           }
         }
       } catch {
-        // Fallback remains active
+        if (isMounted) setScriptsError('Video scripts could not be loaded. Please refresh the page.');
+      } finally {
+        if (isMounted) setScriptsLoading(false);
       }
     }
     loadData();
@@ -51,7 +72,7 @@ export default function VideoScriptsPage() {
     };
   }, [clientId]);
 
-  const scripts: GeneratedScript[] = generateAllScripts({
+  const scripts: GeneratedScript[] = generateScriptsFromTemplates(scriptTemplates, {
     client_name: clientName,
     company_name: companyName,
   });
@@ -176,7 +197,7 @@ export default function VideoScriptsPage() {
             </div>
           ) : (
             <div>
-              <strong style={{ color: 'var(--color-text-primary)' }}>Workflow State: Self-Filmed Video.</strong> You record yourself reading the 3 provided scripts below on your mobile device in natural lighting, and upload the footage to your CSM for professional editing.
+              <strong style={{ color: 'var(--color-text-primary)' }}>Workflow State: Self-Filmed Video.</strong> You record yourself reading the provided scripts below on your mobile device in natural lighting, and upload the footage to your CSM for professional editing.
             </div>
           )}
         </div>
@@ -186,7 +207,7 @@ export default function VideoScriptsPage() {
       <Card style={{ marginBottom: 'var(--space-6)' }}>
         <CardHeader
           title="Script Personalization Variables"
-          subtitle="Interpolated live into all 3 campaign video script templates"
+          subtitle="Interpolated live into your campaign video script templates"
         />
 
         <div
@@ -212,7 +233,31 @@ export default function VideoScriptsPage() {
         </div>
       </Card>
 
-      {/* The 3 Interpolated Scripts */}
+      {/* Interpolated Scripts */}
+      {scriptsLoading && (
+        <Card>
+          <p style={{ margin: 0, fontSize: 'var(--font-size-sm)', color: 'var(--color-text-secondary)' }}>
+            Loading video scripts...
+          </p>
+        </Card>
+      )}
+
+      {!scriptsLoading && scriptsError && (
+        <Card>
+          <p style={{ margin: 0, fontSize: 'var(--font-size-sm)', color: 'var(--color-status-danger-text)' }}>
+            {scriptsError}
+          </p>
+        </Card>
+      )}
+
+      {!scriptsLoading && !scriptsError && scripts.length === 0 && (
+        <Card>
+          <p style={{ margin: 0, fontSize: 'var(--font-size-sm)', color: 'var(--color-text-secondary)' }}>
+            No video scripts are available yet. Your Motionz team will publish them here.
+          </p>
+        </Card>
+      )}
+
       <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-4)' }}>
         {scripts.map((script, idx) => (
           <Card key={script.id}>
