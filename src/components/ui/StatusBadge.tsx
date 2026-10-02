@@ -9,34 +9,34 @@ export interface StatusBadgeProps {
   dot?: boolean;
 }
 
+const DONE = new Set(['done', 'active', 'verified', 'connected', 'complete', 'completed', 'approved', 'signed', 'paid', 'delivered', 'won', 'success']);
+const PROGRESS = new Set(['in progress', 'onboarding', 'processing', 'shipped', 'sent', 'scheduled', 'submitted', 'in review', 'reviewing']);
+const WARNING = new Set(['warning', 'stuck', 'not connected', 'expired', 'needs attention', 'overdue', 'action needed']);
+const SUSPENDED = new Set(['suspended', 'banned', 'disabled']);
+const DANGER = new Set(['cancelled', 'canceled', 'failed', 'error', 'revoked', 'rejected', 'lost']);
+
+/** Pick a colour from common status words when no explicit variant is passed. */
+export function inferStatusVariant(status: string): StatusVariant {
+  const normalized = status.toLowerCase().replace(/[_-]+/g, ' ').trim();
+  if (DONE.has(normalized)) return 'done';
+  if (PROGRESS.has(normalized)) return 'progress';
+  if (WARNING.has(normalized)) return 'warning';
+  if (SUSPENDED.has(normalized)) return 'suspended';
+  if (DANGER.has(normalized)) return 'danger';
+  return 'pending';
+}
+
 export const StatusBadge: React.FC<StatusBadgeProps> = ({
   status,
   variant,
   className = '',
   dot = true,
 }) => {
-  // Infer variant from status string if not explicitly provided
-  let badgeVariant = variant;
-  if (!badgeVariant) {
-    const normalized = status.toLowerCase();
-    if (normalized === 'done' || normalized === 'active' || normalized === 'verified' || normalized === 'connected') {
-      badgeVariant = 'done';
-    } else if (normalized === 'in progress' || normalized === 'onboarding') {
-      badgeVariant = 'progress';
-    } else if (normalized === 'warning' || normalized === 'stuck' || normalized === 'not connected' || normalized === 'expired') {
-      badgeVariant = 'warning';
-    } else if (normalized === 'suspended' || normalized === 'banned' || normalized === 'disabled') {
-      badgeVariant = 'suspended';
-    } else if (normalized === 'cancelled' || normalized === 'failed' || normalized === 'error' || normalized === 'revoked') {
-      badgeVariant = 'danger';
-    } else {
-      badgeVariant = 'pending';
-    }
-  }
+  const badgeVariant = variant || inferStatusVariant(status);
 
   return (
     <span className={`ui-badge ui-badge-${badgeVariant} ${className}`.trim()}>
-      {dot && <span className="ui-badge-dot" />}
+      {dot && <span className="ui-badge-dot" aria-hidden="true" />}
       {status}
     </span>
   );

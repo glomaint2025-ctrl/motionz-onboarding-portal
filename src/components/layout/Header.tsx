@@ -1,8 +1,9 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
-import { Button } from '@/components/ui/Button';
+import { Icon } from '@/components/brand/Icon';
+import { MotionzMark } from '@/components/brand/MotionzLogo';
 
 export interface HeaderProps {
   companyName?: string;
@@ -10,223 +11,150 @@ export interface HeaderProps {
   userRole?: string;
   onMenuToggle?: () => void;
   onLogout?: () => void;
+  /** Where "Home" in the user menu goes. */
+  homeHref?: string;
+  /** Shows a placeholder instead of the company name while it loads. */
+  isLoading?: boolean;
+  /** Whether the mobile drawer is open (for aria-expanded on the menu button). */
+  isMenuOpen?: boolean;
+}
+
+function initialsFrom(text: string): string {
+  const words = text.trim().split(/\s+/).filter(Boolean);
+  if (words.length === 0) return '';
+  if (words.length === 1) return words[0].substring(0, 2).toUpperCase();
+  return (words[0][0] + words[1][0]).toUpperCase();
 }
 
 export const Header: React.FC<HeaderProps> = ({
-  companyName = 'ABC Roofing',
-  portalTitle = 'Client Portal',
-  userRole = 'Client',
+  companyName = '',
+  portalTitle = '',
+  userRole = '',
   onMenuToggle,
   onLogout,
+  homeHref,
+  isLoading = false,
+  isMenuOpen,
 }) => {
   const [isUserMenuOpen, setIsUserMenuOpen] = useState(false);
-  const isAdmin = userRole.toLowerCase().includes('admin');
+  const menuRef = useRef<HTMLDivElement>(null);
+  const triggerRef = useRef<HTMLButtonElement>(null);
+
+  const displayName = companyName.trim();
+  const showSkeleton = !displayName && isLoading;
+  const avatarText = initialsFrom(displayName || userRole || '');
+
+  // Close the user menu on outside click or Escape.
+  useEffect(() => {
+    if (!isUserMenuOpen) return;
+    const handleClick = (e: MouseEvent) => {
+      if (menuRef.current && !menuRef.current.contains(e.target as Node)) {
+        setIsUserMenuOpen(false);
+      }
+    };
+    const handleKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        setIsUserMenuOpen(false);
+        triggerRef.current?.focus();
+      }
+    };
+    document.addEventListener('mousedown', handleClick);
+    document.addEventListener('keydown', handleKey);
+    return () => {
+      document.removeEventListener('mousedown', handleClick);
+      document.removeEventListener('keydown', handleKey);
+    };
+  }, [isUserMenuOpen]);
 
   return (
     <header className="app-header">
-      <div className="header-left" style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-3)', flex: 1, maxWidth: '480px' }}>
+      <div className="header-left">
         {onMenuToggle && (
-          <Button
-            variant="secondary"
-            size="sm"
-            className="mobile-menu-btn"
+          <button
+            type="button"
+            className="header-icon-btn mobile-menu-btn"
             onClick={onMenuToggle}
-            aria-label="Open Navigation Menu"
+            aria-label="Open navigation menu"
+            aria-haspopup="dialog"
+            aria-expanded={isMenuOpen}
+            aria-controls="mobile-nav-drawer"
           >
-            Menu
-          </Button>
+            <Icon name="menu" size={22} />
+          </button>
         )}
 
-        {/* Global Search Bar as in reference image */}
-        <div
-          className="header-search-container"
-          style={{
-            display: 'flex',
-            alignItems: 'center',
-            backgroundColor: 'rgba(15, 23, 42, 0.65)',
-            border: '1px solid rgba(255, 255, 255, 0.08)',
-            borderRadius: 'var(--radius-md, 8px)',
-            padding: '6px 12px',
-            width: '100%',
-            maxWidth: '380px',
-            transition: 'border-color 0.15s ease',
-          }}
-        >
-          <svg
-            width="15"
-            height="15"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            strokeWidth="2"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-            style={{ color: '#94a3b8', marginRight: '8px', flexShrink: 0 }}
-          >
-            <circle cx="11" cy="11" r="8" />
-            <line x1="21" y1="21" x2="16.65" y2="16.65" />
-          </svg>
-          <input
-            type="text"
-            placeholder="Search anything..."
-            style={{
-              background: 'transparent',
-              border: 'none',
-              outline: 'none',
-              color: 'var(--color-text-primary, #f8fafc)',
-              fontSize: '13px',
-              width: '100%',
-            }}
-          />
-          <kbd
-            style={{
-              fontSize: '11px',
-              color: '#94a3b8',
-              backgroundColor: 'rgba(255, 255, 255, 0.07)',
-              padding: '2px 6px',
-              borderRadius: '4px',
-              border: '1px solid rgba(255, 255, 255, 0.08)',
-              fontFamily: 'inherit',
-              whiteSpace: 'nowrap',
-            }}
-          >
-            Ctrl K
-          </kbd>
+        <span className="header-mobile-brand">
+          <MotionzMark size={28} />
+        </span>
+        <span className="header-divider" aria-hidden="true" />
+
+        <div className="header-context">
+          {showSkeleton ? (
+            <span className="ui-skeleton header-skeleton" aria-label="Loading company name" />
+          ) : (
+            displayName && <span className="header-company-name">{displayName}</span>
+          )}
+          {portalTitle && <span className="header-portal-label">{portalTitle}</span>}
         </div>
       </div>
 
-      <div className="header-right" style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-4)' }}>
-        {/* Notification Bell with red badge */}
-        <button
-          type="button"
-          aria-label="Notifications"
-          style={{
-            position: 'relative',
-            background: 'none',
-            border: 'none',
-            color: '#94a3b8',
-            cursor: 'pointer',
-            padding: '6px',
-            borderRadius: '50%',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            transition: 'color 0.15s ease',
-          }}
-        >
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-            <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9" />
-            <path d="M13.73 21a2 2 0 0 1-3.46 0" />
-          </svg>
-          <span
-            style={{
-              position: 'absolute',
-              top: '4px',
-              right: '5px',
-              width: '7px',
-              height: '7px',
-              borderRadius: '50%',
-              backgroundColor: '#ef4444',
-              boxShadow: '0 0 6px #ef4444',
-            }}
-          />
-        </button>
-
-        {/* User Profile Avatar & Role */}
-        <div style={{ position: 'relative' }}>
-          <div
+      <div className="header-right">
+        <div className="user-menu" ref={menuRef}>
+          <button
+            ref={triggerRef}
+            type="button"
+            className="user-menu-trigger"
             onClick={() => setIsUserMenuOpen((prev) => !prev)}
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: '10px',
-              cursor: 'pointer',
-              userSelect: 'none',
-            }}
+            aria-haspopup="menu"
+            aria-expanded={isUserMenuOpen}
+            aria-label={`Account menu${displayName ? ` for ${displayName}` : ''}`}
           >
-            <div
-              style={{
-                width: '34px',
-                height: '34px',
-                borderRadius: '50%',
-                backgroundColor: '#2563eb',
-                color: '#ffffff',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                fontWeight: '600',
-                fontSize: '13px',
-                boxShadow: '0 0 10px rgba(37, 99, 235, 0.35)',
-              }}
-            >
-              {isAdmin
-                ? 'MA'
-                : companyName && companyName !== 'Client Workspace'
-                ? companyName.substring(0, 2).toUpperCase()
-                : userRole.substring(0, 2).toUpperCase()}
-            </div>
-            <div style={{ display: 'flex', flexDirection: 'column' }}>
-              <span style={{ fontSize: '13px', fontWeight: '600', color: 'var(--color-text-primary, #f8fafc)', lineHeight: 1.2 }}>
-                {isAdmin ? 'Motionz Admin' : (companyName || 'Client Workspace')}
-              </span>
-              <span style={{ fontSize: '11px', color: '#94a3b8', lineHeight: 1.2 }}>
-                {isAdmin ? 'Administrator' : userRole}
-              </span>
-            </div>
-          </div>
+            <span className="user-avatar" aria-hidden="true">
+              {avatarText || <Icon name="user" size={16} />}
+            </span>
+            <span className="user-menu-meta">
+              {displayName && <span className="user-menu-name">{displayName}</span>}
+              {userRole && <span className="user-menu-role">{userRole}</span>}
+            </span>
+            <span className="user-menu-chevron" aria-hidden="true">
+              <Icon name="chevron-down" size={16} />
+            </span>
+          </button>
 
-          {/* User Menu Dropdown */}
           {isUserMenuOpen && (
-            <div
-              style={{
-                position: 'absolute',
-                top: 'calc(100% + 8px)',
-                right: 0,
-                width: '180px',
-                backgroundColor: '#0b1329',
-                border: '1px solid rgba(56, 189, 248, 0.3)',
-                borderRadius: 'var(--radius-md, 8px)',
-                padding: '6px',
-                boxShadow: '0 12px 28px rgba(0, 0, 0, 0.75)',
-                zIndex: 1000,
-                display: 'flex',
-                flexDirection: 'column',
-                gap: '2px',
-              }}
-            >
-              <Link
-                href="/admin"
-                onClick={() => setIsUserMenuOpen(false)}
-                style={{
-                  padding: '8px 12px',
-                  borderRadius: '4px',
-                  fontSize: '13px',
-                  color: '#cbd5e1',
-                  textDecoration: 'none',
-                }}
-              >
-                Dashboard
-              </Link>
+            <div className="user-menu-dropdown" role="menu" aria-label="Account">
+              <div className="user-menu-header">
+                <span className="user-avatar user-avatar-lg" aria-hidden="true">
+                  {avatarText || <Icon name="user" size={18} />}
+                </span>
+                <span style={{ minWidth: 0 }}>
+                  {displayName && <span className="user-menu-name" style={{ display: 'block' }}>{displayName}</span>}
+                  {userRole && <span className="user-menu-role">{userRole}</span>}
+                </span>
+              </div>
+              {homeHref && (
+                <Link
+                  href={homeHref}
+                  role="menuitem"
+                  className="user-menu-item"
+                  onClick={() => setIsUserMenuOpen(false)}
+                >
+                  <Icon name="home" size={18} />
+                  Home
+                </Link>
+              )}
               {onLogout && (
                 <button
                   type="button"
+                  role="menuitem"
+                  className="user-menu-item user-menu-item-danger"
                   onClick={() => {
                     setIsUserMenuOpen(false);
                     onLogout();
                   }}
-                  style={{
-                    background: 'none',
-                    border: 'none',
-                    padding: '8px 12px',
-                    borderRadius: '4px',
-                    fontSize: '13px',
-                    color: '#f87171',
-                    textAlign: 'left',
-                    cursor: 'pointer',
-                    width: '100%',
-                  }}
                 >
-                  Sign Out
+                  <Icon name="logout" size={18} />
+                  Sign out
                 </button>
               )}
             </div>

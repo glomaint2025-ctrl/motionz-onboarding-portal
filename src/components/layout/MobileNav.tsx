@@ -1,9 +1,11 @@
 'use client';
 
-import React from 'react';
+import React, { useEffect } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { Button } from '@/components/ui/Button';
+import { Icon } from '@/components/brand/Icon';
+import { MotionzWordmark } from '@/components/brand/MotionzLogo';
+import { getBottomBarItems, getNavGroups, isNavItemActive } from './nav-config';
 
 export interface MobileNavProps {
   isOpen: boolean;
@@ -13,6 +15,8 @@ export interface MobileNavProps {
   clientId?: string;
   featureToggles?: Record<string, boolean>;
   isLoading?: boolean;
+  /** Optional sign-out handler shown at the bottom of the drawer. */
+  onLogout?: () => void;
 }
 
 export const MobileNav: React.FC<MobileNavProps> = ({
@@ -22,165 +26,124 @@ export const MobileNav: React.FC<MobileNavProps> = ({
   role = 'client',
   clientId = 'demo',
   featureToggles,
-  isLoading = false,
+  onLogout,
 }) => {
   const pathname = usePathname();
+  const groups = getNavGroups(role, clientId, featureToggles);
+  const bottomItems = getBottomBarItems(role, clientId, featureToggles);
+  const tag = role === 'admin' ? 'Admin' : role === 'csm' ? 'CSM' : undefined;
 
-  const clientNavItems = [
-    { label: 'Overview', href: `/portal/${clientId}` },
-    { label: 'Setup Progress', href: `/portal/${clientId}/onboarding` },
-    { label: 'Leads & Pipeline', href: `/portal/${clientId}/leads` },
-    { label: 'Campaign Tracking', href: `/portal/${clientId}/tracking` },
-    { label: 'Signed Contract', href: `/portal/${clientId}/contract` },
-    { label: 'Orders & Shipping', href: `/portal/${clientId}/orders` },
-    { label: 'Tools & Resources', href: `/portal/${clientId}/tools` },
-    { label: 'Roof Measurement', href: `/portal/${clientId}/roof-measurement` },
-    { label: 'Video Scripts', href: `/portal/${clientId}/video-scripts` },
-    { label: 'Book CSM Call', href: `/portal/${clientId}/book-call` },
-    { label: 'Company Profile', href: `/portal/${clientId}/profile` },
-    { label: 'Team Members', href: `/portal/${clientId}/team` },
-  ];
+  // Escape closes the drawer; lock page scroll while it is open.
+  useEffect(() => {
+    if (!isOpen) return;
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onClose();
+    };
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    window.addEventListener('keydown', handleKeyDown);
+    return () => {
+      document.body.style.overflow = previousOverflow;
+      window.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [isOpen, onClose]);
 
-  const featureKeyMap: Record<string, string> = {
-    [`/portal/${clientId}/onboarding`]: 'onboarding',
-    [`/portal/${clientId}/leads`]: 'leads',
-    [`/portal/${clientId}/tracking`]: 'tracking',
-    [`/portal/${clientId}/contract`]: 'contracts',
-    [`/portal/${clientId}/orders`]: 'orders',
-    [`/portal/${clientId}/tools`]: 'tools',
-    [`/portal/${clientId}/roof-measurement`]: 'roof_measurement',
-    [`/portal/${clientId}/video-scripts`]: 'video_scripts',
-    [`/portal/${clientId}/book-call`]: 'book_call',
-    [`/portal/${clientId}/team`]: 'team',
-  };
-
-  const filteredClientNavItems = clientNavItems.filter((item) => {
-    const key = featureKeyMap[item.href];
-    if (!key) return true;
-    if (featureToggles && featureToggles[key] === false) {
-      return false;
-    }
-    return true;
-  });
-
-  const adminNavItems = [
-    { label: 'Admin Dashboard', href: '/admin' },
-    { label: 'Client Management', href: '/admin/clients' },
-    { label: 'Master Templates', href: '/admin/templates' },
-    { label: 'Settings & Integrations', href: '/admin/integrations' },
-    { label: 'Security & Audit Logs', href: '/admin/audit-logs' },
-    { label: 'Security Alerts', href: '/admin/security-alerts' },
-  ];
-
-  const csmNavItems = [
-    { label: 'CSM Workspace', href: '/csm' },
-    { label: 'Assigned Clients', href: '/csm/clients' },
-    { label: 'Setup Review Queue', href: '/csm/setup-queue' },
-  ];
-
-  const navItems = role === 'admin' ? adminNavItems : role === 'csm' ? csmNavItems : filteredClientNavItems;
+  const bottomBarCoversPath = bottomItems.some((item) => isNavItemActive(item.href, pathname, role, clientId));
 
   return (
     <>
-      {/* Off-Canvas Navigation Drawer */}
+      {/* Off-canvas navigation drawer */}
       {isOpen && (
         <div className="mobile-drawer-overlay" onClick={onClose}>
-          <div className="mobile-drawer" onClick={(e) => e.stopPropagation()}>
+          <div
+            className="mobile-drawer"
+            id="mobile-nav-drawer"
+            role="dialog"
+            aria-modal="true"
+            aria-label="Navigation menu"
+            onClick={(e) => e.stopPropagation()}
+          >
             <div className="drawer-header">
-              <span className="brand-logo">Motionz</span>
-              <Button variant="secondary" size="sm" onClick={onClose}>
-                Close
-              </Button>
+              <MotionzWordmark size={28} tag={tag} />
+              <button type="button" className="header-icon-btn" onClick={onClose} aria-label="Close menu" autoFocus>
+                <Icon name="close" size={20} />
+              </button>
             </div>
-            <nav className="drawer-nav">
-              {navItems.map((item) => {
-                const isRootPage = item.href === `/portal/${clientId}` || item.href === '/admin' || item.href === '/csm';
-                const isActive = isRootPage
-                  ? pathname === item.href
-                  : (pathname === item.href || pathname.startsWith(item.href + '/'));
-                return (
-                  <Link
-                    key={item.href}
-                    href={item.href}
-                    onClick={onClose}
-                    className={`nav-link ${isActive ? 'nav-link-active' : ''}`.trim()}
-                  >
-                    {item.label}
-                  </Link>
-                );
-              })}
+            <nav className="drawer-nav" aria-label="Main navigation">
+              {groups.map((group) => (
+                <div className="nav-group" key={group.label}>
+                  {groups.length > 1 && <div className="nav-group-label">{group.label}</div>}
+                  {group.items.map((item) => {
+                    const isActive = isNavItemActive(item.href, pathname, role, clientId);
+                    return (
+                      <Link
+                        key={item.href}
+                        href={item.href}
+                        onClick={onClose}
+                        className={`nav-link ${isActive ? 'nav-link-active' : ''}`.trim()}
+                        aria-current={isActive ? 'page' : undefined}
+                      >
+                        <span className="nav-link-icon">
+                          <Icon name={item.icon} size={20} />
+                        </span>
+                        <span>{item.label}</span>
+                      </Link>
+                    );
+                  })}
+                </div>
+              ))}
             </nav>
+            {onLogout && (
+              <div className="drawer-footer">
+                <button
+                  type="button"
+                  className="user-menu-item user-menu-item-danger"
+                  style={{ minHeight: 'var(--tap-target)' }}
+                  onClick={() => {
+                    onClose();
+                    onLogout();
+                  }}
+                >
+                  <Icon name="logout" size={18} />
+                  Sign out
+                </button>
+              </div>
+            )}
           </div>
         </div>
       )}
 
-      {/* Mobile Bottom Quick Navigation Bar */}
-      <nav className="mobile-bottom-bar" aria-label="Mobile Navigation">
-        {role === 'client' ? (
-          <>
+      {/* Phone bottom tab bar */}
+      <nav className="mobile-bottom-bar" aria-label="Quick navigation">
+        {bottomItems.map((item) => {
+          const isActive = isNavItemActive(item.href, pathname, role, clientId);
+          return (
             <Link
-              href={`/portal/${clientId}`}
-              className={`bottom-tab-item ${pathname === `/portal/${clientId}` ? 'bottom-tab-item-active' : ''}`}
+              key={item.href}
+              href={item.href}
+              className={`bottom-tab-item ${isActive ? 'bottom-tab-item-active' : ''}`.trim()}
+              aria-current={isActive ? 'page' : undefined}
             >
-              Overview
+              <span className="bottom-tab-icon">
+                <Icon name={item.icon} size={20} />
+              </span>
+              <span>{item.shortLabel || item.label}</span>
             </Link>
-            {(!featureToggles || featureToggles.onboarding !== false) && (
-              <Link
-                href={`/portal/${clientId}/onboarding`}
-                className={`bottom-tab-item ${pathname === `/portal/${clientId}/onboarding` ? 'bottom-tab-item-active' : ''}`}
-              >
-                Setup
-              </Link>
-            )}
-            {(!featureToggles || featureToggles.leads !== false) && (
-              <Link
-                href={`/portal/${clientId}/leads`}
-                className={`bottom-tab-item ${pathname === `/portal/${clientId}/leads` ? 'bottom-tab-item-active' : ''}`}
-              >
-                Leads
-              </Link>
-            )}
-            {(!featureToggles || featureToggles.tracking !== false) && (
-              <Link
-                href={`/portal/${clientId}/tracking`}
-                className={`bottom-tab-item ${pathname === `/portal/${clientId}/tracking` ? 'bottom-tab-item-active' : ''}`}
-              >
-                Tracking
-              </Link>
-            )}
-            <button
-              type="button"
-              className="bottom-tab-item"
-              style={{ background: 'none', border: 'none', cursor: 'pointer' }}
-              onClick={onOpen}
-            >
-              More
-            </button>
-          </>
-        ) : (
-          <>
-            <Link
-              href={role === 'admin' ? '/admin' : '/csm'}
-              className="bottom-tab-item bottom-tab-item-active"
-            >
-              Dashboard
-            </Link>
-            <Link
-              href={role === 'admin' ? '/admin/clients' : '/csm/clients'}
-              className="bottom-tab-item"
-            >
-              Clients
-            </Link>
-            <button
-              type="button"
-              className="bottom-tab-item"
-              style={{ background: 'none', border: 'none', cursor: 'pointer' }}
-              onClick={onOpen}
-            >
-              Menu
-            </button>
-          </>
-        )}
+          );
+        })}
+        <button
+          type="button"
+          className={`bottom-tab-item ${!bottomBarCoversPath || isOpen ? 'bottom-tab-item-active' : ''}`.trim()}
+          onClick={onOpen}
+          aria-haspopup="dialog"
+          aria-expanded={isOpen}
+          aria-controls="mobile-nav-drawer"
+        >
+          <span className="bottom-tab-icon">
+            <Icon name="menu" size={20} />
+          </span>
+          <span>More</span>
+        </button>
       </nav>
     </>
   );

@@ -3,7 +3,9 @@
 import React, { useState, Suspense } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { Card, Button, Input, StatusBadge } from '@/components/ui';
+import { Button, Input, buttonClasses } from '@/components/ui';
+import { Icon } from '@/components/brand/Icon';
+import { MotionzWordmark } from '@/components/brand/MotionzLogo';
 
 function ResetPasswordForm() {
   const searchParams = useSearchParams();
@@ -58,70 +60,48 @@ function ResetPasswordForm() {
 
   if (!token) {
     return (
-      <Card style={{ textAlign: 'center', padding: 'var(--space-6)' }}>
-        <div style={{ marginBottom: 'var(--space-3)' }}>
-          <StatusBadge status="Invalid Link" variant="danger" />
+      <div className="auth-card auth-card-center">
+        <div className="auth-icon auth-icon-warning">
+          <Icon name="alert" size={24} />
         </div>
-        <h2 style={{ fontSize: 'var(--font-size-base)', marginBottom: 'var(--space-2)' }}>
-          Password Reset Token Missing
-        </h2>
-        <p style={{ fontSize: 'var(--font-size-xs)', color: 'var(--color-text-secondary)', marginBottom: 'var(--space-4)' }}>
-          This reset link does not contain a valid security token.
+        <h1 className="auth-title">This reset link is incomplete</h1>
+        <p className="auth-subtitle">
+          The link is missing its security code. Request a new one and use the button in the email.
         </p>
-        <Link href="/auth/forgot-password" style={{ textDecoration: 'none' }}>
-          <Button variant="primary" fullWidth>
-            Request New Reset Link
-          </Button>
+        <Link href="/auth/forgot-password" className={buttonClasses({ variant: 'primary', size: 'lg', fullWidth: true })}>
+          Request a new link
         </Link>
-      </Card>
+      </div>
     );
   }
 
   if (isSuccess) {
     return (
-      <Card style={{ textAlign: 'center', padding: 'var(--space-6)' }}>
-        <div style={{ marginBottom: 'var(--space-3)' }}>
-          <StatusBadge status="Password Updated" variant="done" />
+      <div className="auth-card auth-card-center">
+        <div className="auth-icon auth-icon-success">
+          <Icon name="check-circle" size={24} />
         </div>
-        <h2 style={{ fontSize: 'var(--font-size-base)', fontWeight: 'var(--font-weight-semibold)', marginBottom: 'var(--space-2)' }}>
-          Your Password Has Been Reset
-        </h2>
-        <p style={{ fontSize: 'var(--font-size-xs)', color: 'var(--color-text-secondary)', marginBottom: 'var(--space-5)', lineHeight: 1.5 }}>
-          Your credentials have been securely updated. You can now access your account using your new password.
-        </p>
-        <Link href="/auth/login" style={{ textDecoration: 'none' }}>
-          <Button variant="primary" fullWidth>
-            Proceed to Sign In
-          </Button>
+        <h1 className="auth-title">Password updated</h1>
+        <p className="auth-subtitle">You&apos;re all set. Sign in with your new password.</p>
+        <Link href="/auth/login" className={buttonClasses({ variant: 'primary', size: 'lg', fullWidth: true })}>
+          Go to sign in
         </Link>
-      </Card>
+      </div>
     );
   }
 
   return (
-    <Card>
-      <div style={{ textAlign: 'center', marginBottom: 'var(--space-4)' }}>
-        <h2 style={{ fontSize: 'var(--font-size-base)', fontWeight: 'var(--font-weight-semibold)', margin: 0 }}>
-          Create New Password
-        </h2>
-        <p style={{ fontSize: 'var(--font-size-xs)', color: 'var(--color-text-muted)', marginTop: 'var(--space-1)' }}>
-          Choose a secure password of at least 8 characters.
-        </p>
+    <div className="auth-card">
+      <div className="auth-icon">
+        <Icon name="lock" size={24} />
       </div>
+      <h1 className="auth-title">Choose a new password</h1>
+      <p className="auth-subtitle">Use at least 8 characters. You&apos;ll use it the next time you sign in.</p>
 
       {errorMessage && (
-        <div
-          style={{
-            padding: 'var(--space-3)',
-            backgroundColor: 'rgba(239, 68, 68, 0.1)',
-            border: '1px solid rgba(239, 68, 68, 0.3)',
-            borderRadius: 'var(--radius-md)',
-            color: 'var(--color-danger, #ef4444)',
-            fontSize: 'var(--font-size-xs)',
-            marginBottom: 'var(--space-4)',
-          }}
-        >
-          {errorMessage}
+        <div className="auth-alert auth-alert-danger" role="alert">
+          <Icon name="alert" size={18} />
+          <span>{errorMessage}</span>
         </div>
       )}
 
@@ -130,7 +110,7 @@ function ResetPasswordForm() {
           id="new-password"
           name="new-password"
           type="password"
-          label="New Password"
+          label="New password"
           placeholder="At least 8 characters"
           autoComplete="new-password"
           value={password}
@@ -138,69 +118,46 @@ function ResetPasswordForm() {
           required
         />
 
-        <div style={{ marginTop: 'var(--space-3)' }}>
-          <Input
-            id="confirm-new-password"
-            name="confirm-new-password"
-            type="password"
-            label="Confirm New Password"
-            placeholder="Re-enter your new password"
-            autoComplete="new-password"
-            value={confirmPassword}
-            onChange={(e) => setConfirmPassword(e.target.value)}
-            required
-          />
-        </div>
+        <Input
+          id="confirm-new-password"
+          name="confirm-new-password"
+          type="password"
+          label="Confirm new password"
+          placeholder="Type it again"
+          autoComplete="new-password"
+          value={confirmPassword}
+          onChange={(e) => setConfirmPassword(e.target.value)}
+          required
+        />
 
         <Button
           type="submit"
           variant="primary"
+          size="lg"
           fullWidth
           disabled={loading || !password || !confirmPassword}
-          style={{ marginTop: 'var(--space-5)' }}
+          style={{ marginTop: 'var(--space-2)' }}
         >
-          {loading ? 'Updating Password...' : 'Save New Password'}
+          {loading ? 'Saving...' : 'Save new password'}
         </Button>
       </form>
-    </Card>
+    </div>
   );
 }
 
 export default function ResetPasswordPage() {
   return (
-    <div
-      style={{
-        minHeight: '100vh',
-        display: 'flex',
-        flexDirection: 'column',
-        justifyContent: 'center',
-        alignItems: 'center',
-        padding: 'var(--space-4)',
-        backgroundColor: 'var(--color-bg-base)',
-      }}
-    >
-      <div style={{ width: '100%', maxWidth: '440px' }}>
-        <div style={{ textAlign: 'center', marginBottom: 'var(--space-6)' }}>
-          <h1
-            style={{
-              fontSize: 'var(--font-size-2xl)',
-              fontWeight: 'var(--font-weight-bold)',
-              color: 'var(--color-text-primary)',
-              letterSpacing: '-0.025em',
-            }}
-          >
-            Motionz
-          </h1>
-          <p style={{ color: 'var(--color-text-muted)', fontSize: 'var(--font-size-sm)', marginTop: 'var(--space-1)' }}>
-            Establish New Password
-          </p>
+    <div className="auth-page">
+      <div className="auth-container">
+        <div className="auth-brand">
+          <MotionzWordmark size={40} />
         </div>
 
         <Suspense
           fallback={
-            <Card style={{ textAlign: 'center', padding: 'var(--space-6)' }}>
-              <p style={{ color: 'var(--color-text-muted)' }}>Loading security token...</p>
-            </Card>
+            <div className="auth-card auth-card-center" role="status">
+              <p>Loading...</p>
+            </div>
           }
         >
           <ResetPasswordForm />

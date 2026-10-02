@@ -17,11 +17,19 @@ html {
   line-height: var(--line-height-normal);
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
+  -webkit-text-size-adjust: 100%;
+  font-feature-settings: "cv11", "ss01";
 }
 
 body {
   min-height: 100vh;
+  min-height: 100dvh;
   background-color: var(--color-bg-base);
+  background-image:
+    radial-gradient(1200px 600px at 85% -10%, rgba(69, 176, 216, 0.06), transparent 60%),
+    radial-gradient(900px 500px at -10% 110%, rgba(244, 167, 100, 0.035), transparent 60%);
+  background-attachment: fixed;
   color: var(--color-text-primary);
   overflow-x: hidden;
 }
@@ -31,12 +39,17 @@ h1, h2, h3, h4, h5, h6 {
   color: var(--color-text-primary);
   font-weight: var(--font-weight-semibold);
   line-height: var(--line-height-tight);
+  letter-spacing: var(--letter-spacing-tight);
 }
 
-h1 { font-size: var(--font-size-2xl); }
+h1 { font-size: var(--font-size-2xl); letter-spacing: var(--letter-spacing-heading); font-weight: var(--font-weight-bold); }
 h2 { font-size: var(--font-size-xl); }
 h3 { font-size: var(--font-size-lg); }
 h4 { font-size: var(--font-size-base); }
+
+@media (min-width: 768px) {
+  h1 { font-size: 1.75rem; }
+}
 
 p {
   color: var(--color-text-secondary);
@@ -44,8 +57,10 @@ p {
   line-height: var(--line-height-relaxed);
 }
 
+strong, b { color: var(--color-text-primary); font-weight: var(--font-weight-semibold); }
+
 a {
-  color: var(--color-primary);
+  color: var(--color-primary-text);
   text-decoration: none;
   transition: color var(--transition-fast);
 }
@@ -53,30 +68,66 @@ a {
 a:hover {
   color: var(--color-primary-hover);
   text-decoration: underline;
+  text-underline-offset: 3px;
 }
 
-/* Accessible Focus Styles */
+img, svg { flex-shrink: 0; }
+
+::selection {
+  background: rgba(69, 176, 216, 0.35);
+  color: #ffffff;
+}
+
+/* Accessible Focus Styles: a clear ring that components' box-shadows can't hide */
+:focus { outline: none; }
 :focus-visible {
-  outline: none;
-  box-shadow: 0 0 0 2px var(--color-primary);
+  outline: 2px solid var(--color-focus-ring);
+  outline-offset: 2px;
+}
+
+/* Visually hidden but readable by screen readers */
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
 }
 
 /* Form Primitives */
 input, select, textarea, button {
   font-family: inherit;
   font-size: var(--font-size-sm);
+  color: inherit;
 }
 
-/* Global Custom Select & Dropdown Override (Theme-aligned) */
+/* iOS zooms the page when an input's font-size is below 16px; avoid that on phones. */
+@media (max-width: 767px) {
+  input:not([type="checkbox"]):not([type="radio"]):not([type="range"]), select, textarea {
+    font-size: 16px;
+  }
+}
+
+input::placeholder, textarea::placeholder {
+  color: var(--color-text-muted);
+  opacity: 1;
+}
+
+/* Global native <select> styling (theme-aligned) */
 select, .ui-select {
   appearance: none;
   -webkit-appearance: none;
   -moz-appearance: none;
   background-color: var(--color-bg-input);
   color: var(--color-text-primary);
-  border: 1px solid var(--color-border-subtle);
+  border: 1px solid var(--color-border-default);
   border-radius: var(--radius-md);
-  padding: var(--space-2) var(--space-8) var(--space-2) var(--space-3);
+  padding: var(--space-2) var(--space-10) var(--space-2) var(--space-3);
+  min-height: var(--control-height);
   font-size: var(--font-size-sm);
   font-family: inherit;
   font-weight: var(--font-weight-normal);
@@ -85,7 +136,7 @@ select, .ui-select {
   width: 100%;
   display: block;
   transition: border-color var(--transition-fast), box-shadow var(--transition-fast), background-color var(--transition-fast);
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%2334A5CB' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'%3E%3C/polyline%3E%3C/svg%3E");
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%23AEB8C5' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'%3E%3C/polyline%3E%3C/svg%3E");
   background-repeat: no-repeat;
   background-position: right var(--space-3) center;
   background-size: 16px 16px;
@@ -97,26 +148,22 @@ select::-ms-expand {
 
 select:hover, .ui-select:hover {
   border-color: var(--color-border-strong);
-  background-color: var(--color-bg-card-hover);
 }
 
 select:focus, select:focus-visible, .ui-select:focus {
   outline: none;
-  border-color: var(--color-primary);
-  box-shadow: 0 0 0 1px var(--color-primary), 0 0 12px var(--color-primary-muted);
-  background-color: var(--color-bg-card);
+  border-color: var(--color-border-focus);
+  box-shadow: 0 0 0 3px var(--color-primary-muted);
 }
 
 select:disabled, .ui-select:disabled {
-  opacity: 0.5;
+  opacity: 0.55;
   cursor: not-allowed;
   border-color: var(--color-border-subtle);
-  background-color: var(--color-bg-base);
 }
 
-/* Global Dropdown Option Menus */
 select option, .ui-select option {
-  background-color: var(--color-bg-surface);
+  background-color: var(--color-bg-elevated);
   color: var(--color-text-primary);
   padding: var(--space-2) var(--space-3);
   font-size: var(--font-size-sm);
@@ -124,55 +171,63 @@ select option, .ui-select option {
 
 select option:checked, .ui-select option:checked {
   background-color: var(--color-bg-card-hover);
-  color: var(--color-primary);
+  color: var(--color-primary-text);
   font-weight: var(--font-weight-semibold);
-}
-
-select option:hover, .ui-select option:hover {
-  background-color: var(--color-bg-card-hover);
-  color: var(--color-primary);
 }
 
 /* Scrollbar Styling - Cross Browser */
 * {
   scrollbar-width: thin;
-  scrollbar-color: var(--color-border-subtle) var(--color-bg-base);
+  scrollbar-color: rgba(255, 255, 255, 0.14) transparent;
 }
 
 ::-webkit-scrollbar {
-  width: 5px;
-  height: 5px;
+  width: 8px;
+  height: 8px;
 }
 
 ::-webkit-scrollbar-track {
-  background: var(--color-bg-base);
+  background: transparent;
 }
 
 ::-webkit-scrollbar-thumb {
-  background: var(--color-border-subtle);
-  border-radius: 3px;
+  background: rgba(255, 255, 255, 0.12);
+  border-radius: var(--radius-full);
+  border: 2px solid transparent;
+  background-clip: padding-box;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: var(--color-border-strong);
+  background: rgba(255, 255, 255, 0.22);
+  background-clip: padding-box;
 }
 
 /* App Shell Utilities */
 .portal-container {
   max-width: var(--max-content-width);
   margin: 0 auto;
-  padding: var(--space-4);
+  padding: var(--space-5) var(--space-4);
   width: 100%;
 }
 
 @media (min-width: 768px) {
   .portal-container {
-    padding: var(--space-6);
+    padding: var(--space-8) var(--space-6);
   }
 }
 
 @media (min-width: 1024px) {
   .portal-container {
-    padding: var(--space-8);
+    padding: var(--space-8) var(--space-10);
+  }
+}
+
+/* Respect users who prefer less motion */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
   }
 }

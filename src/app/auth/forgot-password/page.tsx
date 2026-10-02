@@ -2,7 +2,9 @@
 
 import React, { useState } from 'react';
 import Link from 'next/link';
-import { Card, Button, Input, StatusBadge } from '@/components/ui';
+import { Button, Input } from '@/components/ui';
+import { Icon } from '@/components/brand/Icon';
+import { MotionzWordmark } from '@/components/brand/MotionzLogo';
 
 export default function ForgotPasswordPage() {
   const [email, setEmail] = useState('');
@@ -55,101 +57,60 @@ export default function ForgotPasswordPage() {
 
 
   return (
-    <div
-      style={{
-        minHeight: '100vh',
-        display: 'flex',
-        flexDirection: 'column',
-        justifyContent: 'center',
-        alignItems: 'center',
-        padding: 'var(--space-4)',
-        backgroundColor: 'var(--color-bg-base)',
-      }}
-    >
-      <div style={{ width: '100%', maxWidth: '440px' }}>
-        <div style={{ textAlign: 'center', marginBottom: 'var(--space-6)' }}>
-          <h1
-            style={{
-              fontSize: 'var(--font-size-2xl)',
-              fontWeight: 'var(--font-weight-bold)',
-              color: 'var(--color-text-primary)',
-              letterSpacing: '-0.025em',
-            }}
-          >
-            Motionz
-          </h1>
-          <p style={{ color: 'var(--color-text-muted)', fontSize: 'var(--font-size-sm)', marginTop: 'var(--space-1)' }}>
-            Reset Account Password
-          </p>
+    <div className="auth-page">
+      <div className="auth-container">
+        <div className="auth-brand">
+          <MotionzWordmark size={40} />
         </div>
 
-        <Card>
+        <div className="auth-card">
           {successEmail ? (
-            <div>
-              <div style={{ display: 'flex', justifyContent: 'center', marginBottom: 'var(--space-3)' }}>
-                <StatusBadge status="Check Your Email" variant="done" />
+            <div className="auth-card-center">
+              <div className="auth-icon auth-icon-success">
+                <Icon name="mail" size={24} />
               </div>
-
-              <h2 style={{ fontSize: 'var(--font-size-base)', fontWeight: 'var(--font-weight-semibold)', textAlign: 'center', marginBottom: 'var(--space-2)' }}>
-                Check your inbox
-              </h2>
-
-              <p style={{ fontSize: 'var(--font-size-xs)', color: 'var(--color-text-secondary)', textAlign: 'center', marginBottom: 'var(--space-4)' }}>
-                If an account exists for <strong>{successEmail}</strong>, we have emailed a password reset link. It works once and expires in 60 minutes.
+              <h1 className="auth-title">Check your inbox</h1>
+              <p className="auth-subtitle">
+                If an account exists for <strong>{successEmail}</strong>, we&apos;ve emailed you a link to reset your
+                password. It works once and expires in 60 minutes.
               </p>
 
               {resetUrl && (
-                <div
-                  style={{
-                    padding: 'var(--space-3)',
-                    backgroundColor: 'var(--color-bg-surface)',
-                    border: '1px dashed var(--color-border-subtle)',
-                    borderRadius: 'var(--radius-md)',
-                    fontSize: 'var(--font-size-xs)',
-                    wordBreak: 'break-all',
-                    marginBottom: 'var(--space-4)',
-                  }}
-                >
-                  <strong>Development only (no email provider configured):</strong>{' '}
-                  <Link href={resetUrl}>{resetUrl}</Link>
+                <div className="auth-alert auth-alert-info">
+                  <span>
+                    <strong>Development only (no email provider configured):</strong>{' '}
+                    <Link href={resetUrl}>{resetUrl}</Link>
+                  </span>
                 </div>
               )}
 
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-2)' }}>
-                <Link href="/auth/login" style={{ textDecoration: 'none', textAlign: 'center', marginTop: 'var(--space-2)' }}>
-                  <span style={{ fontSize: 'var(--font-size-xs)', color: 'var(--color-primary)' }}>
-                    &larr; Back to Sign In
-                  </span>
-                </Link>
-              </div>
+              <Link href="/auth/login" className="auth-link">
+                <Icon name="arrow-left" size={16} />
+                Back to sign in
+              </Link>
             </div>
           ) : (
             <form onSubmit={handleSubmit}>
-              <p style={{ fontSize: 'var(--font-size-xs)', color: 'var(--color-text-secondary)', marginBottom: 'var(--space-4)', lineHeight: 1.5 }}>
-                Enter the email address associated with your account. We will email you a secure link to choose a new password.
+              <div className="auth-icon">
+                <Icon name="key" size={24} />
+              </div>
+              <h1 className="auth-title">Forgot your password?</h1>
+              <p className="auth-subtitle">
+                No problem. Enter the email you sign in with and we&apos;ll send you a link to choose a new one.
               </p>
 
               {errorMessage && (
-                <div
-                  style={{
-                    padding: 'var(--space-3)',
-                    backgroundColor: 'rgba(239, 68, 68, 0.1)',
-                    border: '1px solid rgba(239, 68, 68, 0.3)',
-                    borderRadius: 'var(--radius-md)',
-                    color: 'var(--color-danger, #ef4444)',
-                    fontSize: 'var(--font-size-xs)',
-                    marginBottom: 'var(--space-4)',
-                  }}
-                >
-                  {errorMessage}
+                <div className="auth-alert auth-alert-danger" role="alert">
+                  <Icon name="alert" size={18} />
+                  <span>{errorMessage}</span>
                 </div>
               )}
 
               <Input
                 id="reset-email"
                 type="email"
-                label="Account Email"
-                placeholder="e.g. michael@apexroofing.com"
+                label="Email"
+                placeholder="you@company.com"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 required
@@ -159,21 +120,23 @@ export default function ForgotPasswordPage() {
               <Button
                 type="submit"
                 variant="primary"
+                size="lg"
                 fullWidth
                 disabled={loading || !email.trim()}
-                style={{ marginTop: 'var(--space-4)' }}
+                style={{ marginTop: 'var(--space-2)' }}
               >
-                {loading ? 'Generating Reset Link...' : 'Generate Reset Link'}
+                {loading ? 'Sending link...' : 'Send reset link'}
               </Button>
 
-              <div style={{ textAlign: 'center', marginTop: 'var(--space-4)' }}>
-                <Link href="/auth/login" style={{ fontSize: 'var(--font-size-xs)', color: 'var(--color-primary)', textDecoration: 'none' }}>
-                  &larr; Back to Sign In
+              <div className="auth-footer-link">
+                <Link href="/auth/login" className="auth-link">
+                  <Icon name="arrow-left" size={16} />
+                  Back to sign in
                 </Link>
               </div>
             </form>
           )}
-        </Card>
+        </div>
       </div>
     </div>
   );

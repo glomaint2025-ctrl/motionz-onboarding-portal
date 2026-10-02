@@ -3,7 +3,11 @@
 import React from 'react';
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
-import { Card, CardHeader, Button, StatusBadge } from '@/components/ui';
+import { buttonClasses } from '@/components/ui';
+import { Icon, type IconName } from '@/components/brand/Icon';
+import { SlackLogo } from '@/components/brand/SlackLogo';
+import { SkoolLogo } from '@/components/brand/SkoolLogo';
+import { GoogleSheetsLogo } from '@/components/brand/GoogleSheetsLogo';
 import { PORTAL_LINKS } from '@/lib/portal-links';
 
 interface ToolItem {
@@ -13,136 +17,208 @@ interface ToolItem {
   actionText: string;
   href: string;
   isExternal: boolean;
-  badge?: string;
+  visual: React.ReactNode;
+  featured?: boolean;
+}
+
+interface ToolSection {
+  id: string;
+  title: string;
+  subtitle: string;
+  items: ToolItem[];
+}
+
+function IconTile({ name, tone = 'icon' }: { name: IconName; tone?: 'icon' | 'warm' | 'green' }) {
+  return (
+    <span className={`logo-tile logo-tile-${tone}`} aria-hidden="true">
+      <Icon name={name} size={24} />
+    </span>
+  );
+}
+
+function LogoTile({ children }: { children: React.ReactNode }) {
+  return (
+    <span className="logo-tile" aria-hidden="true">
+      {children}
+    </span>
+  );
 }
 
 export default function ToolsAndResourcesPage() {
   const params = useParams();
   const clientId = (params?.clientId as string) || 'demo';
 
-  const tools: ToolItem[] = [
+  const sections: ToolSection[] = [
     {
-      title: 'Motionz Slack',
-      category: 'Communication',
-      description: 'Join the Motionz Slack workspace to talk with your CSM and the Motionz team.',
-      actionText: 'Join Slack',
-      href: PORTAL_LINKS.slackInvite,
-      isExternal: true,
+      id: 'connect',
+      title: 'Stay connected',
+      subtitle: 'Where you talk to the Motionz team and learn from other owners.',
+      items: [
+        {
+          title: 'Motionz Slack',
+          category: 'Chat with your team',
+          description: 'Message your CSM and the Motionz team directly. The fastest way to get a quick answer.',
+          actionText: 'Join Slack',
+          href: PORTAL_LINKS.slackInvite,
+          isExternal: true,
+          featured: true,
+          visual: (
+            <LogoTile>
+              <SlackLogo size={26} title="" />
+            </LogoTile>
+          ),
+        },
+        {
+          title: 'Skool Community',
+          category: 'Training and community',
+          description: 'Training videos, call recordings and discussion with other roofing owners. Request to join and we will approve you.',
+          actionText: 'Join Skool',
+          href: PORTAL_LINKS.skoolCommunity,
+          isExternal: true,
+          featured: true,
+          visual: (
+            <LogoTile>
+              <SkoolLogo size={17} title="" />
+            </LogoTile>
+          ),
+        },
+      ],
     },
     {
-      title: 'Skool Community',
-      category: 'Training',
-      description: 'Motionz training, recordings and peer discussion. Request to join and Motionz will approve you.',
-      actionText: 'Join Skool',
-      href: PORTAL_LINKS.skoolCommunity,
-      isExternal: true,
+      id: 'setup',
+      title: 'Get set up',
+      subtitle: 'A couple of forms we need before your campaigns go live.',
+      items: [
+        {
+          title: 'Onboarding Form',
+          category: 'Business details',
+          description: 'Tell us about your business so we can build your ads, website and follow-up campaigns.',
+          actionText: 'Open onboarding form',
+          href: `/portal/${clientId}/onboarding`,
+          isExternal: false,
+          visual: <IconTile name="form" />,
+        },
+        {
+          title: 'Texting Registration (A2P 10DLC)',
+          category: 'Carrier compliance',
+          description: 'US carriers require this before we can text your leads. It keeps your messages from being blocked.',
+          actionText: 'Open A2P form',
+          href: `/portal/${clientId}/onboarding`,
+          isExternal: false,
+          visual: <IconTile name="message" />,
+        },
+        {
+          title: 'Book a Call with Your CSM',
+          category: 'One-on-one help',
+          description: 'Pick a time to walk through your setup, campaigns or results with your Motionz CSM.',
+          actionText: 'Pick a time',
+          href: `/portal/${clientId}/book-call`,
+          isExternal: false,
+          visual: <IconTile name="calendar" tone="warm" />,
+        },
+      ],
     },
     {
-      title: 'Client Onboarding Intake Form',
-      category: 'Business Setup',
-      description: 'Tell us about your business so we can set up your ads, website and campaigns.',
-      actionText: 'Open Onboarding Form',
-      href: `/portal/${clientId}/onboarding`,
-      isExternal: false,
-    },
-    {
-      title: 'Carrier A2P 10DLC Verification Form',
-      category: 'Carrier Compliance',
-      description: 'Business details we need to register your phone number for texting with US carriers (A2P 10DLC), so your texts are not blocked.',
-      actionText: 'Open A2P Form',
-      href: `/portal/${clientId}/onboarding`,
-      isExternal: false,
-    },
-    {
-      title: 'Roof Measurement Tool',
-      category: 'Estimating & Sales',
-      description: 'Calculate residential and commercial roof surface areas, pitch multipliers, and squares.',
-      actionText: 'Launch Roof Tool',
-      href: `/portal/${clientId}/roof-measurement`,
-      isExternal: false,
-      badge: 'Built-in',
-    },
-    {
-      title: 'Template-Based Video Scripts',
-      category: 'Marketing & Brand',
-      description: 'Personalized script generator interpolating your company name and owner name for high-converting ads.',
-      actionText: 'View Video Scripts',
-      href: `/portal/${clientId}/video-scripts`,
-      isExternal: false,
-    },
-    {
-      title: 'Campaign Tracking Sheet',
-      category: 'Performance Analytics',
-      description: 'Your Google Sheet for logging calls and outcomes and tracking leads, appointments, jobs won and revenue.',
-      actionText: 'View Tracking Tab',
-      href: `/portal/${clientId}/tracking`,
-      isExternal: false,
-    },
-    {
-      title: 'Book CSM Strategy Call',
-      category: 'Account Management',
-      description: 'Schedule a 1-on-1 strategy and onboarding review session with your assigned Motionz CSM.',
-      actionText: 'Schedule Call',
-      href: `/portal/${clientId}/book-call`,
-      isExternal: false,
+      id: 'grow',
+      title: 'Win more jobs',
+      subtitle: 'Everyday tools for quoting, filming and tracking results.',
+      items: [
+        {
+          title: 'Results Tracking Sheet',
+          category: 'Google Sheets',
+          description: 'Log calls and outcomes, and track leads, appointments, jobs won and revenue in your own Google Sheet.',
+          actionText: 'Open tracking',
+          href: `/portal/${clientId}/tracking`,
+          isExternal: false,
+          visual: (
+            <LogoTile>
+              <GoogleSheetsLogo size={28} title="" />
+            </LogoTile>
+          ),
+        },
+        {
+          title: 'Roof Measurement',
+          category: 'Estimating',
+          description: 'Measure a roof from its address and get the area, pitch and squares for your quote.',
+          actionText: 'Measure a roof',
+          href: `/portal/${clientId}/roof-measurement`,
+          isExternal: false,
+          visual: <IconTile name="roof" tone="green" />,
+        },
+        {
+          title: 'Video Scripts',
+          category: 'Ads and content',
+          description: 'Ready-to-film ad scripts personalized with your company and owner name.',
+          actionText: 'View scripts',
+          href: `/portal/${clientId}/video-scripts`,
+          isExternal: false,
+          visual: <IconTile name="video" />,
+        },
+      ],
     },
   ];
 
   return (
     <div>
-      {/* Header */}
-      <div style={{ marginBottom: 'var(--space-6)' }}>
-        <h1 style={{ marginBottom: 'var(--space-1)' }}>Tools & Resources</h1>
-        <p style={{ color: 'var(--color-text-secondary)' }}>
-          Curated directory of contractor operational tools, external communities, and business platforms.
-        </p>
-      </div>
+      <header className="ui-page-header">
+        <div>
+          <span className="ui-page-eyebrow">Resources</span>
+          <h1 className="ui-page-title">Tools &amp; Resources</h1>
+          <p className="ui-page-subtitle">
+            Everything you need to work with Motionz, in one place.
+          </p>
+        </div>
+      </header>
 
-      {/* Grid of Tools */}
-      <div
-        style={{
-          display: 'grid',
-          gap: 'var(--space-4)',
-          gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))',
-        }}
-      >
-        {tools.map((tool) => (
-          <Card key={tool.title} style={{ display: 'flex', flexDirection: 'column', justifyContent: 'space-between' }}>
+      {sections.map((section) => (
+        <section className="ui-section" key={section.title} aria-labelledby={`tools-${section.id}`}>
+          <div className="ui-section-header">
             <div>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 'var(--space-2)' }}>
-                <span style={{ fontSize: 'var(--font-size-xs)', color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
-                  {tool.category}
-                </span>
-                {tool.badge && (
-                  <StatusBadge status={tool.badge} variant={tool.badge === 'Live' ? 'done' : 'progress'} />
-                )}
-              </div>
-              <h2 style={{ fontSize: 'var(--font-size-md)', marginBottom: 'var(--space-2)' }}>
-                {tool.title}
-              </h2>
-              <p style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-secondary)', marginBottom: 'var(--space-4)' }}>
-                {tool.description}
-              </p>
+              <h2 className="ui-section-title" id={`tools-${section.id}`}>{section.title}</h2>
+              <p className="ui-section-subtitle">{section.subtitle}</p>
             </div>
+          </div>
 
-            <div>
-              {tool.isExternal ? (
-                <a href={tool.href} target="_blank" rel="noopener noreferrer">
-                  <Button variant="outline" fullWidth size="sm">
-                    {tool.actionText}
-                  </Button>
-                </a>
-              ) : (
-                <Link href={tool.href}>
-                  <Button variant="primary" fullWidth size="sm">
-                    {tool.actionText}
-                  </Button>
-                </Link>
-              )}
-            </div>
-          </Card>
-        ))}
-      </div>
+          <div className="resource-grid">
+            {section.items.map((tool) => (
+              <article
+                key={tool.title}
+                className={`resource-card ${tool.featured ? 'resource-card-featured' : ''}`.trim()}
+              >
+                <div className="resource-card-head">
+                  {tool.visual}
+                  <div style={{ minWidth: 0 }}>
+                    <div className="resource-card-category">{tool.category}</div>
+                    <h3 className="resource-card-title">{tool.title}</h3>
+                  </div>
+                </div>
+
+                <p className="resource-card-desc">{tool.description}</p>
+
+                <div className="resource-card-action">
+                  {tool.isExternal ? (
+                    <a
+                      href={tool.href}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className={buttonClasses({ variant: 'primary', fullWidth: true })}
+                    >
+                      {tool.actionText}
+                      <Icon name="external" size={16} />
+                      <span className="sr-only">(opens in a new tab)</span>
+                    </a>
+                  ) : (
+                    <Link href={tool.href} className={buttonClasses({ variant: 'secondary', fullWidth: true })}>
+                      {tool.actionText}
+                      <Icon name="arrow-right" size={16} />
+                    </Link>
+                  )}
+                </div>
+              </article>
+            ))}
+          </div>
+        </section>
+      ))}
     </div>
   );
 }
