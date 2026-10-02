@@ -2,13 +2,13 @@ import { NextResponse } from 'next/server';
 import { createHash } from 'crypto';
 import { userRepository, tenantRepository, passwordResetRepository, auditLogRepository, securityEventRepository } from '@/lib/db/repositories';
 import { getSupabaseServiceClient } from '@/lib/db/supabase-client';
-import { enforceRateLimit } from '@/lib/auth/security-utils';
+import { enforceRateLimit, getClientIp } from '@/lib/auth/security-utils';
 
 export async function POST(request: Request) {
   try {
-    const ip = request.headers.get('x-forwarded-for') || request.headers.get('x-real-ip') || 'global';
+    const ip = getClientIp(request);
 
-    const rateLimit = enforceRateLimit(`reset_pw:${ip}`, { maxRequests: 10, windowMs: 10 * 60 * 1000 });
+    const rateLimit = await enforceRateLimit(`reset_pw:${ip}`, { maxRequests: 10, windowMs: 10 * 60 * 1000 });
     if (!rateLimit.allowed) {
       return NextResponse.json(
         { error: 'Too many attempts. Please wait a moment.' },

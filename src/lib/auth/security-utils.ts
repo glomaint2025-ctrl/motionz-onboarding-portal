@@ -1,4 +1,5 @@
 import { globalRateLimiter, RateLimitConfig } from '../security/rate-limiter';
+import { getSupabaseServiceClient } from '../db/supabase-client';
 
 /**
  * Validates and sanitizes redirect destinations to prevent open redirect vulnerabilities.
@@ -39,14 +40,88 @@ export function sanitizeRedirectUrl(
   return trimmed;
 }
 
+export interface RateLimitResult {
+  allowed: boolean;
+  remaining: number;
+  resetMs: number;
+}
+
+const DEFAULT_MAX_REQUESTS = 60;
+const DEFAULT_WINDOW_MS = 60 * 1000;
+
+let persistentLimiterFailureLogged = false;
+
 /**
  * Enforces rate limiting on sensitive authentication and invitation endpoints.
+ *
+ * When Supabase is configured, a persistent fixed-window counter in Postgres
+ * (increment_rate_limit RPC) is shared by every serverless instance. If that RPC
+ * fails (e.g. migration not applied), we fall back to the per-instance in-memory
+ * limiter rather than blocking requests. Without Supabase (tests/local), the
+ * in-memory limiter is used directly.
  */
-export function enforceRateLimit(
+export async function enforceRateLimit(
   key: string,
   config?: Partial<RateLimitConfig>
-): { allowed: boolean; remaining: number; resetMs: number } {
-  return globalRateLimiter.isAllowed(key, config);
+): Promise<RateLimitResult> {
+  const supabase = getSupabaseServiceClient();
+  if (!supabase) {
+    return globalRateLimiter.isAllowed(key, config);
+  }
+
+  const maxRequests = config?.maxRequests ?? DEFAULT_MAX_REQUESTS;
+  const windowMs = config?.windowMs ?? DEFAULT_WINDOW_MS;
+  const windowSeconds = Math.max(1, Math.ceil(windowMs / 1000));
+
+  try {
+    const { data, error } = await supabase.rpc('increment_rate_limit', {
+      p_key: key,
+      p_window_seconds: windowSeconds,
+    });
+    if (error) throw error;
+
+    const count = typeof data === 'number' ? data : Number(data);
+    if (!Number.isFinite(count)) {
+      throw new Error(`Unexpected increment_rate_limit result: ${JSON.stringify(data)}`);
+    }
+
+    const windowLengthMs = windowSeconds * 1000;
+    const now = Date.now();
+    const resetMs = Math.floor(now / windowLengthMs) * windowLengthMs + windowLengthMs - now;
+
+    return {
+      allowed: count <= maxRequests,
+      remaining: Math.max(0, maxRequests - count),
+      resetMs: Math.max(0, resetMs),
+    };
+  } catch (err) {
+    if (!persistentLimiterFailureLogged) {
+      persistentLimiterFailureLogged = true;
+      console.error(
+        '[rate-limit] Persistent rate limiter unavailable; falling back to in-memory limiter:',
+        err instanceof Error ? err.message : err
+      );
+    }
+    return globalRateLimiter.isAllowed(key, config);
+  }
+}
+
+/**
+ * Resolves the client IP for rate limiting. Prefers `x-real-ip` (set by Vercel's edge),
+ * then the FIRST entry of `x-forwarded-for`, else 'unknown'.
+ */
+export function getClientIp(request: Request | { headers: Headers }): string {
+  const headers = request.headers;
+  const realIp = headers.get('x-real-ip')?.trim();
+  if (realIp) return realIp;
+
+  const forwarded = headers.get('x-forwarded-for');
+  if (forwarded) {
+    const first = forwarded.split(',')[0]?.trim();
+    if (first) return first;
+  }
+
+  return 'unknown';
 }
 
 /**

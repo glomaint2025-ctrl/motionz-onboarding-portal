@@ -74,7 +74,7 @@ export async function POST(
     const tenantId = targetTenant ? targetTenant.id : DEMO_TENANT_UUID;
 
     // Rate limit team member invitations per tenant
-    const rateLimit = enforceRateLimit(`team_invite:${tenantId}`, {
+    const rateLimit = await enforceRateLimit(`team_invite:${tenantId}`, {
       maxRequests: 20,
       windowMs: 60 * 1000,
     });

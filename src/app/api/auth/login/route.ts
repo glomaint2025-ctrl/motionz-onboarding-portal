@@ -3,16 +3,16 @@ import { authenticateStaff } from '@/lib/auth/staff';
 import { createSessionToken, SESSION_COOKIE_NAME } from '@/lib/auth/session';
 import { createInvitation } from '@/lib/auth/invitations';
 import { userRepository, tenantRepository, securityEventRepository } from '@/lib/db/repositories';
-import { enforceRateLimit, sanitizeRedirectUrl } from '@/lib/auth/security-utils';
+import { enforceRateLimit, getClientIp, sanitizeRedirectUrl } from '@/lib/auth/security-utils';
 import { resolveTenantId } from '@/lib/db/supabase-client';
 import { canExposeDevLinks } from '@/lib/email';
 
 export async function POST(request: Request) {
   try {
-    const ip = request.headers.get('x-forwarded-for') || request.headers.get('x-real-ip') || 'global';
+    const ip = getClientIp(request);
     
     // Rate limit: 10 requests per minute per IP
-    const rateLimit = enforceRateLimit(`login_ip:${ip}`, { maxRequests: 10, windowMs: 60 * 1000 });
+    const rateLimit = await enforceRateLimit(`login_ip:${ip}`, { maxRequests: 10, windowMs: 60 * 1000 });
     if (!rateLimit.allowed) {
       await securityEventRepository.create({
         event_type: 'rate_limit_exceeded',
@@ -181,7 +181,7 @@ export async function POST(request: Request) {
     // 2. Client Magic Link Request
     if (action === 'magic_link') {
       // Per-email rate limit for magic link requests (5 per 15 minutes)
-      const emailRateLimit = enforceRateLimit(`magic_link:${normalizedEmail}`, {
+      const emailRateLimit = await enforceRateLimit(`magic_link:${normalizedEmail}`, {
         maxRequests: 5,
         windowMs: 15 * 60 * 1000,
       });

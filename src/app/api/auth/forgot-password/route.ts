@@ -1,15 +1,15 @@
 import { NextResponse } from 'next/server';
 import crypto from 'crypto';
 import { userRepository, passwordResetRepository, auditLogRepository, securityEventRepository } from '@/lib/db/repositories';
-import { enforceRateLimit, resolveBaseUrl } from '@/lib/auth/security-utils';
+import { enforceRateLimit, getClientIp, resolveBaseUrl } from '@/lib/auth/security-utils';
 import { sendEmail, passwordResetEmail, canExposeDevLinks } from '@/lib/email';
 
 export async function POST(request: Request) {
   try {
-    const ip = request.headers.get('x-forwarded-for') || request.headers.get('x-real-ip') || 'global';
+    const ip = getClientIp(request);
 
     // Rate limit: 5 password reset requests per 10 minutes per IP
-    const rateLimit = enforceRateLimit(`forgot_pw:${ip}`, { maxRequests: 5, windowMs: 10 * 60 * 1000 });
+    const rateLimit = await enforceRateLimit(`forgot_pw:${ip}`, { maxRequests: 5, windowMs: 10 * 60 * 1000 });
     if (!rateLimit.allowed) {
       return NextResponse.json(
         { error: 'Too many password reset requests. Please wait a few minutes before trying again.' },
