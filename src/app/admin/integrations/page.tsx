@@ -90,7 +90,9 @@ export default function AdminSettingsPage() {
     else setMessage({ type: 'error', text: data.error || 'Could not link the submission.' });
   };
 
-  const webhookUrl = typeof window !== 'undefined' ? `${window.location.origin}/api/webhooks/ghl` : '/api/webhooks/ghl';
+  // Resolved after mount so server and client render the same markup.
+  const [webhookUrl, setWebhookUrl] = useState('/api/webhooks/ghl');
+  useEffect(() => setWebhookUrl(`${window.location.origin}/api/webhooks/ghl`), []);
 
   const statusRows = [
     { label: 'Email delivery', ok: status.email, detail: status.emailSender ? `Sending as ${status.emailSender}` : 'No email provider key set' },
