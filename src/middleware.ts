@@ -207,7 +207,7 @@ export async function middleware(request: NextRequest) {
     if (session.role === 'client' || session.role === 'client_member') {
       const userTenant = resolveTenantId(session.tenantId || '');
       const targetTenant = resolveTenantId(requestedTenantId);
-      if (userTenant && targetTenant && userTenant !== targetTenant && requestedTenantId !== 'demo') {
+      if (userTenant && targetTenant && userTenant !== targetTenant) {
         const redirectUrl = new URL(`/portal/${userTenant}`, request.url);
         return secureResponse(NextResponse.redirect(redirectUrl));
       }

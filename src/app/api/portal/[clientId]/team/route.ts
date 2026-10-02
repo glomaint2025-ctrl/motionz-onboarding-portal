@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { validatePhone } from '@/lib/validation';
+import { isStaffEmail } from '@/lib/auth/staff';
 import { getTenantById, getTeamMembers, listTeamMemberInvitations, getFeatureToggles, logAuditEvent, DEMO_TENANT_UUID } from '@/lib/db';
 import { assertPortalAccess, handleAuthError } from '@/lib/auth/guard';
 import { assertPermission, assertTenantAccess } from '@/lib/auth/permissions';
@@ -99,6 +100,13 @@ export async function POST(
 
     const body = await request.json();
     const { email, phone, allowed_modules } = body;
+
+    if (typeof email === 'string' && isStaffEmail(email)) {
+      return NextResponse.json(
+        { error: '@motionz.ai addresses are for Motionz staff only. Invite your team member with their own email.' },
+        { status: 400 }
+      );
+    }
 
     if (!email || !email.includes('@')) {
       return NextResponse.json(
