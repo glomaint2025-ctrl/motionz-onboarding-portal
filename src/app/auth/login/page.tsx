@@ -99,7 +99,7 @@ function LoginForm() {
 
       if (!res.ok) {
         if (data?.suspended) {
-          const reasonQuery = encodeURIComponent(data?.reason || data?.error || 'Account suspended');
+          const reasonQuery = /organization/i.test(data?.error || '') ? 'portal' : 'account';
           router.push(`/auth/suspended?reason=${reasonQuery}`);
           return;
         }

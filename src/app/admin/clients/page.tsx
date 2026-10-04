@@ -499,7 +499,7 @@ export default function ClientsPage() {
                   <th>Setup Progress</th>
                   <th>GoHighLevel</th>
                   <th>Created</th>
-                  <th style={{ textAlign: 'right', paddingRight: '24px' }}>Actions</th>
+                  <th>Actions</th>
                 </tr>
               </thead>
               <tbody>
@@ -647,7 +647,7 @@ export default function ClientsPage() {
 
                         {/* Actions */}
                         <td>
-                          <div className="ui-actions-cell" style={{ justifyContent: 'flex-end' }}>
+                          <div className="ui-actions-cell" style={{ justifyContent: 'flex-start' }}>
                             {!isArchived ? (
                               <Link
                                 href={`/portal/${client.id}`}

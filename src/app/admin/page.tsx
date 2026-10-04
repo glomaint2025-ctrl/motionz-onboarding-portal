@@ -155,7 +155,7 @@ export default function AdminDashboardPage() {
           <div style={{ display: 'grid', gap: 'var(--space-4)', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))' }}>
             <Card>
               <CardHeader title="Stuck in setup" subtitle="On the same setup step for 14 days or more" />
-              <ClientList items={data.stuck} empty="Nobody is stuck." render={(c) => `${c.currentStep} · ${c.daysOnStep} days`} />
+              <ClientList items={data.stuck} empty="No clients are stuck in setup." render={(c) => `${c.currentStep} · ${c.daysOnStep} days`} />
             </Card>
             <Card>
               <CardHeader title="No CSM assigned" />
