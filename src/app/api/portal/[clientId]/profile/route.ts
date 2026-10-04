@@ -3,6 +3,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getTenantById, updateTenantProfile, logAuditEvent, DEMO_TENANT_UUID } from '@/lib/db';
 import { assertPortalAccess, handleAuthError } from '@/lib/auth/guard';
 import { hasPermission } from '@/lib/auth/permissions';
+import { publicTenant } from '../../public-fields';
 
 export async function PATCH(
   request: NextRequest,
@@ -31,25 +32,29 @@ export async function PATCH(
     const actorRole: any = session.role;
     const actorEmail = session.email;
 
-    const body = await request.json().catch(() => ({}));
-    let changes: { name?: string; phone?: string; primary_contact_name?: string };
+    const parsed = await request.json().catch(() => null);
+    const body: Record<string, unknown> = parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed : {};
+    // The business name is always required. A contact name sent blank is an error (never silently
+    // ignored), and a phone sent blank clears the saved number.
+    const changes: { name?: string; phone?: string | null; primary_contact_name?: string } = {};
     try {
-      changes = {
-        name: validateText(body.name, 'Company name', { max: 255 }),
-        phone: validatePhone(body.phone),
-        primary_contact_name: validateText(body.primary_contact_name, 'Contact name', { max: 255 }),
-      };
+      changes.name = validateText(body.name, 'Business name', { required: true, max: 255 });
+      if ('primary_contact_name' in body) {
+        changes.primary_contact_name = validateText(body.primary_contact_name, 'Contact name', { required: true, max: 255 });
+      }
+      if ('phone' in body) {
+        changes.phone = validatePhone(body.phone) ?? null;
+      }
     } catch (e: any) {
       return NextResponse.json({ error: e.message }, { status: 400 });
     }
     // The primary email identifies the client (invites, onboarding form matching); only admins change it.
     const { name, phone, primary_contact_name } = changes;
 
-    const updated = await updateTenantProfile(tenantId, {
-      ...(name ? { name } : {}),
-      ...(phone ? { phone } : {}),
-      ...(primary_contact_name ? { primary_contact_name } : {}),
-    });
+    const updated = await updateTenantProfile(tenantId, changes as any);
+    if (!updated) {
+      return NextResponse.json({ error: 'Your profile could not be saved. Please try again.' }, { status: 500 });
+    }
 
     await logAuditEvent({
       tenantId,
@@ -61,7 +66,7 @@ export async function PATCH(
       details: { name, phone, primary_contact_name },
     });
 
-    return NextResponse.json({ success: true, tenant: updated });
+    return NextResponse.json({ success: true, tenant: publicTenant(updated) });
   } catch (error: any) {
     if (
       error.code ||

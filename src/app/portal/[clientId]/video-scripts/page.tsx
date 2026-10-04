@@ -376,7 +376,7 @@ export default function VideoScriptsPage() {
             <p style={mutedText}>
               These are educational videos, not ads. The Motionz team produces them using the scripts below, with your
               name and company filled in. You do not need to pick or record anything. If a detail looks wrong, tell
-              your account manager.
+              your CSM.
             </p>
           </Card>
 
@@ -411,7 +411,7 @@ export default function VideoScriptsPage() {
               ))}
             </ul>
             <p style={{ ...mutedText, marginTop: 'var(--space-3)' }}>
-              Questions? Reach out to your dedicated account manager.
+              Questions? Reach out to your CSM.
             </p>
           </Card>
 
@@ -430,7 +430,7 @@ export default function VideoScriptsPage() {
               {[
                 '1. Pick one script from each: Pain Point, Testimonials, Trustworthy',
                 '2. Record each one (vertical)',
-                '3. Send your videos to your account manager on Slack',
+                '3. Send your videos to your CSM on Slack',
               ].map((step, index) => (
                 <li
                   key={step}

@@ -3,6 +3,7 @@
 import React, { useState, useEffect } from 'react';
 import { useParams } from 'next/navigation';
 import { Card, CardHeader, Button, StatusBadge, Skeleton } from '@/components/ui';
+import { formatDate } from '@/lib/utils/format';
 
 interface ContractRecord {
   id: string;
@@ -13,7 +14,7 @@ interface ContractRecord {
   created_at: string;
 }
 
-export default function SignedContractPage() {
+export default function ContractPage() {
   const params = useParams();
   const clientId = (params?.clientId as string) || 'demo';
 
@@ -28,9 +29,9 @@ export default function SignedContractPage() {
         const data = await res.json().catch(() => ({}));
         if (!isMounted) return;
         if (res.ok) setContracts(data.contracts || []);
-        else setError(res.status === 403 ? 'You do not have access to contracts.' : 'Could not load contracts.');
+        else setError(res.status === 403 ? 'Only the account owner can see the contract.' : 'Your contract could not be loaded. Please refresh the page.');
       })
-      .catch(() => isMounted && setError('Network error while loading contracts.'))
+      .catch(() => isMounted && setError('We could not reach the server. Check your connection and refresh the page.'))
       .finally(() => isMounted && setIsLoading(false));
     return () => {
       isMounted = false;
@@ -40,8 +41,8 @@ export default function SignedContractPage() {
   return (
     <div>
       <div style={{ marginBottom: 'var(--space-6)' }}>
-        <h1 style={{ marginBottom: 'var(--space-1)' }}>Signed Contract</h1>
-        <p style={{ color: 'var(--color-text-secondary)' }}>Your signed agreement with Motionz.</p>
+        <h1 style={{ marginBottom: 'var(--space-1)' }}>Contract</h1>
+        <p style={{ color: 'var(--color-text-secondary)' }}>Your agreement with Motionz.</p>
       </div>
 
       {isLoading ? (
@@ -55,9 +56,9 @@ export default function SignedContractPage() {
         </Card>
       ) : contracts.length === 0 ? (
         <Card>
-          <CardHeader title="No signed contract yet" />
+          <CardHeader title="No contract yet" />
           <p style={{ color: 'var(--color-text-secondary)', margin: 0 }}>
-            Your agreement will appear here once it has been signed. If you think this is a mistake, contact your CSM.
+            Your contract will appear here once it is ready. If you think this is a mistake, contact your CSM.
           </p>
         </Card>
       ) : (
@@ -68,12 +69,12 @@ export default function SignedContractPage() {
                 title={contract.title}
                 subtitle={
                   contract.signed_at
-                    ? `Signed ${new Date(contract.signed_at).toLocaleDateString()}`
+                    ? `Signed ${formatDate(contract.signed_at)}`
                     : 'Awaiting signature'
                 }
                 action={
                   <StatusBadge
-                    status={contract.signed_at ? 'Signed' : 'Pending'}
+                    status={contract.signed_at ? 'Signed' : 'Awaiting signature'}
                     variant={contract.signed_at ? 'done' : 'pending'}
                   />
                 }

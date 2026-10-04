@@ -3,8 +3,9 @@
 import React, { useState, useEffect, useRef } from 'react';
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
-import { Card, CardHeader, Button, StatusBadge, Input, Skeleton } from '@/components/ui';
-import { PORTAL_LINKS } from '@/lib/portal-links';
+import { Card, CardHeader, Button, Input, Skeleton } from '@/components/ui';
+import { formatDateTime } from '@/lib/utils/format';
+import { suspendedPageUrl } from '@/components/portal/suspended';
 
 interface SetupStep {
   name: string;
@@ -86,7 +87,7 @@ export default function ClientOverviewPage() {
   const [steps, setSteps] = useState<SetupStep[]>([]);
   const [leadCount, setLeadCount] = useState(0);
   const [nextCall, setNextCall] = useState<string | null>(null);
-  const [sheetUrl, setSheetUrl] = useState<string | null>(null);
+  const [sheetReady, setSheetReady] = useState(false);
   const [csm, setCsm] = useState<{ name?: string; email: string } | null>(null);
   // 'signed' only when a contract row carries a signed_at timestamp; 'sent' when a contract exists but is unsigned.
   const [contractState, setContractState] = useState<'signed' | 'sent' | 'none'>('none');
@@ -114,7 +115,7 @@ export default function ClientOverviewPage() {
         if (res.status === 403) {
           const data = await res.json().catch(() => ({}));
           if (data?.suspended) {
-            window.location.href = `/auth/suspended?reason=${encodeURIComponent(data.reason || 'Your account access has been suspended.')}`;
+            window.location.href = suspendedPageUrl(data);
             return;
           }
         }
@@ -127,7 +128,8 @@ export default function ClientOverviewPage() {
             if (data.tenant?.name) setCompanyName(data.tenant.name);
             setContactName(typeof data.tenant?.primary_contact_name === 'string' ? data.tenant.primary_contact_name : '');
             if (data.setupSteps) setSteps(data.setupSteps);
-            if (data.leads) setLeadCount(data.leads.length);
+            // The real total from the server, not the length of a capped list.
+            setLeadCount(typeof data.leadCount === 'number' ? data.leadCount : 0);
             // Appointments are calls between the client and their CSM (client answer 2.1).
             const now = Date.now();
             const upcoming = (data.appointments || [])
@@ -135,7 +137,7 @@ export default function ClientOverviewPage() {
               .sort((a: any, b: any) => new Date(a.appointment_time).getTime() - new Date(b.appointment_time).getTime());
             setNextCall(upcoming[0]?.appointment_time || null);
             const sheet = (data.integrations || []).find((i: any) => i.integration_type === 'google_sheets' && i.is_active);
-            setSheetUrl(sheet?.config_data?.sheet_url || null);
+            setSheetReady(Boolean(sheet?.config_data?.sheet_url || sheet?.config_data?.spreadsheet_id));
             setCsm(data.csm || null);
             const contracts: any[] = Array.isArray(data.contracts) ? data.contracts : [];
             setContractState(contracts.some((c) => Boolean(c.signed_at)) ? 'signed' : contracts.length > 0 ? 'sent' : 'none');
@@ -175,7 +177,6 @@ export default function ClientOverviewPage() {
       form.append('title', changeTitle);
       form.append('description', changeDesc);
       form.append('targetPageUrl', changeUrl);
-      form.append('isUrgent', 'false');
       changeFiles.forEach((file) => form.append('files', file, file.name));
       // No Content-Type header: the browser sets the multipart boundary itself.
       const res = await fetch(`/api/portal/${clientId}/website-update`, { method: 'POST', body: form });
@@ -370,20 +371,9 @@ export default function ClientOverviewPage() {
             </div>
             )}
 
-            <div style={{ display: 'flex', gap: 'var(--space-2)', width: '100%', flexWrap: 'wrap' }}>
-              <Link href={`/portal/${clientId}/onboarding`} style={{ flex: 1, minWidth: '130px', textDecoration: 'none' }}>
-                <Button variant="primary" fullWidth>
-                  Review Step Details
-                </Button>
-              </Link>
-              {(!featureToggles || featureToggles.book_call !== false) && (
-                <Link href={`/portal/${clientId}/book-call`} style={{ textDecoration: 'none' }}>
-                  <button type="button" className="ui-filter-clear-btn" style={{ height: '38px', padding: '0 14px' }}>
-                    Book CSM Call
-                  </button>
-                </Link>
-              )}
-            </div>
+            <Link href={`/portal/${clientId}/onboarding`} style={{ textDecoration: 'none' }}>
+              <Button variant="primary">See all steps</Button>
+            </Link>
           </div>
         </div>
       )}
@@ -411,7 +401,7 @@ export default function ClientOverviewPage() {
                     <span className="ui-stat-label">Total Leads</span>
                     <span className="ui-stat-value">{leadCount}</span>
                     <Link href={`/portal/${clientId}/leads`} style={{ fontSize: '0.72rem', color: 'var(--color-primary-text)', textDecoration: 'none' }}>
-                      View Pipeline →
+                      View leads →
                     </Link>
                   </div>
                 </div>
@@ -434,7 +424,7 @@ export default function ClientOverviewPage() {
                     <span className="ui-stat-label">Next CSM Call</span>
                     <span className="ui-stat-value" style={{ fontSize: nextCall ? '1rem' : undefined }}>
                       {nextCall
-                        ? new Date(nextCall).toLocaleString(undefined, { weekday: 'short', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })
+                        ? formatDateTime(nextCall)
                         : 'Not booked'}
                     </span>
                     <Link href={`/portal/${clientId}/book-call`} style={{ fontSize: '0.72rem', color: 'var(--color-status-done-text)', textDecoration: 'none' }}>
@@ -459,21 +449,17 @@ export default function ClientOverviewPage() {
                     </svg>
                   </div>
                   <div className="ui-stat-info">
-                    <span className="ui-stat-label">Tracking Sheet</span>
-                    <span className="ui-stat-value">{sheetUrl ? 'Ready' : 'Not ready yet'}</span>
-                    {sheetUrl ? (
-                      <a href={sheetUrl} target="_blank" rel="noopener noreferrer" style={{ fontSize: '0.72rem', color: 'var(--color-status-warning-text)', textDecoration: 'none' }}>
-                        Open my tracking sheet →
-                      </a>
-                    ) : (
-                      <span className="ui-stat-meta-text">The link will appear here once your sheet is connected</span>
-                    )}
+                    <span className="ui-stat-label">Results Tracking</span>
+                    <span className="ui-stat-value">{sheetReady ? 'Ready' : 'Being set up'}</span>
+                    <Link href={`/portal/${clientId}/tracking`} style={{ fontSize: '0.72rem', color: 'var(--color-status-warning-text)', textDecoration: 'none' }}>
+                      {sheetReady ? 'Open Results Tracking →' : 'See Results Tracking →'}
+                    </Link>
                   </div>
                 </div>
               </div>
             )}
 
-            {/* Signed Contract */}
+            {/* Contract */}
             {showContractCard && (
               <div className="ui-stat-card">
                 <div className="ui-stat-card-body">
@@ -484,13 +470,15 @@ export default function ClientOverviewPage() {
                     </svg>
                   </div>
                   <div className="ui-stat-info">
-                    <span className="ui-stat-label">Signed Contract</span>
+                    <span className="ui-stat-label">Contract</span>
                     <span className="ui-stat-value" style={{ color: contractState === 'signed' ? 'var(--color-status-done-text)' : 'var(--color-status-warning-text)' }}>
                       {contractState === 'signed' ? 'Signed' : contractState === 'sent' ? 'Awaiting signature' : 'Not available yet'}
                     </span>
-                    <Link href={`/portal/${clientId}/contract`} style={{ fontSize: '0.72rem', color: 'var(--color-text-muted)', textDecoration: 'none' }}>
-                      View Agreement →
-                    </Link>
+                    {contractState !== 'none' && (
+                      <Link href={`/portal/${clientId}/contract`} style={{ fontSize: '0.72rem', color: 'var(--color-text-muted)', textDecoration: 'none' }}>
+                        View contract →
+                      </Link>
+                    )}
                   </div>
                 </div>
               </div>
@@ -499,68 +487,7 @@ export default function ClientOverviewPage() {
         </div>
       )}
 
-      {/* Split Section: Onboarding Milestones & Website Change Widget */}
-      <div
-        style={{
-          display: 'grid',
-          gap: 'var(--space-4)',
-          gridTemplateColumns: (!featureToggles || featureToggles.onboarding !== false) ? 'repeat(auto-fit, minmax(320px, 1fr))' : '1fr',
-          marginBottom: 'var(--space-6)',
-        }}
-      >
-        {/* Onboarding Roadmap Overview */}
-        {(!featureToggles || featureToggles.onboarding !== false) && (
-          <Card>
-            <CardHeader
-              title="Onboarding Milestones"
-              subtitle="Core operational setup progress"
-              action={
-                <Link href={`/portal/${clientId}/onboarding`}>
-                  <Button variant="secondary" size="sm">
-                    Full Roadmap
-                  </Button>
-                </Link>
-              }
-            />
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-2)' }}>
-              {activeSteps.map((step) => (
-                <div
-                  key={step.step_key}
-                  style={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'space-between',
-                    padding: 'var(--space-3)',
-                    backgroundColor: 'var(--color-bg-surface)',
-                    borderRadius: 'var(--radius-md)',
-                    border: '1px solid var(--color-border-subtle)',
-                  }}
-                >
-                  <div>
-                    <span style={{ fontWeight: 'var(--font-weight-medium)', fontSize: 'var(--font-size-sm)' }}>
-                      {step.name}
-                    </span>
-                    <span
-                      style={{
-                        display: 'block',
-                        fontSize: 'var(--font-size-xs)',
-                        color: 'var(--color-text-muted)',
-                        marginTop: '2px',
-                      }}
-                    >
-                      Owner: {step.owner === 'we_handle' ? 'WE HANDLE' : 'YOUR ACTION'}
-                    </span>
-                  </div>
-                  <StatusBadge
-                    status={step.status === 'done' ? 'Done' : step.status === 'in_progress' ? 'In Progress' : 'Not Started'}
-                    variant={step.status === 'done' ? 'done' : step.status === 'in_progress' ? 'progress' : 'pending'}
-                  />
-                </div>
-              ))}
-            </div>
-          </Card>
-        )}
-
+      <div style={{ marginBottom: 'var(--space-6)' }}>
         {/* Website Change Request Widget */}
         <Card>
           <CardHeader
@@ -595,7 +522,10 @@ export default function ClientOverviewPage() {
             />
             <Input
               label="Page URL (optional)"
-              type="url"
+              type="text"
+              inputMode="url"
+              autoComplete="url"
+              maxLength={2000}
               placeholder="e.g. https://yourcompany.com/about"
               helperText="Mention the section (for example, the homepage banner) in the description."
               value={changeUrl}
@@ -603,6 +533,7 @@ export default function ClientOverviewPage() {
             />
             <div>
               <label
+                htmlFor="website-change-description"
                 style={{
                   display: 'block',
                   fontSize: 'var(--font-size-sm)',
@@ -613,6 +544,7 @@ export default function ClientOverviewPage() {
                 Description of Change
               </label>
               <textarea
+                id="website-change-description"
                 rows={3}
                 style={{
                   width: '100%',
@@ -719,46 +651,18 @@ export default function ClientOverviewPage() {
         </Card>
       </div>
 
-      {/* Account Support Card */}
+      {/* Your CSM */}
       <Card>
-        <CardHeader
-          title="Motionz Account Team"
-          subtitle="Your CSM and the Motionz community"
-          action={
-            (!featureToggles || featureToggles.book_call !== false) ? (
-              <Link href={`/portal/${clientId}/book-call`}>
-                <Button variant="secondary" size="sm">
-                  Book CSM Call
-                </Button>
-              </Link>
-            ) : undefined
-          }
-        />
-        <div style={{ display: 'flex', gap: 'var(--space-4)', flexWrap: 'wrap' }}>
-          <div>
-            <div style={{ fontWeight: 'var(--font-weight-semibold)', fontSize: 'var(--font-size-sm)' }}>
-              Your CSM
-            </div>
-            <div style={{ color: 'var(--color-text-secondary)', fontSize: 'var(--font-size-sm)' }}>
-              {csm ? (
-                <>
-                  {csm.name ? `${csm.name} · ` : ''}
-                  <a href={`mailto:${csm.email}`}>{csm.email}</a>
-                </>
-              ) : (
-                'Not assigned yet'
-              )}
-            </div>
-          </div>
-          <div>
-            <div style={{ fontWeight: 'var(--font-weight-semibold)', fontSize: 'var(--font-size-sm)' }}>
-              Community
-            </div>
-            <div style={{ display: 'flex', gap: 'var(--space-3)', fontSize: 'var(--font-size-sm)' }}>
-              <a href={PORTAL_LINKS.slackInvite} target="_blank" rel="noopener noreferrer">Join Slack</a>
-              <a href={PORTAL_LINKS.skoolCommunity} target="_blank" rel="noopener noreferrer">Join Skool</a>
-            </div>
-          </div>
+        <CardHeader title="Your CSM" subtitle="Your main contact at Motionz" />
+        <div style={{ color: 'var(--color-text-secondary)', fontSize: 'var(--font-size-sm)' }}>
+          {csm ? (
+            <>
+              {csm.name ? `${csm.name} \u00B7 ` : ''}
+              <a href={`mailto:${csm.email}`}>{csm.email}</a>
+            </>
+          ) : (
+            'Not assigned yet'
+          )}
         </div>
       </Card>
     </div>
@@ -795,7 +699,6 @@ function ClientOverviewSkeleton() {
           <Skeleton width="70%" height="14px" style={{ marginBottom: 'var(--space-4)' }} />
           <div style={{ display: 'flex', gap: 'var(--space-2)' }}>
             <Skeleton width="120px" height="38px" borderRadius="var(--radius-md)" />
-            <Skeleton width="130px" height="38px" borderRadius="var(--radius-md)" />
           </div>
         </Card>
       </div>
@@ -820,37 +723,7 @@ function ClientOverviewSkeleton() {
         </div>
       </div>
 
-      {/* Onboarding Roadmap Skeleton */}
-      <div style={{ display: 'grid', gap: 'var(--space-4)', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))' }}>
-        <Card>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 'var(--space-4)' }}>
-            <div>
-              <Skeleton width="160px" height="20px" style={{ marginBottom: '6px' }} />
-              <Skeleton width="220px" height="14px" />
-            </div>
-            <Skeleton width="100px" height="32px" borderRadius="var(--radius-md)" />
-          </div>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-3)' }}>
-            {[1, 2, 3, 4, 5].map((i) => (
-              <div
-                key={i}
-                style={{
-                  padding: 'var(--space-3)',
-                  backgroundColor: 'var(--color-bg-surface)',
-                  borderRadius: 'var(--radius-md)',
-                  border: '1px solid var(--color-border-subtle)',
-                }}
-              >
-                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 'var(--space-2)' }}>
-                  <Skeleton width="140px" height="18px" />
-                  <Skeleton width="75px" height="20px" borderRadius="var(--radius-full)" />
-                </div>
-                <Skeleton width="75%" height="14px" />
-              </div>
-            ))}
-          </div>
-        </Card>
-
+      <div>
         <Card>
           <Skeleton width="180px" height="20px" style={{ marginBottom: '6px' }} />
           <Skeleton width="240px" height="14px" style={{ marginBottom: 'var(--space-4)' }} />

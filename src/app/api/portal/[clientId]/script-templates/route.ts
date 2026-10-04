@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getTenantById } from '@/lib/db';
+import { getTenantById, DEMO_TENANT_UUID } from '@/lib/db';
 import { scriptRepository } from '@/lib/db/repositories';
 import { assertPortalAccess, handleAuthError } from '@/lib/auth/guard';
+import { assertModuleEnabled } from '@/lib/auth/modules';
 
 /**
  * GET /api/portal/[clientId]/script-templates
@@ -22,7 +23,8 @@ export async function GET(
     }
 
     // Enforce active account, tenant suspension, and tenant isolation
-    await assertPortalAccess(request, targetTenant, rawClientId);
+    const session = await assertPortalAccess(request, targetTenant, rawClientId);
+    await assertModuleEnabled(session, targetTenant ? targetTenant.id : DEMO_TENANT_UUID, 'video_scripts');
 
     const templates = await scriptRepository.listTemplates();
     const scripts = templates.map((t) => ({

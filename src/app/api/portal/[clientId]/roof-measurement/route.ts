@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getTenantById, getFeatureToggles } from '@/lib/db';
+import { getTenantById } from '@/lib/db';
 import { roofMeasurementRepository } from '@/lib/db/repositories';
 import { assertPortalAccess, handleAuthError } from '@/lib/auth/guard';
+import { assertModuleEnabled } from '@/lib/auth/modules';
 import { enforceRateLimit } from '@/lib/auth/security-utils';
 import { measureRoof, isRoofServiceConfigured, RoofServiceError } from '@/lib/integrations/roof/solar';
 import { validateText } from '@/lib/validation';
@@ -11,11 +12,14 @@ export async function GET(request: NextRequest, { params }: { params: { clientId
   try {
     const tenant = await getTenantById(params.clientId);
     if (!tenant) return NextResponse.json({ error: 'Tenant not found' }, { status: 404 });
-    await assertPortalAccess(request, tenant, params.clientId);
+    const session = await assertPortalAccess(request, tenant, params.clientId);
+    await assertModuleEnabled(session, tenant.id, 'roof_measurement');
     const recent = await roofMeasurementRepository.listByTenant(tenant.id, 10);
     return NextResponse.json({ configured: isRoofServiceConfigured(), recent });
   } catch (error: any) {
-    return handleAuthError(error);
+    if (error.statusCode === 401 || error.statusCode === 403) return handleAuthError(error);
+    console.error('[roof] Could not load measurements:', error?.message);
+    return NextResponse.json({ error: 'Roof measurements could not be loaded. Please try again.' }, { status: 500 });
   }
 }
 
@@ -25,10 +29,8 @@ export async function POST(request: NextRequest, { params }: { params: { clientI
     if (!tenant) return NextResponse.json({ error: 'Tenant not found' }, { status: 404 });
     const session = await assertPortalAccess(request, tenant, params.clientId);
 
-    const toggles = await getFeatureToggles(tenant.id);
-    if (toggles.roof_measurement === false) {
-      return NextResponse.json({ error: 'Roof measurement is not enabled for this portal.' }, { status: 403 });
-    }
+    // On for this client and, for a team member, included in their access.
+    await assertModuleEnabled(session, tenant.id, 'roof_measurement');
 
     // Each lookup costs money past the free tier, so cap usage per client.
     const limit = await enforceRateLimit(`roof:${tenant.id}`, { maxRequests: 50, windowMs: 24 * 60 * 60 * 1000 });

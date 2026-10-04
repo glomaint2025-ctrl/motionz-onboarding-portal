@@ -1,15 +1,21 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { validatePhone } from '@/lib/validation';
+import { validateEmail, validatePhone } from '@/lib/validation';
 import { isStaffEmail } from '@/lib/auth/staff';
 import { getTenantById, getTeamMembers, listTeamMemberInvitations, getFeatureToggles, logAuditEvent, DEMO_TENANT_UUID } from '@/lib/db';
 import { assertPortalAccess, handleAuthError } from '@/lib/auth/guard';
-import { assertPermission, assertTenantAccess } from '@/lib/auth/permissions';
-import { verifySession } from '@/lib/auth/session';
+import { hasPermission } from '@/lib/auth/permissions';
+import { isMemberSelectableModule, MEMBER_SELECTABLE_MODULES } from '@/lib/portal-modules';
+import { publicTeamMember, publicInvitation } from '../../public-fields';
 import { createInvitation, revokeInvitation, resendInvitation } from '@/lib/auth/invitations';
 import { invitationRepository } from '@/lib/db/repositories/invitations.repository';
 import { userRepository } from '@/lib/db/repositories/users.repository';
 import { tenantRepository } from '@/lib/db/repositories/tenants.repository';
 import { enforceRateLimit } from '@/lib/auth/security-utils';
+import type { UserInvitation } from '@/lib/db/schema';
+
+/** Inviting, removing and changing people's access is for the account owner (and Motionz staff). */
+const ownerOnly = () =>
+  NextResponse.json({ error: 'Only the account owner can do this.', code: 'FORBIDDEN' }, { status: 403 });
 
 export async function GET(
   request: NextRequest,
@@ -26,11 +32,13 @@ export async function GET(
     const tenantId = targetTenant ? targetTenant.id : DEMO_TENANT_UUID;
 
     // Enforce active account, tenant suspension, and tenant isolation
-    await assertPortalAccess(request, targetTenant, rawClientId);
+    const session = await assertPortalAccess(request, targetTenant, rawClientId);
+    // Pending invitations hold other people's emails and phone numbers: owner and staff only.
+    const canManage = !session || hasPermission(session.role, 'team:invite');
 
     const [members, allInvitations, featureToggles] = await Promise.all([
       getTeamMembers(tenantId),
-      listTeamMemberInvitations(tenantId),
+      canManage ? listTeamMemberInvitations(tenantId) : Promise.resolve([] as UserInvitation[]),
       getFeatureToggles(tenantId),
     ]);
 
@@ -44,7 +52,12 @@ export async function GET(
       return true;
     });
 
-    return NextResponse.json({ members, invitations, featureToggles });
+    return NextResponse.json({
+      members: members.map(publicTeamMember),
+      invitations: invitations.map(publicInvitation),
+      featureToggles,
+      viewer: session ? { email: session.email, role: session.role, userId: session.userId } : null,
+    });
   } catch (error: any) {
     if (
       error.code ||
@@ -94,28 +107,27 @@ export async function POST(
     if (!session) {
       return NextResponse.json({ error: 'Authentication required. Please sign in.', code: 'UNAUTHENTICATED' }, { status: 401 });
     }
-    assertPermission(session.role, 'team:invite');
+    if (!hasPermission(session.role, 'team:invite')) return ownerOnly();
     const actorRole: any = session.role;
     const actorEmail = session.email;
 
-    const body = await request.json();
+    const body = (await request.json().catch(() => ({}))) || {};
     const { email, phone, allowed_modules } = body;
 
-    if (typeof email === 'string' && isStaffEmail(email)) {
+    let normalizedEmail: string;
+    try {
+      normalizedEmail = validateEmail(email);
+    } catch (e: any) {
+      return NextResponse.json({ error: e.message }, { status: 400 });
+    }
+
+    if (isStaffEmail(normalizedEmail)) {
       return NextResponse.json(
         { error: '@motionz.ai addresses are for Motionz staff only. Invite your team member with their own email.' },
         { status: 400 }
       );
     }
 
-    if (!email || !email.includes('@')) {
-      return NextResponse.json(
-        { error: 'A valid email address is required' },
-        { status: 400 }
-      );
-    }
-
-    const normalizedEmail = String(email).trim().toLowerCase();
     const existingUser = await userRepository.findByEmail(normalizedEmail);
     if (existingUser) {
       return NextResponse.json(
@@ -146,9 +158,15 @@ export async function POST(
     const tenantToggles = await getFeatureToggles(tenantId);
     let resolvedAllowedModules: string[] | undefined = undefined;
     if (Array.isArray(allowed_modules)) {
-      resolvedAllowedModules = allowed_modules.filter((key: string) => tenantToggles[key] !== false);
+      resolvedAllowedModules = allowed_modules.filter(
+        (key: unknown): key is string => typeof key === 'string' && tenantToggles[key] !== false
+      );
     } else {
-      resolvedAllowedModules = Object.keys(tenantToggles).filter((key) => tenantToggles[key] !== false);
+      resolvedAllowedModules = MEMBER_SELECTABLE_MODULES.map((m) => m.key).filter((key) => tenantToggles[key] !== false);
+    }
+    // Team members can never be given owner-only sections (the contract, managing the team).
+    if (assignedRole === 'client_member') {
+      resolvedAllowedModules = resolvedAllowedModules.filter(isMemberSelectableModule);
     }
 
     const inviteResult = await createInvitation({
@@ -169,13 +187,17 @@ export async function POST(
       action: 'team.invite_sent',
       resourceType: 'user_invitation',
       resourceId: inviteResult.invitation.id,
-      details: { email: String(email).trim().toLowerCase(), role: assignedRole, phone: validPhone },
+      details: { email: normalizedEmail, role: assignedRole, phone: validPhone, emailDelivered: Boolean(inviteResult.emailDelivered) },
     });
 
     return NextResponse.json({
       success: true,
-      invitation: inviteResult.invitation,
+      invitation: publicInvitation(inviteResult.invitation),
       magicLinkUrl: inviteResult.magicLinkUrl,
+      emailDelivered: Boolean(inviteResult.emailDelivered),
+      message: inviteResult.emailDelivered
+        ? `Invite emailed to ${normalizedEmail}.`
+        : 'The invite was created, but the email could not be sent. Copy the link and send it yourself.',
     });
   } catch (error: any) {
     if (
@@ -214,7 +236,7 @@ export async function DELETE(
     if (!session) {
       return NextResponse.json({ error: 'Authentication required. Please sign in.', code: 'UNAUTHENTICATED' }, { status: 401 });
     }
-    assertPermission(session.role, 'team:remove');
+    if (!hasPermission(session.role, 'team:remove')) return ownerOnly();
     const actorRole: any = session.role;
     const actorEmail = session.email;
 
@@ -298,7 +320,7 @@ export async function PATCH(
     if (!session) {
       return NextResponse.json({ error: 'Authentication required. Please sign in.', code: 'UNAUTHENTICATED' }, { status: 401 });
     }
-    assertPermission(session.role, 'team:invite');
+    if (!hasPermission(session.role, 'team:invite')) return ownerOnly();
     const actorRole: any = session.role;
     const actorEmail = session.email;
 
@@ -337,9 +359,12 @@ export async function PATCH(
 
     return NextResponse.json({
       success: true,
-      message: 'Invitation regenerated and resent successfully.',
-      invitation: result.invitation,
+      message: result.emailDelivered
+        ? `Invite emailed to ${result.invitation.email}.`
+        : 'A new invite link was created, but the email could not be sent. Copy the link and send it yourself.',
+      invitation: publicInvitation(result.invitation),
       magicLinkUrl: result.magicLinkUrl,
+      emailDelivered: Boolean(result.emailDelivered),
     });
   } catch (error: any) {
     if (error.message?.includes('Forbidden') || error.message?.includes('Unauthorized')) {
@@ -372,10 +397,12 @@ export async function PUT(
     if (!session) {
       return NextResponse.json({ error: 'Authentication required. Please sign in.', code: 'UNAUTHENTICATED' }, { status: 401 });
     }
+    // Disabling people and changing what they can see is never open to team members.
+    if (!hasPermission(session.role, 'team:remove')) return ownerOnly();
     const actorRole: any = session.role;
     const actorEmail = session.email;
 
-    const body = await request.json().catch(() => ({}));
+    const body = (await request.json().catch(() => ({}))) || {};
     const { action, memberId, reason } = body;
 
     if (!memberId) {
@@ -394,16 +421,23 @@ export async function PUT(
       );
     }
 
+    if (targetUser.id === session.userId || targetUser.email.toLowerCase() === session.email.toLowerCase()) {
+      return NextResponse.json(
+        { error: 'You cannot change your own access.', code: 'FORBIDDEN' },
+        { status: 403 }
+      );
+    }
+
     // Main client cannot ban another main client unless they are admin/csm
     if (targetUser.role === 'client' && actorRole !== 'admin' && actorRole !== 'csm') {
       return NextResponse.json(
-        { error: 'Forbidden: Only Motionz administrators can disable the primary client account.' },
+        { error: "Only Motionz can change the account owner's access.", code: 'FORBIDDEN' },
         { status: 403 }
       );
     }
 
     if (action === 'suspend') {
-      const banReason = reason?.trim() || 'Access disabled by organization administrator.';
+      const banReason = (typeof reason === 'string' ? reason.trim().slice(0, 500) : '') || 'Access turned off by the account owner.';
       const updatedUser = await userRepository.suspendUser(
         targetUser.id,
         banReason,
@@ -429,8 +463,8 @@ export async function PUT(
 
       return NextResponse.json({
         success: true,
-        message: 'Member account has been suspended.',
-        user: updatedUser,
+        message: 'Access turned off.',
+        user: updatedUser ? publicTeamMember(updatedUser) : null,
       });
     }
 
@@ -449,8 +483,8 @@ export async function PUT(
 
       return NextResponse.json({
         success: true,
-        message: 'Member account has been reactivated.',
-        user: updatedUser,
+        message: 'Access turned back on.',
+        user: updatedUser ? publicTeamMember(updatedUser) : null,
       });
     }
 
@@ -465,14 +499,20 @@ export async function PUT(
 
       if (targetUser.role === 'client' && actorRole !== 'admin' && actorRole !== 'csm') {
         return NextResponse.json(
-          { error: 'Forbidden: Cannot change permissions for primary organization owner.' },
+          { error: "Only Motionz can change the account owner's access.", code: 'FORBIDDEN' },
           { status: 403 }
         );
       }
 
       // Hierarchy: cannot enable modules that are disabled at the organization level
       const tenantToggles = await getFeatureToggles(tenantId);
-      const sanitizedAllowed = allowed_modules.filter((k: string) => tenantToggles[k] !== false);
+      const sanitizedAllowed = allowed_modules.filter(
+        (k: unknown): k is string =>
+          typeof k === 'string' &&
+          tenantToggles[k] !== false &&
+          // Team members can never be given owner-only sections (the contract, managing the team).
+          (targetUser.role !== 'client_member' || isMemberSelectableModule(k))
+      );
 
       const updatedUser = await userRepository.updatePermissions(targetUser.id, sanitizedAllowed);
 
@@ -493,8 +533,8 @@ export async function PUT(
 
       return NextResponse.json({
         success: true,
-        message: 'Member permissions updated successfully.',
-        user: updatedUser,
+        message: 'Access updated.',
+        user: updatedUser ? publicTeamMember(updatedUser) : null,
       });
     }
 

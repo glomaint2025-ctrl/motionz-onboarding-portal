@@ -62,6 +62,7 @@ const ROLE_PERMISSIONS: Record<UserRole, Capability[]> = {
     'client:view_scripts',
     'client:book_call',
     'team:invite',
+    'team:remove',
     'profile:update',
   ],
   client: [

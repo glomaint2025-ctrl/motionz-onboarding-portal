@@ -89,7 +89,7 @@ export default function CampaignTrackingPage() {
   return (
     <div>
       <div style={{ marginBottom: 'var(--space-6)' }}>
-        <h1 style={{ marginBottom: 'var(--space-1)' }}>Tracking</h1>
+        <h1 style={{ marginBottom: 'var(--space-1)' }}>Results Tracking</h1>
         <p style={{ color: 'var(--color-text-secondary)' }}>
           Your Google Sheet is where you log calls and outcomes for each lead and track your results.
         </p>

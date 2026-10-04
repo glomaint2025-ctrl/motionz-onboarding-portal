@@ -1,23 +1,23 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
+import Link from 'next/link';
 import { useParams, usePathname, useRouter } from 'next/navigation';
 import { AppShell } from '@/components/layout/AppShell';
-import { PortalPreloader } from '@/components/ui';
+import { Button, PortalPreloader } from '@/components/ui';
+import { Icon } from '@/components/brand/Icon';
+import { suspendedPageUrl } from '@/components/portal/suspended';
 
+/** Portal section (URL segment) to the module that switches it on or off. */
 const FEATURE_ROUTE_MAP: Record<string, string> = {
   'onboarding': 'onboarding',
   'leads': 'leads',
   'tracking': 'tracking',
-  'performance': 'tracking',
   'contract': 'contracts',
   'tools': 'tools',
   'roof-measurement': 'roof_measurement',
-  'measure': 'roof_measurement',
   'video-scripts': 'video_scripts',
-  'scripts': 'video_scripts',
   'book-call': 'book_call',
-  'booking': 'book_call',
   'team': 'team',
 };
 
@@ -31,11 +31,13 @@ export default function ClientPortalLayout({
   const router = useRouter();
 
   const clientId = (params?.clientId as string) || 'demo';
-  const [companyName, setCompanyName] = useState<string>(
-    ''
-  );
+  const [companyName, setCompanyName] = useState<string>('');
+  const [tenantId, setTenantId] = useState<string>('');
+  const [viewerRole, setViewerRole] = useState<string | null>(null);
   const [featureToggles, setFeatureToggles] = useState<Record<string, boolean>>({});
   const [isLoading, setIsLoading] = useState(true);
+  const [loadError, setLoadError] = useState('');
+  const [attempt, setAttempt] = useState(0);
 
   // Extract the portal sub-section: /portal/[clientId]/[section]
   const pathSegments = pathname ? pathname.split('/').filter(Boolean) : [];
@@ -44,44 +46,54 @@ export default function ClientPortalLayout({
 
   useEffect(() => {
     let isMounted = true;
-    async function loadBranding() {
+    async function loadPortal() {
+      setIsLoading(true);
+      setLoadError('');
       try {
         const res = await fetch(`/api/portal/${clientId}/data`);
-        if (res.status === 403) {
-          const data = await res.json().catch(() => ({}));
-          if (data?.suspended) {
-            window.location.href = `/auth/suspended?reason=${encodeURIComponent(data.reason || 'Your account access has been suspended.')}`;
-            return;
-          }
+        const data = await res.json().catch(() => ({}));
+        if (res.status === 403 && data?.suspended) {
+          window.location.href = suspendedPageUrl(data);
+          return;
         }
-        if (res.ok) {
-          const data = await res.json();
-          if (isMounted) {
-            if (data.tenant?.name) {
-              setCompanyName(data.tenant.name);
-            }
-            if (data.featureToggles) {
-              setFeatureToggles(data.featureToggles);
-            }
-          }
+        if (res.status === 401) {
+          window.location.href = '/auth/login';
+          return;
         }
-      } catch (err) {
-        // Fallback remains active
+        if (!isMounted) return;
+        if (!res.ok) {
+          // Without this we do not know which sections are switched on, so nothing is shown.
+          setLoadError(
+            res.status === 403
+              ? 'You do not have access to this portal.'
+              : res.status === 404
+                ? 'We could not find this portal.'
+                : 'Your portal could not be loaded.'
+          );
+          return;
+        }
+        setCompanyName(data.tenant?.name || '');
+        setTenantId(data.tenant?.id || '');
+        setViewerRole(data.viewer?.role || null);
+        setFeatureToggles(data.featureToggles || {});
+      } catch {
+        if (isMounted) setLoadError('We could not reach the server. Check your connection and try again.');
       } finally {
-        if (isMounted) {
-          setIsLoading(false);
-        }
+        if (isMounted) setIsLoading(false);
       }
     }
-    loadBranding();
+    loadPortal();
     return () => {
       isMounted = false;
     };
-  }, [clientId]);
+  }, [clientId, attempt]);
+
+  const retry = useCallback(() => setAttempt((n) => n + 1), []);
 
   // Check if current route is disabled by feature toggle
   const isAccessDenied =
     !isLoading &&
+    !loadError &&
     Boolean(requiredFeatureKey) &&
     featureToggles[requiredFeatureKey as string] === false;
 
@@ -96,7 +108,77 @@ export default function ClientPortalLayout({
     return <PortalPreloader />;
   }
 
-  // 2. If attempting to access a disabled module, show gentle transition while redirecting to overview
+  // 2. The portal settings did not load: say so and offer a retry, instead of showing every section.
+  if (loadError) {
+    return (
+      <div
+        role="alert"
+        style={{
+          minHeight: '100vh',
+          display: 'flex',
+          flexDirection: 'column',
+          alignItems: 'center',
+          justifyContent: 'center',
+          gap: 'var(--space-4)',
+          padding: 'var(--space-6)',
+          textAlign: 'center',
+          backgroundColor: 'var(--color-bg-page, var(--color-bg-surface))',
+          color: 'var(--color-text-primary)',
+        }}
+      >
+        <span style={{ color: 'var(--color-status-danger-text)' }}>
+          <Icon name="alert" size={32} />
+        </span>
+        <h1 style={{ fontSize: '1.25rem', margin: 0 }}>Something went wrong</h1>
+        <p style={{ margin: 0, color: 'var(--color-text-secondary)', maxWidth: '44ch' }}>{loadError}</p>
+        <div style={{ display: 'flex', gap: 'var(--space-3)', flexWrap: 'wrap', justifyContent: 'center' }}>
+          <Button variant="primary" onClick={retry}>
+            Try again
+          </Button>
+          <Link href="/auth/login" style={{ textDecoration: 'none' }}>
+            <Button variant="outline">Back to sign in</Button>
+          </Link>
+        </div>
+      </div>
+    );
+  }
+
+  const isStaffViewer = viewerRole === 'admin' || viewerRole === 'csm';
+  const staffBackHref =
+    viewerRole === 'admin'
+      ? `/admin/clients/${tenantId || clientId}`
+      : `/csm/clients/${tenantId || clientId}/setup`;
+
+  const staffBar = isStaffViewer ? (
+    <div
+      style={{
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        flexWrap: 'wrap',
+        gap: 'var(--space-2)',
+        padding: '6px 12px',
+        marginBottom: 'var(--space-4)',
+        borderRadius: 'var(--radius-md)',
+        backgroundColor: 'var(--color-primary-muted)',
+        border: '1px solid var(--color-primary-border)',
+        color: 'var(--color-primary-text)',
+        fontSize: 'var(--font-size-xs)',
+        fontWeight: 600,
+      }}
+    >
+      <span>Viewing as staff{companyName ? ` · ${companyName}` : ''}</span>
+      <Link
+        href={staffBackHref}
+        style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', color: 'inherit', textDecoration: 'underline' }}
+      >
+        <Icon name="arrow-left" size={14} />
+        {viewerRole === 'admin' ? 'Back to Admin' : 'Back to CSM'}
+      </Link>
+    </div>
+  ) : null;
+
+  // 3. This section is switched off for the viewer: send them to Home.
   if (isAccessDenied) {
     return (
       <AppShell
@@ -107,6 +189,7 @@ export default function ClientPortalLayout({
         featureToggles={featureToggles}
       >
         <div className="portal-container">
+          {staffBar}
           <div
             style={{
               display: 'flex',
@@ -119,13 +202,14 @@ export default function ClientPortalLayout({
             }}
           >
             <p
+              role="status"
               style={{
                 color: 'var(--color-text-secondary)',
-                fontSize: '13px',
+                fontSize: 'var(--font-size-sm)',
                 margin: 0,
               }}
             >
-              Module disabled. Redirecting to overview...
+              This page isn&apos;t available on your account. Taking you back to Home...
             </p>
           </div>
         </div>
@@ -133,7 +217,7 @@ export default function ClientPortalLayout({
     );
   }
 
-  // 3. Render dashboard with sidebar and header immediately; page content handles its own in-page data loading skeletons
+  // 4. Render the shell; each page handles its own loading state
   return (
     <AppShell
       role="client"
@@ -143,6 +227,7 @@ export default function ClientPortalLayout({
       featureToggles={featureToggles}
     >
       <div className="portal-container">
+        {staffBar}
         {children}
       </div>
     </AppShell>

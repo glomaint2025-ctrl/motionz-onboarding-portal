@@ -7,10 +7,37 @@ import { buttonClasses } from '@/components/ui';
 import { Icon } from '@/components/brand/Icon';
 import { MotionzWordmark } from '@/components/brand/MotionzLogo';
 
+/**
+ * Fixed wording per reason code. Text from the URL is never shown: anyone can craft a link,
+ * so only the short codes below are recognised and everything else gets the general message.
+ */
+const COPY: Record<'account' | 'portal' | 'general', { title: string; message: string }> = {
+  account: {
+    title: 'Account paused',
+    message: 'Your access to this portal has been turned off.',
+  },
+  portal: {
+    title: 'Portal paused',
+    message: 'This portal has been paused by Motionz.',
+  },
+  general: {
+    title: 'Access paused',
+    message: 'Access to this portal has been turned off.',
+  },
+};
+
 function SuspendedContent() {
   const searchParams = useSearchParams();
-  const reason = searchParams?.get('reason') || 'Your account or organization portal has been suspended.';
-  const type = searchParams?.get('type') || 'account';
+  const reason = searchParams?.get('reason');
+  const type = searchParams?.get('type');
+
+  const kind: keyof typeof COPY =
+    reason === 'portal' || type === 'tenant'
+      ? 'portal'
+      : reason === 'account' || type === 'account'
+        ? 'account'
+        : 'general';
+  const copy = COPY[kind];
 
   return (
     <div className="auth-page">
@@ -23,21 +50,14 @@ function SuspendedContent() {
           <div className="auth-icon auth-icon-danger">
             <Icon name="lock" size={24} />
           </div>
-          <h1 className="auth-title">{type === 'tenant' ? 'Portal paused' : 'Account paused'}</h1>
-          <p className="auth-subtitle">
-            Access to this portal has been turned off by a Motionz administrator.
-          </p>
-
-          <div className="auth-reason">
-            <div className="auth-reason-label">Reason</div>
-            <div className="auth-reason-text">{reason}</div>
-          </div>
+          <h1 className="auth-title">{copy.title}</h1>
+          <p className="auth-subtitle">{copy.message}</p>
 
           <Link href="/auth/login" className={buttonClasses({ variant: 'secondary', size: 'lg', fullWidth: true })}>
             Back to sign in
           </Link>
           <p className="auth-footnote" style={{ marginTop: 'var(--space-4)' }}>
-            Think this is a mistake? Reach out to your Motionz account manager and we&apos;ll sort it out.
+            Think this is a mistake? Reach out to your Motionz CSM and we&apos;ll sort it out.
           </p>
         </div>
       </div>

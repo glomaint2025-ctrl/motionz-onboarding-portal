@@ -4,6 +4,7 @@ import React, { useEffect, useState } from 'react';
 import { useParams } from 'next/navigation';
 import { Card, CardHeader, Button, Input, Skeleton, StatusBadge } from '@/components/ui';
 import type { RoofMeasurementResult } from '@/lib/integrations/roof/solar';
+import { formatDate } from '@/lib/utils/format';
 
 interface RecentMeasurement {
   id: string;
@@ -20,6 +21,8 @@ export default function RoofMeasurementPage() {
 
   const [loading, setLoading] = useState(true);
   const [configured, setConfigured] = useState(false);
+  const [loadError, setLoadError] = useState('');
+  const [attempt, setAttempt] = useState(0);
   const [recent, setRecent] = useState<RecentMeasurement[]>([]);
   const [address, setAddress] = useState('');
   const [measuring, setMeasuring] = useState(false);
@@ -27,15 +30,35 @@ export default function RoofMeasurementPage() {
   const [result, setResult] = useState<RoofMeasurementResult | null>(null);
 
   useEffect(() => {
+    let isMounted = true;
+    setLoading(true);
+    setLoadError('');
     fetch(`/api/portal/${clientId}/roof-measurement`)
-      .then((res) => res.json())
-      .then((data) => {
+      .then(async (res) => {
+        const data = await res.json().catch(() => ({}));
+        if (!isMounted) return;
+        if (!res.ok) {
+          // A failed load is not the same as the tool not being set up yet.
+          setLoadError(
+            res.status === 403
+              ? 'You do not have access to Roof Measurement. Ask the account owner if you need it.'
+              : 'Roof Measurement could not be loaded.'
+          );
+          return;
+        }
         setConfigured(Boolean(data.configured));
         setRecent(data.recent || []);
       })
-      .catch(() => {})
-      .finally(() => setLoading(false));
-  }, [clientId]);
+      .catch(() => {
+        if (isMounted) setLoadError('We could not reach the server. Check your connection and try again.');
+      })
+      .finally(() => {
+        if (isMounted) setLoading(false);
+      });
+    return () => {
+      isMounted = false;
+    };
+  }, [clientId, attempt]);
 
   const measure = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -48,8 +71,8 @@ export default function RoofMeasurementPage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ address }),
       });
-      const data = await res.json();
-      if (data.success) {
+      const data = await res.json().catch(() => ({}));
+      if (res.ok && data.success) {
         setResult(data.result);
         setRecent((list) => [
           { id: String(Date.now()), address: data.result.formattedAddress, squares: data.result.squares, pitch: data.result.predominantPitch, created_at: new Date().toISOString(), result_data: data.result },
@@ -59,7 +82,7 @@ export default function RoofMeasurementPage() {
         setError(data.error || 'Could not measure this roof.');
       }
     } catch {
-      setError('Network error while measuring.');
+      setError('We could not reach the server. Check your connection and try again.');
     } finally {
       setMeasuring(false);
     }
@@ -77,13 +100,22 @@ export default function RoofMeasurementPage() {
       <div style={{ marginBottom: 'var(--space-6)' }}>
         <h1 style={{ marginBottom: 'var(--space-1)' }}>Roof Measurement</h1>
         <p style={{ color: 'var(--color-text-secondary)' }}>
-          Enter a property address to get the roof area, roofing squares and pitch from satellite data.
+          Measure a roof&apos;s area, squares and pitch from an address, using satellite data.
         </p>
       </div>
 
       {loading ? (
         <Card>
           <Skeleton height="80px" />
+        </Card>
+      ) : loadError ? (
+        <Card>
+          <p role="alert" style={{ margin: '0 0 var(--space-3) 0', color: 'var(--color-status-danger-text)' }}>
+            {loadError}
+          </p>
+          <Button variant="secondary" size="sm" onClick={() => setAttempt((n) => n + 1)}>
+            Try again
+          </Button>
         </Card>
       ) : !configured ? (
         <Card>
@@ -102,6 +134,7 @@ export default function RoofMeasurementPage() {
                   placeholder="123 Main St, Austin, TX 78701"
                   value={address}
                   onChange={(e) => setAddress(e.target.value)}
+                  maxLength={300}
                   required
                 />
               </div>
@@ -109,7 +142,7 @@ export default function RoofMeasurementPage() {
                 {measuring ? 'Measuring...' : 'Measure roof'}
               </Button>
             </form>
-            {error && <p style={{ color: 'var(--color-status-danger-text)', margin: 'var(--space-3) 0 0' }}>{error}</p>}
+            {error && <p role="alert" style={{ color: 'var(--color-status-danger-text)', margin: 'var(--space-3) 0 0' }}>{error}</p>}
           </Card>
 
           {result && (
@@ -182,7 +215,7 @@ export default function RoofMeasurementPage() {
                     <span style={{ display: 'flex', gap: 'var(--space-2)', alignItems: 'center', whiteSpace: 'nowrap' }}>
                       {m.squares !== undefined && <StatusBadge status={`${m.squares} sq`} variant="progress" />}
                       <span style={{ fontSize: 'var(--font-size-xs)', color: 'var(--color-text-muted)' }}>
-                        {new Date(m.created_at).toLocaleDateString()}
+                        {formatDate(m.created_at)}
                       </span>
                     </span>
                   </button>

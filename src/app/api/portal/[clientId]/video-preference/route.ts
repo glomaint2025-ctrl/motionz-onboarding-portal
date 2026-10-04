@@ -10,6 +10,7 @@ import {
 import { scriptRepository } from '@/lib/db/repositories';
 import { assertPortalAccess, handleAuthError } from '@/lib/auth/guard';
 import { hasPermission } from '@/lib/auth/permissions';
+import { assertModuleEnabled } from '@/lib/auth/modules';
 import {
   SELF_FILMED_CATEGORIES,
   SCRIPT_CATEGORY_LABELS,
@@ -48,7 +49,8 @@ export async function GET(
     const tenantId = targetTenant ? targetTenant.id : DEMO_TENANT_UUID;
 
     // Enforce active account, tenant suspension, and tenant isolation
-    await assertPortalAccess(request, targetTenant, rawClientId);
+    const session = await assertPortalAccess(request, targetTenant, rawClientId);
+    await assertModuleEnabled(session, tenantId, 'video_scripts');
 
     const pref = await getClientScriptPreference(tenantId);
     // Picks pointing at scripts that no longer exist (or moved category) are dropped.
@@ -101,6 +103,7 @@ export async function POST(
     if (!session) {
       return NextResponse.json({ error: 'Authentication required. Please sign in.', code: 'UNAUTHENTICATED' }, { status: 401 });
     }
+    await assertModuleEnabled(session, tenantId, 'video_scripts');
     if (!hasPermission(session.role, 'client:video_preference')) {
       return NextResponse.json({ error: 'You do not have permission to make this change. Ask the account owner.', code: 'FORBIDDEN' }, { status: 403 });
     }

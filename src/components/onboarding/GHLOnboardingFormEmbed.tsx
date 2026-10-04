@@ -13,6 +13,8 @@ export interface GHLOnboardingFormEmbedProps {
   prefillEmail?: string;
 }
 
+const TITLE = 'Onboarding form';
+
 export const GHLOnboardingFormEmbed: React.FC<GHLOnboardingFormEmbedProps> = ({
   formId = PORTAL_LINKS.onboardingFormId,
   isModal = false,
@@ -26,7 +28,8 @@ export const GHLOnboardingFormEmbed: React.FC<GHLOnboardingFormEmbedProps> = ({
   const renderContent = () => (
     <div>
       <div style={{ marginBottom: 'var(--space-4)', fontSize: 'var(--font-size-sm)', color: 'var(--color-text-secondary)' }}>
-        Complete this official GoHighLevel onboarding form to submit your business details, target territory zip codes, and website branding preferences directly to your CSM.
+        Tell us about your business, the areas you serve and how you want your website to look. Your answers go
+        straight to your CSM.
       </div>
 
       <div
@@ -59,14 +62,14 @@ export const GHLOnboardingFormEmbed: React.FC<GHLOnboardingFormEmbedProps> = ({
             }}
           >
             <div style={{ fontWeight: 'var(--font-weight-medium)', marginBottom: 'var(--space-2)' }}>
-              Loading GoHighLevel Onboarding Form...
+              Loading the form...
             </div>
             <span style={{ fontSize: 'var(--font-size-xs)', color: 'var(--color-text-muted)', marginBottom: 'var(--space-4)' }}>
-              Connecting to secure form instance ({formId})
+              Taking a while? You can open it in a new tab instead.
             </span>
             <a href={formUrl} target="_blank" rel="noopener noreferrer">
               <Button variant="secondary" size="sm">
-                Open in Dedicated Tab
+                Open in new tab
               </Button>
             </a>
           </div>
@@ -83,7 +86,7 @@ export const GHLOnboardingFormEmbed: React.FC<GHLOnboardingFormEmbedProps> = ({
           scrolling="yes"
           id={`msgsndr-form-${formId}`}
           onLoad={() => setIframeLoaded(true)}
-          title="GoHighLevel Client Onboarding Intake Form"
+          title={TITLE}
         />
       </div>
     </div>
@@ -91,11 +94,11 @@ export const GHLOnboardingFormEmbed: React.FC<GHLOnboardingFormEmbedProps> = ({
 
   if (isModal) {
     return (
-      <Modal isOpen={isOpen} onClose={onClose} title="GoHighLevel Client Onboarding Form">
+      <Modal isOpen={isOpen} onClose={onClose} title={TITLE} dismissOnOverlay={false}>
         {renderContent()}
         <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 'var(--space-4)' }}>
           <Button variant="secondary" onClick={onClose}>
-            Close Form
+            Close
           </Button>
         </div>
       </Modal>
@@ -105,12 +108,12 @@ export const GHLOnboardingFormEmbed: React.FC<GHLOnboardingFormEmbedProps> = ({
   return (
     <Card>
       <CardHeader
-        title="Client Onboarding Intake Form"
-        subtitle="GoHighLevel Form #wyM27h1ZCiwGoyXE03oC"
+        title={TITLE}
+        subtitle="About your business"
         action={
           <a href={formUrl} target="_blank" rel="noopener noreferrer">
             <Button variant="outline" size="sm">
-              Open Fullscreen Tab
+              Open in new tab
             </Button>
           </a>
         }
