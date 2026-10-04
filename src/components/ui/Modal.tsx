@@ -10,6 +10,8 @@ export interface ModalProps {
   footer?: React.ReactNode;
   /** Optional max width of the dialog (e.g. 720 or '48rem'). */
   maxWidth?: number | string;
+  /** Set false for dialogs holding a form or one-time information, so a stray click outside does not discard it. */
+  dismissOnOverlay?: boolean;
 }
 
 export const Modal: React.FC<ModalProps> = ({
@@ -19,6 +21,7 @@ export const Modal: React.FC<ModalProps> = ({
   children,
   footer,
   maxWidth,
+  dismissOnOverlay = true,
 }) => {
   const titleId = useId();
 
@@ -35,7 +38,7 @@ export const Modal: React.FC<ModalProps> = ({
   if (!isOpen) return null;
 
   return (
-    <div className="ui-modal-overlay" onClick={onClose}>
+    <div className="ui-modal-overlay" onClick={dismissOnOverlay ? onClose : undefined}>
       <div
         className="ui-modal-dialog"
         role="dialog"
