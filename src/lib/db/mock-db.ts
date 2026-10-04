@@ -21,6 +21,7 @@ import {
   OnboardingSubmission,
   AppSetting,
 } from './schema';
+import { AD_SCRIPT_LIBRARY } from '../scripts/ad-script-library';
 
 export interface DatabaseStore {
   tenants: Tenant[];
@@ -371,6 +372,7 @@ export const createInitialStore = (): DatabaseStore => {
         id: 'st-1',
         title: 'Script 1: Introduction and Brand Story',
         script_content: 'Hello, I am {{client_name}} with {{company_name}}. We specialize in providing residential and commercial roof restoration and inspections throughout our local community. Our team is committed to safety, reliability, and long-lasting quality.',
+        category: 'ai_video',
         sort_order: 1,
         created_at: '2026-09-01T00:00:00Z',
         updated_at: '2026-09-01T00:00:00Z',
@@ -379,6 +381,7 @@ export const createInitialStore = (): DatabaseStore => {
         id: 'st-2',
         title: 'Script 2: Service Offer and Customer Value',
         script_content: 'At {{company_name}}, we know your roof is your property first line of defense. My name is {{client_name}}, and we offer comprehensive roof assessments designed to identify issues before they lead to expensive structural damage.',
+        category: 'ai_video',
         sort_order: 2,
         created_at: '2026-09-01T00:00:00Z',
         updated_at: '2026-09-01T00:00:00Z',
@@ -387,10 +390,17 @@ export const createInitialStore = (): DatabaseStore => {
         id: 'st-3',
         title: 'Script 3: Call to Action and Inspection Booking',
         script_content: 'Looking for honest, professional roofing services? Reach out to {{client_name}} at {{company_name}} today to schedule your complimentary inspection.',
+        category: 'ai_video',
         sort_order: 3,
         created_at: '2026-09-01T00:00:00Z',
         updated_at: '2026-09-01T00:00:00Z',
       },
+      // Self-filmed ad script library (Google Doc "Motionz AI | Ad Scripts").
+      ...AD_SCRIPT_LIBRARY.map((script) => ({
+        ...script,
+        created_at: '2026-10-04T00:00:00Z',
+        updated_at: '2026-10-04T00:00:00Z',
+      })),
     ],
 
     clientScriptPreferences: [
@@ -400,6 +410,7 @@ export const createInitialStore = (): DatabaseStore => {
         video_preference: 'ai_video',
         custom_name: 'John Smith',
         custom_company: 'ABC Roofing',
+        selected_scripts: {},
         updated_at: '2026-09-15T00:00:00Z',
       },
     ],

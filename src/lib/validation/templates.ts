@@ -1,6 +1,9 @@
 import { StepOwner } from '../db/schema';
 import type { TemplateStepUpdate } from '../db/repositories/portal-templates.repository';
-import type { ScriptTemplateUpdate } from '../db/repositories/scripts.repository';
+import type { ScriptTemplateUpdate, ScriptTemplateCreate } from '../db/repositories/scripts.repository';
+import { SCRIPT_CATEGORIES, isScriptCategory } from '../scripts/ad-script-library';
+
+const CATEGORY_ERROR = `Category must be one of: ${SCRIPT_CATEGORIES.join(', ')}.`;
 
 export const TEMPLATE_LIMITS = {
   stepName: 255,
@@ -94,8 +97,24 @@ export function validateScriptTemplateUpdate(body: unknown): ValidationResult<Sc
   if (!content.ok) return content;
   if (content.value !== undefined) update.script_content = content.value;
 
+  if (input.category !== undefined) {
+    if (!isScriptCategory(input.category)) return { ok: false, error: CATEGORY_ERROR };
+    update.category = input.category;
+  }
+
   if (Object.keys(update).length === 0) {
-    return { ok: false, error: 'Provide a title or script content to update.' };
+    return { ok: false, error: 'Provide a title, script content or category to update.' };
   }
   return { ok: true, value: update };
+}
+
+/** New script: title, content and category are all required. */
+export function validateScriptTemplateCreate(body: unknown): ValidationResult<ScriptTemplateCreate> {
+  const result = validateScriptTemplateUpdate(body);
+  if (!result.ok) return result;
+  const { title, script_content, category } = result.value;
+  if (!title) return { ok: false, error: 'Title is required.' };
+  if (!script_content) return { ok: false, error: 'Script content is required.' };
+  if (!category) return { ok: false, error: CATEGORY_ERROR };
+  return { ok: true, value: { title, script_content, category } };
 }
