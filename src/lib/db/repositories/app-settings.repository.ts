@@ -10,8 +10,18 @@ export interface NotificationSettings {
   notify_assigned_csm: boolean;
 }
 
-const DEFAULTS: { notifications: NotificationSettings } = {
+/** Who must enter an emailed one-time code after their password when signing in. */
+export type StaffLoginCodeMode = 'off' | 'csm' | 'all_staff';
+export const STAFF_LOGIN_CODE_MODES: StaffLoginCodeMode[] = ['off', 'csm', 'all_staff'];
+
+export interface SecuritySettings {
+  staff_login_code: StaffLoginCodeMode;
+}
+
+const DEFAULTS: { notifications: NotificationSettings; security: SecuritySettings } = {
   notifications: { onboarding_form_recipients: [], notify_assigned_csm: true },
+  // Off by default so staff whose @motionz.ai mailbox cannot receive email are not locked out.
+  security: { staff_login_code: 'off' },
 };
 
 type SettingKey = keyof typeof DEFAULTS;

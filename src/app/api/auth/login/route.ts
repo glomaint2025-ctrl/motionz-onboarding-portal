@@ -2,7 +2,17 @@ import { NextResponse } from 'next/server';
 import { authenticateStaff } from '@/lib/auth/staff';
 import { createSessionToken, SESSION_COOKIE_NAME } from '@/lib/auth/session';
 import { createInvitation } from '@/lib/auth/invitations';
-import { userRepository, tenantRepository, securityEventRepository } from '@/lib/db/repositories';
+import { userRepository, tenantRepository, securityEventRepository, appSettingsRepository } from '@/lib/db/repositories';
+import {
+  LOGIN_CHALLENGE_COOKIE,
+  ISSUE_LIMIT,
+  challengeCookieOptions,
+  issueLoginChallenge,
+  maskEmail,
+  resolveStaffRedirect,
+  signLoginChallenge,
+  staffLoginCodeRequired,
+} from '@/lib/auth/login-challenge';
 import { enforceRateLimit, getClientIp, sanitizeRedirectUrl } from '@/lib/auth/security-utils';
 import { resolveTenantId } from '@/lib/db/supabase-client';
 import { canExposeDevLinks } from '@/lib/email';
@@ -50,22 +60,71 @@ export async function POST(request: Request) {
         return NextResponse.json({ error: authResult.error }, { status: 403 });
       }
 
+      // Auto-route based on authenticated staff role
+      const safeRedirect = resolveStaffRedirect(authResult.user.role, redirect);
+
+      // Second step: when enabled for this role, email a one-time code instead of signing in.
+      const staffUser = authResult.user;
+      const security = await appSettingsRepository.get('security');
+      if (
+        (staffUser.role === 'admin' || staffUser.role === 'csm') &&
+        staffLoginCodeRequired(security.staff_login_code, staffUser.role)
+      ) {
+        const issueLimit = await enforceRateLimit(`login_code_issue:${staffUser.id}`, ISSUE_LIMIT);
+        if (!issueLimit.allowed) {
+          await securityEventRepository.create({
+            event_type: 'rate_limit_exceeded',
+            severity: 'medium',
+            details: { ip, email: staffUser.email, endpoint: '/api/auth/login', reason: 'sign-in code requests' },
+          });
+          return NextResponse.json(
+            { error: 'Too many sign-in codes requested. Please wait a few minutes and try again.' },
+            { status: 429, headers: { 'Retry-After': String(Math.ceil(issueLimit.resetMs / 1000)) } }
+          );
+        }
+
+        const challenge = await issueLoginChallenge({
+          userId: staffUser.id,
+          email: staffUser.email,
+          role: staffUser.role,
+          redirect: safeRedirect,
+        });
+        if (!challenge) {
+          await securityEventRepository.create({
+            event_type: 'staff_login_code_delivery_failed',
+            severity: 'high',
+            details: { email: staffUser.email, role: staffUser.role, ip, timestamp: new Date().toISOString() },
+          });
+          return NextResponse.json(
+            { error: 'We could not email your sign-in code. Please try again in a moment or contact a Motionz administrator.' },
+            { status: 503 }
+          );
+        }
+
+        await securityEventRepository.create({
+          event_type: 'staff_login_code_sent',
+          severity: 'low',
+          details: { email: staffUser.email, role: staffUser.role, ip, timestamp: new Date().toISOString() },
+        });
+
+        const challengeResponse = NextResponse.json({
+          success: true,
+          codeRequired: true,
+          emailHint: maskEmail(staffUser.email),
+        });
+        challengeResponse.cookies.set(
+          LOGIN_CHALLENGE_COOKIE,
+          signLoginChallenge(challenge),
+          challengeCookieOptions(challenge.exp)
+        );
+        return challengeResponse;
+      }
+
       const sessionToken = createSessionToken(
         authResult.user.id,
         authResult.user.email,
         authResult.user.role
       );
-
-      const defaultRedirect = authResult.user.role === 'admin' ? '/admin' : '/csm';
-      let safeRedirect = sanitizeRedirectUrl(redirect, defaultRedirect);
-
-      // Auto-route based on authenticated staff role
-      if (authResult.user.role === 'csm' && safeRedirect.startsWith('/admin')) {
-        safeRedirect = '/csm';
-      }
-      if (authResult.user.role === 'admin' && (safeRedirect === '/auth/login' || safeRedirect === '/')) {
-        safeRedirect = '/admin';
-      }
 
       const response = NextResponse.json({
         success: true,

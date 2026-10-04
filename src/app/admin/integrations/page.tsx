@@ -15,6 +15,14 @@ interface ClientOption {
   name: string;
 }
 
+type LoginCodeMode = 'off' | 'csm' | 'all_staff';
+
+const LOGIN_CODE_OPTIONS: { value: LoginCodeMode; label: string; detail: string }[] = [
+  { value: 'off', label: 'Off', detail: 'Staff sign in with their password only.' },
+  { value: 'csm', label: 'CSMs only', detail: 'CSMs enter an emailed code every time they log in. Admins sign in with their password only.' },
+  { value: 'all_staff', label: 'All staff', detail: 'CSMs and admins, including you, enter an emailed code every time they log in.' },
+];
+
 export default function AdminSettingsPage() {
   const [loading, setLoading] = useState(true);
   const [recipients, setRecipients] = useState('');
@@ -26,15 +34,28 @@ export default function AdminSettingsPage() {
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState<{ type: 'ok' | 'error'; text: string } | null>(null);
 
+  const [loginCodeMode, setLoginCodeMode] = useState<LoginCodeMode>('off');
+  const [savedLoginCodeMode, setSavedLoginCodeMode] = useState<LoginCodeMode>('off');
+  const [savingSecurity, setSavingSecurity] = useState(false);
+  const [securityMessage, setSecurityMessage] = useState<{ type: 'ok' | 'error'; text: string } | null>(null);
+
   const load = async () => {
     setLoading(true);
     try {
-      const [settingsRes, clientsRes] = await Promise.all([
+      const [settingsRes, clientsRes, securityRes] = await Promise.all([
         fetch('/api/admin/settings/notifications'),
         fetch('/api/admin/clients'),
+        fetch('/api/admin/settings/security'),
       ]);
       const settings = await settingsRes.json();
       const clientData = await clientsRes.json();
+      const security = await securityRes.json().catch(() => null);
+      if (security?.success) {
+        setLoginCodeMode(security.security.staff_login_code);
+        setSavedLoginCodeMode(security.security.staff_login_code);
+      } else {
+        setSecurityMessage({ type: 'error', text: security?.error || 'Could not load sign-in security settings.' });
+      }
       if (settings.success) {
         setRecipients((settings.notifications.onboarding_form_recipients || []).join(', '));
         setNotifyCsm(settings.notifications.notify_assigned_csm !== false);
@@ -75,6 +96,30 @@ export default function AdminSettingsPage() {
       setMessage({ type: 'error', text: 'Network error while saving.' });
     } finally {
       setSaving(false);
+    }
+  };
+
+  const saveSecurity = async () => {
+    setSavingSecurity(true);
+    setSecurityMessage(null);
+    try {
+      const res = await fetch('/api/admin/settings/security', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ staff_login_code: loginCodeMode }),
+      });
+      const data = await res.json();
+      if (data.success) {
+        setLoginCodeMode(data.security.staff_login_code);
+        setSavedLoginCodeMode(data.security.staff_login_code);
+        setSecurityMessage({ type: 'ok', text: 'Sign-in security saved. It applies from the next staff login.' });
+      } else {
+        setSecurityMessage({ type: 'error', text: data.error || 'Could not save sign-in security.' });
+      }
+    } catch {
+      setSecurityMessage({ type: 'error', text: 'Network error while saving.' });
+    } finally {
+      setSavingSecurity(false);
     }
   };
 
@@ -156,6 +201,85 @@ export default function AdminSettingsPage() {
             </label>
             <Button variant="primary" onClick={save} disabled={saving}>
               {saving ? 'Saving...' : 'Save notification settings'}
+            </Button>
+          </>
+        )}
+      </Card>
+
+      <Card style={{ marginBottom: 'var(--space-6)' }}>
+        <CardHeader
+          title="Staff sign-in security"
+          subtitle="Add a second step to staff logins: after the password, a 6-digit code is emailed and must be entered to finish signing in. Client logins are not affected."
+        />
+        {loading ? (
+          <Skeleton height="120px" />
+        ) : (
+          <>
+            <fieldset style={{ border: 'none', padding: 0, margin: '0 0 var(--space-3)' }}>
+              <legend style={{ fontSize: 'var(--font-size-sm)', fontWeight: 'var(--font-weight-medium)', marginBottom: 'var(--space-2)', padding: 0 }}>
+                Email a sign-in code when staff log in
+              </legend>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-2)' }}>
+                {LOGIN_CODE_OPTIONS.map((option) => {
+                  const blocked = option.value === 'all_staff' && !status.email;
+                  return (
+                    <label
+                      key={option.value}
+                      style={{
+                        display: 'flex',
+                        alignItems: 'flex-start',
+                        gap: 'var(--space-2)',
+                        fontSize: 'var(--font-size-sm)',
+                        color: blocked ? 'var(--color-text-muted)' : 'var(--color-text-primary)',
+                      }}
+                    >
+                      <input
+                        type="radio"
+                        name="staff-login-code"
+                        value={option.value}
+                        checked={loginCodeMode === option.value}
+                        disabled={blocked}
+                        onChange={() => setLoginCodeMode(option.value)}
+                        style={{ marginTop: 3 }}
+                      />
+                      <span>
+                        <span style={{ fontWeight: 'var(--font-weight-medium)' }}>{option.label}</span>
+                        <span style={{ display: 'block', fontSize: 'var(--font-size-xs)', color: 'var(--color-text-muted)' }}>
+                          {blocked ? 'Needs email delivery to be connected first (see Connected services below).' : option.detail}
+                        </span>
+                      </span>
+                    </label>
+                  );
+                })}
+              </div>
+            </fieldset>
+            <p
+              style={{
+                padding: 'var(--space-3)',
+                borderRadius: 'var(--radius-md)',
+                margin: '0 0 var(--space-4)',
+                fontSize: 'var(--font-size-sm)',
+                backgroundColor: 'var(--color-status-warning-bg)',
+                color: 'var(--color-status-warning-text)',
+              }}
+            >
+              Each staff member must be able to receive email at their @motionz.ai address.
+              {!status.email && loginCodeMode === 'csm' ? ' Email delivery is not connected yet, so CSMs would not be able to sign in.' : ''}
+            </p>
+            {securityMessage && (
+              <p
+                role={securityMessage.type === 'error' ? 'alert' : 'status'}
+                style={{
+                  margin: '0 0 var(--space-3)',
+                  fontSize: 'var(--font-size-sm)',
+                  color: securityMessage.type === 'ok' ? 'var(--color-status-done-text)' : 'var(--color-status-danger-text)',
+                }}
+              >
+                {securityMessage.text}
+              </p>
+            )}
+            <Button variant="primary" onClick={saveSecurity} disabled={savingSecurity || loginCodeMode === savedLoginCodeMode}>
+              {savingSecurity ? 'Saving...' : 'Save sign-in security'}
             </Button>
           </>
         )}

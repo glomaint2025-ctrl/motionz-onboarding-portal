@@ -79,6 +79,26 @@ export function passwordResetEmail(params: { to: string; url: string; expiresInM
   );
 }
 
+export function staffLoginCodeEmail(params: { to: string; code: string; expiresInMinutes: number }): EmailMessage {
+  const message = build(
+    params.to,
+    'Your Motionz sign-in code',
+    'Your sign-in code',
+    [
+      'Enter this code to finish signing in to the Motionz portal:',
+      params.code,
+      `This code expires in ${params.expiresInMinutes} minutes and works once.`,
+    ],
+    undefined,
+    "If this wasn't you, someone has your password. Change your password right away and tell a Motionz administrator.",
+    ['staff-login-code']
+  );
+  // Same content as the text part, with the code shown large.
+  const plain = `<p style="margin:0 0 16px;line-height:1.5;">${escapeHtml(params.code)}</p>`;
+  const large = `<p style="margin:0 0 16px;font-size:32px;font-weight:bold;letter-spacing:0.3em;font-family:'Courier New',Courier,monospace;">${escapeHtml(params.code)}</p>`;
+  return { ...message, html: message.html.replace(plain, () => large) };
+}
+
 export function onboardingSubmittedEmail(params: { to: string; companyName: string; portalUrl: string; fields: Record<string, string> }): EmailMessage {
   const lines = Object.entries(params.fields)
     .filter(([, v]) => v)
