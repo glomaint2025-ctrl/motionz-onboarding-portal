@@ -42,7 +42,18 @@ export function canExposeDevLinks(): boolean {
   return process.env.NODE_ENV !== 'production' && !isEmailConfigured();
 }
 
-export async function sendEmail(message: EmailMessage): Promise<EmailResult> {
+/**
+ * Local testing only: EMAIL_TEST_REDIRECT_TO sends every email to one inbox (the real recipient is put in
+ * the subject), so flows for addresses nobody can read can still be tested. Ignored in production.
+ */
+function applyTestRedirect(message: EmailMessage): EmailMessage {
+  const redirect = process.env.EMAIL_TEST_REDIRECT_TO?.trim();
+  if (!redirect || process.env.NODE_ENV === 'production') return message;
+  return { ...message, to: redirect, toName: undefined, subject: `[for ${message.to}] ${message.subject}` };
+}
+
+export async function sendEmail(original: EmailMessage): Promise<EmailResult> {
+  const message = applyTestRedirect(original);
   if (process.env.RESEND_API_KEY) {
     return sendViaResend(process.env.RESEND_API_KEY, message);
   }

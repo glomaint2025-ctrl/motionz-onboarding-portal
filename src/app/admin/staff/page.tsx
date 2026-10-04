@@ -47,6 +47,7 @@ export default function StaffPage() {
   const clearAddError = () => setAddMessage((prev) => (prev?.type === 'error' ? null : prev));
 
   const [editing, setEditing] = useState<StaffMember | null>(null);
+  const [disableTarget, setDisableTarget] = useState<StaffMember | null>(null);
   const [editName, setEditName] = useState('');
   const [editEmail, setEditEmail] = useState('');
   const [editRole, setEditRole] = useState<'csm' | 'admin'>('csm');
@@ -113,9 +114,13 @@ export default function StaffPage() {
     }
   };
 
-  const toggle = async (member: StaffMember) => {
+  const toggle = async (member: StaffMember, confirmed = false) => {
     const action = member.status === 'suspended' ? 'enable' : 'disable';
-    if (action === 'disable' && !window.confirm(`Disable portal access for ${member.email}?`)) return;
+    if (action === 'disable' && !confirmed) {
+      setDisableTarget(member);
+      return;
+    }
+    setDisableTarget(null);
     setTeamMessage(null);
     try {
       const res = await fetch('/api/admin/staff', {
@@ -371,6 +376,22 @@ export default function StaffPage() {
           </div>
         )}
       </Card>
+
+      <Modal
+        isOpen={Boolean(disableTarget)}
+        onClose={() => setDisableTarget(null)}
+        title="Disable staff member"
+        footer={
+          <div style={{ display: 'flex', gap: 'var(--space-2)', justifyContent: 'flex-end', width: '100%' }}>
+            <Button variant="secondary" onClick={() => setDisableTarget(null)}>Cancel</Button>
+            <Button variant="danger" onClick={() => disableTarget && toggle(disableTarget, true)}>Disable</Button>
+          </div>
+        }
+      >
+        <p>
+          Disable <strong>{disableTarget?.name || disableTarget?.email}</strong>? They are signed out and cannot sign in until you enable them again. Their clients stay assigned to them.
+        </p>
+      </Modal>
 
       <Modal
         isOpen={Boolean(editing)}

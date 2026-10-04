@@ -46,8 +46,10 @@ export function invitationEmail(params: { to: string; url: string; companyName?:
     `You're invited to the ${company} Motionz portal`,
     'Your portal is ready',
     [
-      `${params.invitedBy ? `${params.invitedBy} has` : 'You have been'} invited you to the Motionz client portal for ${company}.`,
-      'Use the button below to activate your access. You can set a password after you sign in.',
+      params.invitedBy
+        ? `${params.invitedBy} has invited you to the Motionz client portal for ${company}.`
+        : `You have been invited to the Motionz client portal for ${company}.`,
+      'Use the button below to set your password and sign in.',
     ],
     { label: 'Activate my access', url: params.url },
     `This link works once and expires in ${params.expiresInHours || 72} hours. If you were not expecting this email, you can ignore it.`,
