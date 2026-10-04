@@ -42,34 +42,11 @@ function getAvatarGradient(name: string): string {
   return AVATAR_GRADIENTS[index];
 }
 
-/** "3 days ago" style hint shown under the created date. */
-function relativeAge(dateString: string): string {
-  const date = new Date(dateString);
-  if (isNaN(date.getTime())) return '';
-  const diffDays = Math.floor((Date.now() - date.getTime()) / (1000 * 60 * 60 * 24));
-  if (diffDays <= 0) return 'Today';
-  if (diffDays === 1) return '1 day ago';
-  if (diffDays < 7) return `${diffDays} days ago`;
-  if (diffDays < 14) return '1 week ago';
-  if (diffDays < 30) return `${Math.floor(diffDays / 7)} weeks ago`;
-  if (diffDays < 60) return '1 month ago';
-  return `${Math.floor(diffDays / 30)} months ago`;
-}
-
 function getInitials(name: string): string {
   if (!name || name === 'Unassigned') return 'U';
   const parts = name.trim().split(/\s+/);
   if (parts.length === 1) return parts[0].substring(0, 2).toUpperCase();
   return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
-}
-
-function getDisplayDomain(email: string, contact?: string): string {
-  if (!email) return contact || '';
-  const atIndex = email.indexOf('@');
-  if (atIndex !== -1 && atIndex < email.length - 1) {
-    return email.substring(atIndex + 1);
-  }
-  return email;
 }
 
 export default function ClientsPage() {
@@ -80,6 +57,17 @@ export default function ClientsPage() {
   const [debouncedSearch, setDebouncedSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
   const [csmFilter, setCsmFilter] = useState('all');
+  // "Still in setup" arrives from the dashboard tile as ?setup=in_progress (also accepts ?status=).
+  const [setupFilter, setSetupFilter] = useState<'all' | 'in_progress'>('all');
+  const [urlReady, setUrlReady] = useState(false);
+
+  useEffect(() => {
+    const query = new URLSearchParams(window.location.search);
+    if (query.get('setup') === 'in_progress') setSetupFilter('in_progress');
+    const status = query.get('status');
+    if (status && ['active', 'onboarding', 'suspended', 'archived'].includes(status)) setStatusFilter(status);
+    setUrlReady(true);
+  }, []);
 
   // Server-side pagination state
   const [page, setPage] = useState(1);
@@ -143,6 +131,7 @@ export default function ClientsPage() {
       });
       if (debouncedSearch.trim()) params.set('search', debouncedSearch.trim());
       if (csmFilter !== 'all') params.set('csm', csmFilter);
+      if (setupFilter !== 'all') params.set('setup', setupFilter);
 
       const res = await fetch(`/api/admin/clients?${params.toString()}`);
       const data = await res.json().catch(() => ({}));
@@ -162,8 +151,9 @@ export default function ClientsPage() {
   };
 
   useEffect(() => {
-    fetchClients();
-  }, [page, pageSize, debouncedSearch, statusFilter, csmFilter]);
+    // Wait until the filters in the page address have been read, so the list is loaded once.
+    if (urlReady) fetchClients();
+  }, [urlReady, page, pageSize, debouncedSearch, statusFilter, csmFilter, setupFilter]);
 
   // Close context menu on outside click, scroll, or resize
   useEffect(() => {
@@ -470,6 +460,7 @@ export default function ClientsPage() {
               setSearchQuery('');
               setStatusFilter('all');
               setCsmFilter('all');
+              setSetupFilter('all');
               setPage(1);
             }}
           >
@@ -481,55 +472,64 @@ export default function ClientsPage() {
         </div>
       </div>
 
+      {setupFilter === 'in_progress' && (
+        <Notice tone="info" style={{ marginBottom: 'var(--space-4)' }}>
+          <span style={{ display: 'inline-flex', gap: 'var(--space-3)', alignItems: 'center', flexWrap: 'wrap' }}>
+            Showing only clients that are still in setup.
+            <button
+              type="button"
+              className="ui-btn-action-portal"
+              onClick={() => {
+                setSetupFilter('all');
+                setPage(1);
+              }}
+            >
+              Show all clients
+            </button>
+          </span>
+        </Notice>
+      )}
+
       {/* 5. Modern Data Table */}
       {loading ? (
-        <TableSkeleton rows={6} columns={8} />
+        <TableSkeleton rows={6} columns={6} />
       ) : loadError ? (
         <Notice onRetry={fetchClients}>{loadError}</Notice>
       ) : (
         <div className="ui-modern-table-card">
           <div style={{ width: '100%', overflowX: 'auto' }}>
-            <table className="ui-modern-table">
+            {/* Six columns that fit a 1024px screen; on phones each row becomes a stacked card (staff-tables.css). */}
+            <table className="ui-modern-table ui-clients-table">
               <thead>
                 <tr>
-                  <th style={{ width: '40px', textAlign: 'center' }}>#</th>
                   <th>Company</th>
-                  <th>Assigned CSM</th>
+                  <th>CSM</th>
                   <th>Status</th>
-                  <th>Setup Progress</th>
+                  <th>Setup progress</th>
                   <th>GoHighLevel</th>
-                  <th>Created</th>
                   <th>Actions</th>
                 </tr>
               </thead>
               <tbody>
                 {displayClients.length === 0 ? (
                   <tr>
-                    <td colSpan={8} style={{ textAlign: 'center', padding: '48px 16px', color: 'var(--color-text-muted)' }}>
+                    <td colSpan={6} style={{ textAlign: 'center', justifyContent: 'center', padding: '48px 16px', color: 'var(--color-text-muted)' }}>
                       {totalClients === 0
                         ? 'No clients yet. Use "Add client" to create the first one.'
                         : 'No clients match your search or filters.'}
                     </td>
                   </tr>
                 ) : (
-                  displayClients.map((client, index) => {
+                  displayClients.map((client) => {
                     const isArchived = Boolean(client.is_archived || client.deleted_at || client.status === 'cancelled');
                     const isSuspended = client.status === 'suspended';
                     const hasCsm = client.csm_name && client.csm_name !== 'Unassigned';
-                    const createdDate = formatDate(client.created_at) || 'Unknown';
-                    const relativeDate = relativeAge(client.created_at);
-                    const domainSubtext = getDisplayDomain(client.primary_email, client.primary_contact_name);
-                    const rowNumber = (page - 1) * pageSize + index + 1;
+                    const createdDate = formatDate(client.created_at);
 
                     return (
                       <tr key={client.id}>
-                        {/* # */}
-                        <td style={{ textAlign: 'center' }}>
-                          <span className="ui-row-num">{rowNumber}</span>
-                        </td>
-
-                        {/* Company / Organization */}
-                        <td>
+                        {/* Company, with the main contact's email and the date added underneath */}
+                        <td className="ui-cell-title" data-label="Company">
                           <div className="ui-company-cell">
                             <div
                               className="ui-company-avatar"
@@ -539,22 +539,20 @@ export default function ClientsPage() {
                             </div>
                             <div className="ui-company-info">
                               <span className="ui-company-name">{client.name}</span>
-                              <span className="ui-company-sub">{domainSubtext}</span>
+                              <span className="ui-company-sub">{client.primary_email || client.primary_contact_name || 'No email'}</span>
+                              {createdDate && <span className="ui-company-date">Added {createdDate}</span>}
                             </div>
                           </div>
                         </td>
 
-                        {/* Assigned CSM */}
-                        <td>
+                        {/* Assigned CSM: the person's name, once */}
+                        <td data-label="CSM">
                           {hasCsm ? (
-                            <div className="ui-csm-cell">
-                              <div className="ui-csm-avatar">
+                            <div className="ui-csm-cell" title={client.csm_email || undefined}>
+                              <div className="ui-csm-avatar" aria-hidden="true">
                                 {getInitials(client.csm_name)}
                               </div>
-                              <div className="ui-csm-details">
-                                <span className="ui-csm-title">Motionz CSM</span>
-                                <span className="ui-csm-sub">{client.csm_name}</span>
-                              </div>
+                              <span className="ui-csm-name">{client.csm_name}</span>
                             </div>
                           ) : (
                             <div className="ui-csm-cell">
@@ -572,7 +570,7 @@ export default function ClientsPage() {
                         </td>
 
                         {/* Status */}
-                        <td>
+                        <td data-label="Status">
                           {isArchived ? (
                             <span className="ui-pill-status ui-pill-status-archived">
                               <span className="ui-pill-status-dot" />
@@ -602,7 +600,7 @@ export default function ClientsPage() {
                         </td>
 
                         {/* Setup Progress */}
-                        <td>
+                        <td data-label="Setup progress">
                           <div className="ui-progress-pill-wrapper">
                             <div className="ui-progress-pill-track">
                               <div
@@ -617,7 +615,7 @@ export default function ClientsPage() {
                         </td>
 
                         {/* GoHighLevel */}
-                        <td>
+                        <td data-label="GoHighLevel">
                           {client.ghl_location_id ? (
                             <span className="ui-ghl-pill ui-ghl-pill-connected">
                               <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
@@ -637,28 +635,21 @@ export default function ClientsPage() {
                           )}
                         </td>
 
-                        {/* Created */}
-                        <td>
-                          <div className="ui-date-cell">
-                            <span className="ui-date-main">{createdDate}</span>
-                            <span className="ui-date-sub">{relativeDate}</span>
-                          </div>
-                        </td>
-
                         {/* Actions */}
-                        <td>
-                          <div className="ui-actions-cell" style={{ justifyContent: 'flex-start' }}>
+                        <td className="ui-cell-actions" data-label="Actions">
+                          <div className="ui-actions-cell">
                             {!isArchived ? (
                               <Link
                                 href={`/portal/${client.id}`}
-                                className="ui-btn-action-portal"
+                                className="ui-btn-action-portal ui-btn-icon-compact"
+                                title={`Open the portal for ${client.name}`}
                               >
-                                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
                                   <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6" />
                                   <polyline points="15 3 21 3 21 9" />
                                   <line x1="10" y1="14" x2="21" y2="3" />
                                 </svg>
-                                Open portal
+                                <span className="ui-action-label">Open portal</span>
                               </Link>
                             ) : (
                               <button

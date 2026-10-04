@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { Input, Select, Button, Modal, buttonClasses } from '@/components/ui';
 import { PORTAL_MODULES } from '@/lib/portal-modules';
-import { Notice, copyText } from '@/components/admin/Notice';
+import { Notice, copyText, useRevealOnMessage } from '@/components/admin/Notice';
 
 export default function AddClientPage() {
   const router = useRouter();
@@ -45,6 +45,11 @@ export default function AddClientPage() {
 
   const [loading, setLoading] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  // Which input the server rejected (name, primary_contact_name, primary_email or phone), if it said.
+  const [fieldError, setFieldError] = useState<{ field: string; message: string } | null>(null);
+  const errorRef = useRevealOnMessage(errorMessage);
+  const errorFor = (field: string) => (fieldError?.field === field ? fieldError.message : undefined);
+  const clearFieldError = (field: string) => setFieldError((prev) => (prev?.field === field ? null : prev));
   const [createdTenant, setCreatedTenant] = useState<any | null>(null);
   const [magicLink, setMagicLink] = useState<string | null>(null);
   const [isSuccessModalOpen, setIsSuccessModalOpen] = useState(false);
@@ -62,6 +67,7 @@ export default function AddClientPage() {
     if (loading) return;
     setLoading(true);
     setErrorMessage(null);
+    setFieldError(null);
 
     try {
       const res = await fetch('/api/admin/clients', {
@@ -80,7 +86,9 @@ export default function AddClientPage() {
       const data = await res.json().catch(() => ({}));
 
       if (!res.ok || !data.success) {
-        setErrorMessage(data.error || 'The client could not be added. Please try again.');
+        const text = data.error || 'The client could not be added. Please try again.';
+        setErrorMessage(text);
+        if (typeof data.field === 'string') setFieldError({ field: data.field, message: text });
       } else {
         setCreatedTenant(data.tenant);
         setEmailDelivered(data.emailDelivered === true);
@@ -130,7 +138,11 @@ export default function AddClientPage() {
         </p>
       </div>
 
-      {errorMessage && <Notice style={{ marginBottom: 'var(--space-5)' }}>{errorMessage}</Notice>}
+      {errorMessage && (
+        <Notice ref={errorRef} style={{ marginBottom: 'var(--space-5)' }}>
+          {errorMessage}
+        </Notice>
+      )}
 
       <form onSubmit={handleSubmit}>
         {/* Section 1: Company & Contact Information */}
@@ -157,7 +169,11 @@ export default function AddClientPage() {
               label="Company name"
               placeholder="e.g. Apex Roofing Pro"
               value={companyName}
-              onChange={(e) => setCompanyName(e.target.value)}
+              onChange={(e) => {
+                setCompanyName(e.target.value);
+                clearFieldError('name');
+              }}
+              error={errorFor('name')}
               maxLength={255}
               required
             />
@@ -166,7 +182,11 @@ export default function AddClientPage() {
               placeholder="e.g. Michael Henderson"
               autoComplete="off"
               value={contactName}
-              onChange={(e) => setContactName(e.target.value)}
+              onChange={(e) => {
+                setContactName(e.target.value);
+                clearFieldError('primary_contact_name');
+              }}
+              error={errorFor('primary_contact_name')}
               maxLength={255}
               required
             />
@@ -177,7 +197,11 @@ export default function AddClientPage() {
               maxLength={254}
               placeholder="e.g. michael@apexroofing.com"
               value={email}
-              onChange={(e) => setEmail(e.target.value)}
+              onChange={(e) => {
+                setEmail(e.target.value);
+                clearFieldError('primary_email');
+              }}
+              error={errorFor('primary_email')}
               required
               helperText="The invitation is emailed to this address when you add the client."
             />
@@ -188,7 +212,11 @@ export default function AddClientPage() {
               maxLength={30}
               placeholder="e.g. +1 555 234 5678"
               value={phone}
-              onChange={(e) => setPhone(e.target.value)}
+              onChange={(e) => {
+                setPhone(e.target.value);
+                clearFieldError('phone');
+              }}
+              error={errorFor('phone')}
             />
           </div>
         </div>

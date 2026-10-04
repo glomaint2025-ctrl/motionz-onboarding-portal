@@ -2,7 +2,8 @@
 
 import React, { useState } from 'react';
 import { Card, CardHeader } from '@/components/ui';
-import { formatDate, formatDateTime } from '@/lib/utils/format';
+import { formatDateTime } from '@/lib/utils/format';
+import { fieldLabel } from '@/lib/utils/log-labels';
 
 export interface OnboardingSubmissionView {
   id: string;
@@ -40,7 +41,8 @@ export const OnboardingAnswers: React.FC<{ submissions: OnboardingSubmissionView
                   className={i === index ? 'ui-pill-status ui-pill-status-active' : 'ui-pill-status'}
                   style={{ cursor: 'pointer', border: 'none' }}
                 >
-                  {i === 0 ? 'Latest' : formatDate(s.submitted_at)}
+                  {/* Date and time: a client can send the form several times in one day. */}
+                  {i === 0 ? `Latest · ${formatDateTime(s.submitted_at)}` : formatDateTime(s.submitted_at)}
                 </button>
               ))}
             </div>
@@ -48,7 +50,7 @@ export const OnboardingAnswers: React.FC<{ submissions: OnboardingSubmissionView
           <dl style={{ margin: 0, display: 'grid', gap: 'var(--space-3)' }}>
             {Object.entries(current.answers).map(([question, answer]) => (
               <div key={question}>
-                <dt style={{ fontSize: 'var(--font-size-xs)', color: 'var(--color-text-muted)' }}>{question}</dt>
+                <dt style={{ fontSize: 'var(--font-size-xs)', color: 'var(--color-text-muted)' }}>{fieldLabel(question)}</dt>
                 <dd style={{ margin: 0, fontSize: 'var(--font-size-sm)', whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>
                   {/^https?:\/\//.test(answer) ? (
                     <a href={answer} target="_blank" rel="noopener noreferrer">

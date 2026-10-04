@@ -2,6 +2,19 @@
 
 import React, { useEffect, useState } from 'react';
 import { Card, CardHeader, Button, Input, Select, StatusBadge, Skeleton, Modal } from '@/components/ui';
+import { Notice } from '@/components/admin/Notice';
+
+type SectionMessage = { type: 'ok' | 'error'; text: string } | null;
+
+/** A result line shown inside the section it belongs to, right next to the form or list it is about. */
+function SectionNotice({ message, style }: { message: SectionMessage; style?: React.CSSProperties }) {
+  if (!message) return null;
+  return (
+    <Notice tone={message.type === 'ok' ? 'success' : 'error'} style={{ wordBreak: 'break-word', ...style }}>
+      {message.text}
+    </Notice>
+  );
+}
 
 interface StaffMember {
   id: string;
@@ -26,7 +39,12 @@ export default function StaffPage() {
   const [email, setEmail] = useState('');
   const [role, setRole] = useState<'csm' | 'admin'>('csm');
   const [busy, setBusy] = useState(false);
-  const [message, setMessage] = useState<{ type: 'ok' | 'error'; text: string } | null>(null);
+  // Each section keeps its own result message, shown inside that section.
+  const [addMessage, setAddMessage] = useState<SectionMessage>(null);
+  const [teamMessage, setTeamMessage] = useState<SectionMessage>(null);
+  const [defaultMessage, setDefaultMessage] = useState<SectionMessage>(null);
+  /** Typing in the Add form clears an old error there (a success line stays until the next submit). */
+  const clearAddError = () => setAddMessage((prev) => (prev?.type === 'error' ? null : prev));
 
   const [editing, setEditing] = useState<StaffMember | null>(null);
   const [editName, setEditName] = useState('');
@@ -64,7 +82,7 @@ export default function StaffPage() {
   const addStaff = async (e: React.FormEvent) => {
     e.preventDefault();
     setBusy(true);
-    setMessage(null);
+    setAddMessage(null);
     try {
       const res = await fetch('/api/admin/staff', {
         method: 'POST',
@@ -73,7 +91,7 @@ export default function StaffPage() {
       });
       const data = await res.json();
       if (data.success) {
-        setMessage({
+        setAddMessage({
           type: 'ok',
           text: data.emailDelivered
             ? `${data.staff.email} was added and emailed a link to set their password.`
@@ -86,10 +104,10 @@ export default function StaffPage() {
         setRole('csm');
         load();
       } else {
-        setMessage({ type: 'error', text: data.error || 'Could not add staff member.' });
+        setAddMessage({ type: 'error', text: data.error || 'Could not add the staff member.' });
       }
     } catch {
-      setMessage({ type: 'error', text: 'Network error.' });
+      setAddMessage({ type: 'error', text: 'Could not reach the server. The staff member was not added.' });
     } finally {
       setBusy(false);
     }
@@ -98,14 +116,23 @@ export default function StaffPage() {
   const toggle = async (member: StaffMember) => {
     const action = member.status === 'suspended' ? 'enable' : 'disable';
     if (action === 'disable' && !window.confirm(`Disable portal access for ${member.email}?`)) return;
-    const res = await fetch('/api/admin/staff', {
-      method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ id: member.id, action }),
-    });
-    const data = await res.json();
-    if (data.success) load();
-    else setMessage({ type: 'error', text: data.error || 'Could not update staff member.' });
+    setTeamMessage(null);
+    try {
+      const res = await fetch('/api/admin/staff', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id: member.id, action }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (data.success) {
+        setTeamMessage({ type: 'ok', text: `${member.name || member.email} was ${action === 'disable' ? 'disabled' : 'enabled'}.` });
+        load();
+      } else {
+        setTeamMessage({ type: 'error', text: data.error || 'Could not update the staff member.' });
+      }
+    } catch {
+      setTeamMessage({ type: 'error', text: 'Could not reach the server. Nothing was changed.' });
+    }
   };
 
   const openEdit = (member: StaffMember) => {
@@ -120,6 +147,7 @@ export default function StaffPage() {
   const saveDefaultCalendar = async (e: React.FormEvent) => {
     e.preventDefault();
     const id = defaultDraft.trim();
+    setDefaultMessage(null);
     if (!CALENDAR_ID_PATTERN.test(id)) {
       setDefaultError(CALENDAR_ID_ERROR);
       return;
@@ -136,12 +164,13 @@ export default function StaffPage() {
       if (data.success) {
         setDefaultCalendar(data.defaultCalendarId);
         setDefaultDraft(data.defaultCalendarId);
-        setMessage({ type: 'ok', text: data.changed ? 'Default booking calendar saved.' : 'No changes to save.' });
+        setDefaultError('');
+        setDefaultMessage({ type: 'ok', text: data.changed ? 'Default booking calendar saved.' : 'No changes to save.' });
       } else {
         setDefaultError(data.error || 'Could not save the default booking calendar.');
       }
     } catch {
-      setDefaultError('Network error. Nothing was saved.');
+      setDefaultError('Could not reach the server. Nothing was saved.');
     } finally {
       setDefaultBusy(false);
     }
@@ -174,7 +203,7 @@ export default function StaffPage() {
       const data = await res.json();
       if (data.success) {
         const emailChanged = (data.changed || []).includes('email');
-        setMessage({
+        setTeamMessage({
           type: 'ok',
           text:
             (data.changed || []).length === 0
@@ -189,7 +218,7 @@ export default function StaffPage() {
         setEditError(data.error || 'Could not save the changes.');
       }
     } catch {
-      setEditError('Network error. Nothing was saved.');
+      setEditError('Could not reach the server. Nothing was saved.');
     } finally {
       setEditBusy(false);
     }
@@ -204,28 +233,37 @@ export default function StaffPage() {
         </p>
       </div>
 
-      {message && (
-        <div
-          style={{
-            padding: 'var(--space-3)',
-            borderRadius: 'var(--radius-md)',
-            marginBottom: 'var(--space-4)',
-            fontSize: 'var(--font-size-sm)',
-            wordBreak: 'break-all',
-            backgroundColor: message.type === 'ok' ? 'var(--color-status-done-bg)' : 'var(--color-status-danger-bg)',
-            color: message.type === 'ok' ? 'var(--color-status-done-text)' : 'var(--color-status-danger-text)',
-          }}
-        >
-          {message.text}
-        </div>
-      )}
-
       <Card style={{ marginBottom: 'var(--space-6)' }}>
         <CardHeader title="Add a staff member" subtitle="They receive an email to set their password, then sign in on the Staff tab." />
         <form onSubmit={addStaff} style={{ display: 'grid', gap: 'var(--space-3)', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', alignItems: 'end' }}>
-          <Input label="Full name" value={name} onChange={(e) => setName(e.target.value)} required />
-          <Input label="Work email" type="email" placeholder="name@motionz.ai" value={email} onChange={(e) => setEmail(e.target.value)} required />
-          <Select label="Role" value={role} onChange={(e) => setRole(e.target.value === 'admin' ? 'admin' : 'csm')}>
+          <Input
+            label="Full name"
+            value={name}
+            onChange={(e) => {
+              setName(e.target.value);
+              clearAddError();
+            }}
+            required
+          />
+          <Input
+            label="Work email"
+            type="email"
+            placeholder="name@motionz.ai"
+            value={email}
+            onChange={(e) => {
+              setEmail(e.target.value);
+              clearAddError();
+            }}
+            required
+          />
+          <Select
+            label="Role"
+            value={role}
+            onChange={(e) => {
+              setRole(e.target.value === 'admin' ? 'admin' : 'csm');
+              clearAddError();
+            }}
+          >
             <option value="csm">CSM</option>
             <option value="admin">Admin (CSM manager)</option>
           </Select>
@@ -233,6 +271,8 @@ export default function StaffPage() {
             {busy ? 'Adding...' : 'Add staff member'}
           </Button>
         </form>
+        {/* The result appears right under the form that caused it. */}
+        <SectionNotice message={addMessage} style={{ marginTop: 'var(--space-3)' }} />
       </Card>
 
       <Card style={{ marginBottom: 'var(--space-6)' }}>
@@ -256,7 +296,12 @@ export default function StaffPage() {
                 id="default-booking-calendar"
                 label="Default booking calendar ID (GoHighLevel)"
                 value={defaultDraft}
-                onChange={(e) => setDefaultDraft(e.target.value)}
+                onChange={(e) => {
+                  // Correcting the field clears the old error and result straight away.
+                  setDefaultDraft(e.target.value);
+                  setDefaultError('');
+                  setDefaultMessage(null);
+                }}
                 error={defaultError || undefined}
                 helperText="GHL → Calendars → the calendar → the id in the booking link (…/widget/booking/<id>)."
                 required
@@ -272,10 +317,12 @@ export default function StaffPage() {
             </Button>
           </form>
         )}
+        <SectionNotice message={defaultMessage} style={{ marginTop: 'var(--space-3)' }} />
       </Card>
 
       <Card>
         <CardHeader title="Team" subtitle={loading ? undefined : `${staff.length} people`} />
+        <SectionNotice message={teamMessage} style={{ marginBottom: 'var(--space-3)' }} />
         {loading ? (
           <Skeleton height="120px" />
         ) : (
@@ -356,14 +403,26 @@ export default function StaffPage() {
                 {editError}
               </div>
             )}
-            <Input id="edit-staff-name" label="Full name" value={editName} onChange={(e) => setEditName(e.target.value)} required />
+            <Input
+              id="edit-staff-name"
+              label="Full name"
+              value={editName}
+              onChange={(e) => {
+                setEditName(e.target.value);
+                setEditError('');
+              }}
+              required
+            />
             <Input
               id="edit-staff-email"
               label="Work email"
               type="email"
               placeholder="name@motionz.ai"
               value={editEmail}
-              onChange={(e) => setEditEmail(e.target.value)}
+              onChange={(e) => {
+                setEditEmail(e.target.value);
+                setEditError('');
+              }}
               required
               helperText="Must be an @motionz.ai address. Changing it changes the email they sign in with; their password stays the same."
             />
@@ -383,7 +442,10 @@ export default function StaffPage() {
                 id="edit-staff-calendar"
                 label="Booking calendar ID (GoHighLevel)"
                 value={editCalendar}
-                onChange={(e) => setEditCalendar(e.target.value)}
+                onChange={(e) => {
+                  setEditCalendar(e.target.value);
+                  setEditError('');
+                }}
                 helperText="GHL → Calendars → the CSM's calendar → the id in the booking link (…/widget/booking/<id>). Leave empty to use the default calendar."
               />
             )}

@@ -1,0 +1,262 @@
+/* ==========================================================================
+   Staff (Admin + CSM) client tables and small form rows.
+   Loaded by the admin and CSM layouts only. The client tables must never need
+   a sideways scrollbar: they tighten on laptops and become stacked cards on phones.
+   ========================================================================== */
+
+/* Header text sits exactly above its column content (same padding, same side). */
+.ui-modern-table.ui-clients-table th,
+.ui-modern-table.ui-clients-table td {
+  text-align: left;
+}
+
+.ui-clients-table .ui-actions-cell {
+  justify-content: flex-start;
+}
+
+.ui-clients-table .ui-company-info {
+  min-width: 0;
+}
+
+.ui-clients-table .ui-company-name,
+.ui-clients-table .ui-company-sub,
+.ui-clients-table .ui-csm-name {
+  overflow-wrap: anywhere;
+}
+
+.ui-company-date {
+  font-size: var(--font-size-xs);
+  color: var(--color-text-muted);
+  margin-top: 2px;
+}
+
+.ui-csm-name {
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-medium);
+  color: var(--color-text-primary);
+  line-height: 1.3;
+}
+
+/* Laptop widths (about 1024px to 1400px): drop decoration and tighten spacing so all columns fit. */
+@media (max-width: 1399px) {
+  .ui-modern-table.ui-clients-table th,
+  .ui-modern-table.ui-clients-table td {
+    padding-left: var(--space-2);
+    padding-right: var(--space-2);
+  }
+
+  .ui-modern-table.ui-clients-table th {
+    white-space: normal;
+  }
+
+  .ui-clients-table .ui-company-avatar,
+  .ui-clients-table .ui-csm-avatar,
+  .ui-clients-table .ui-csm-unassigned-icon,
+  .ui-clients-table .ui-ghl-pill svg {
+    display: none;
+  }
+
+  /* Percentage above a short bar, instead of side by side. */
+  .ui-clients-table .ui-progress-pill-wrapper {
+    flex-direction: column-reverse;
+    align-items: flex-start;
+    gap: var(--space-1);
+    min-width: 56px;
+  }
+
+  .ui-clients-table .ui-progress-pill-track {
+    flex: none;
+    width: 100%;
+    min-width: 48px;
+  }
+
+  .ui-clients-table .ui-progress-pill-label {
+    min-width: 0;
+    text-align: left;
+  }
+}
+
+/* Narrowest table widths: "Open portal" becomes an icon button (its name stays for screen readers). */
+@media (min-width: 768px) and (max-width: 1199px) {
+  .ui-clients-table .ui-btn-action-portal.ui-btn-icon-compact {
+    padding: 0;
+    width: 34px;
+    justify-content: center;
+  }
+
+  .ui-clients-table .ui-btn-icon-compact .ui-action-label {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    margin: -1px;
+    padding: 0;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+    border: 0;
+  }
+}
+
+/* Phones: each client is a stacked card, with the column name beside each value. */
+@media (max-width: 767px) {
+  .ui-modern-table.ui-clients-table,
+  .ui-modern-table.ui-clients-table tbody {
+    display: block;
+    width: 100%;
+  }
+
+  .ui-modern-table.ui-clients-table thead {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    margin: -1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    border: 0;
+  }
+
+  .ui-modern-table.ui-clients-table tbody tr {
+    display: block;
+    padding: var(--space-3) var(--space-4);
+    border-bottom: 1px solid var(--color-border-subtle);
+  }
+
+  .ui-modern-table.ui-clients-table tbody tr:last-child {
+    border-bottom: none;
+  }
+
+  .ui-modern-table.ui-clients-table td {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--space-3);
+    padding: var(--space-1) 0;
+    border-bottom: none;
+  }
+
+  .ui-modern-table.ui-clients-table td[data-label]::before {
+    content: attr(data-label);
+    flex-shrink: 0;
+    font-size: var(--font-size-xs);
+    font-weight: var(--font-weight-semibold);
+    color: var(--color-text-muted);
+  }
+
+  /* The company is the card title, and the buttons get their own full row: no label needed. */
+  .ui-modern-table.ui-clients-table td.ui-cell-title::before,
+  .ui-modern-table.ui-clients-table td.ui-cell-actions::before {
+    content: none;
+  }
+
+  .ui-modern-table.ui-clients-table td.ui-cell-title {
+    padding-bottom: var(--space-2);
+  }
+
+  .ui-modern-table.ui-clients-table td.ui-cell-actions {
+    justify-content: flex-start;
+    padding-top: var(--space-2);
+  }
+
+  .ui-clients-table .ui-actions-cell {
+    flex-wrap: wrap;
+  }
+
+  .ui-clients-table .ui-progress-pill-wrapper {
+    align-items: flex-end;
+  }
+
+  .ui-clients-table .ui-progress-pill-label {
+    text-align: right;
+  }
+
+  .ui-modern-table.ui-clients-table tbody tr:hover td {
+    background-color: transparent;
+  }
+}
+
+/* ==========================================================================
+   Admin dashboard tiles: five across on wide screens, never an empty slot.
+   ========================================================================== */
+.admin-metric-grid {
+  display: grid;
+  gap: var(--space-4);
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  margin-bottom: var(--space-6);
+}
+
+.admin-metric-link {
+  display: block;
+  height: 100%;
+  text-decoration: none;
+  color: inherit;
+  border-radius: var(--radius-lg);
+}
+
+.admin-metric-link:hover {
+  text-decoration: none;
+  color: inherit;
+}
+
+.admin-metric-link:hover .ui-card {
+  border-color: var(--color-border-strong);
+}
+
+.admin-metric-link:focus-visible {
+  outline: 2px solid var(--color-primary);
+  outline-offset: 2px;
+}
+
+/* Medium screens: two columns, and the fifth tile spans the full row so no gap is left. */
+@media (max-width: 1399px) {
+  .admin-metric-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .admin-metric-grid > :last-child:nth-child(odd) {
+    grid-column: 1 / -1;
+  }
+}
+
+@media (max-width: 520px) {
+  .admin-metric-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+/* ==========================================================================
+   Inline "input + Save / Cancel" row (GHL Connect Location ID editor).
+   The buttons line up with the input itself, not with its helper text.
+   ========================================================================== */
+.admin-inline-edit {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  column-gap: var(--space-2);
+  row-gap: var(--space-1);
+  align-items: center;
+  margin-top: var(--space-3);
+}
+
+.admin-inline-edit > label,
+.admin-inline-edit > .admin-inline-edit-note {
+  grid-column: 1 / -1;
+}
+
+.admin-inline-edit > label {
+  margin-bottom: 0;
+}
+
+.admin-inline-edit-actions {
+  display: flex;
+  gap: var(--space-2);
+  align-items: center;
+}
+
+.admin-inline-edit-actions .ui-btn {
+  min-height: var(--control-height);
+}
+
+@media (max-width: 640px) {
+  .admin-inline-edit {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}

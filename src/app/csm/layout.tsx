@@ -2,6 +2,7 @@
 
 import React from 'react';
 import { AppShell } from '@/components/layout/AppShell';
+import '@/styles/staff-tables.css';
 
 export default function CSMLayout({
   children,

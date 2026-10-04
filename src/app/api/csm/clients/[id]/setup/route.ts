@@ -64,7 +64,7 @@ export async function PUT(
     // Validate status values per authoritative spec: not_started, in_progress, done
     if (status && !['not_started', 'in_progress', 'done'].includes(status)) {
       return NextResponse.json(
-        { error: 'Choose a status: Not started, In progress or Done.' },
+        { error: 'Choose a status: Not started, In progress or Done.', field: 'status' },
         { status: 400 }
       );
     }
@@ -72,19 +72,22 @@ export async function PUT(
     // Only fields that were sent are changed; text is trimmed and length-limited.
     // The client always sees "What it is", "Right now" and "Unlocks", so they cannot be blank.
     // Only "What we need from you" may be left empty.
-    const text = (key: string, label: string, max: number, required = true) =>
-      key in body ? { [key]: validateText(body[key], label, { max, required }) ?? '' } : {};
-    let textUpdates: Record<string, string>;
-    try {
-      textUpdates = {
-        ...text('what_it_is', 'What it is', 2000),
-        ...text('right_now', 'Right now', 2000),
-        ...text('we_need_from_you', 'What we need from you', 2000, false),
-        ...text('unlocks', 'Unlocks', 2000),
-      };
-      if ('name' in body) textUpdates.name = validateText(body.name, 'Step name', { required: true, max: 120 })!;
-    } catch (e: any) {
-      return NextResponse.json({ error: e.message }, { status: 400 });
+    // A validation error names its field, so the form can mark the right input.
+    const fields: [key: string, label: string, max: number, required: boolean][] = [
+      ['what_it_is', 'What it is', 2000, true],
+      ['right_now', 'Right now', 2000, true],
+      ['we_need_from_you', 'What we need from you', 2000, false],
+      ['unlocks', 'Unlocks', 2000, true],
+      ['name', 'Step name', 120, true],
+    ];
+    const textUpdates: Record<string, string> = {};
+    for (const [key, label, max, required] of fields) {
+      if (!(key in body)) continue;
+      try {
+        textUpdates[key] = validateText(body[key], label, { max, required }) ?? '';
+      } catch (e: any) {
+        return NextResponse.json({ error: e.message, field: key }, { status: 400 });
+      }
     }
 
     const updatedStep = await updateClientSetupStep(tenant.id, stepKey, {

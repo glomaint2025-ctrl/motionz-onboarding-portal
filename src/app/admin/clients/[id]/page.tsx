@@ -8,7 +8,7 @@ import { Icon } from '@/components/brand';
 import { PORTAL_MODULES } from '@/lib/portal-modules';
 import { OnboardingAnswers, OnboardingSubmissionView } from '@/components/onboarding/OnboardingAnswers';
 import { ClientRecords } from '@/components/admin/ClientRecords';
-import { Notice, clientStatusLabel, copyText } from '@/components/admin/Notice';
+import { Notice, clientStatusLabel, copyText, useRevealOnMessage } from '@/components/admin/Notice';
 import { MemberModulePicker, memberSelectableModules } from '@/components/admin/MemberModulePicker';
 import { formatDateTime } from '@/lib/utils/format';
 import { roleLabel } from '@/lib/utils/log-labels';
@@ -63,6 +63,11 @@ export default function ClientDetailPage() {
   const [saveSuccess, setSaveSuccess] = useState(false);
   const [saveError, setSaveError] = useState('');
   const [isSaving, setIsSaving] = useState(false);
+  // Which input the server rejected (name, phone or CSM), if it said.
+  const [saveFieldError, setSaveFieldError] = useState<{ field: string; message: string } | null>(null);
+  const saveErrorRef = useRevealOnMessage(saveError);
+  const saveErrorFor = (field: string) => (saveFieldError?.field === field ? saveFieldError.message : undefined);
+  const clearSaveFieldError = (field: string) => setSaveFieldError((prev) => (prev?.field === field ? null : prev));
   const [isArchiveModalOpen, setIsArchiveModalOpen] = useState(false);
   const [isArchiving, setIsArchiving] = useState(false);
   const [archiveError, setArchiveError] = useState('');
@@ -238,7 +243,12 @@ export default function ClientDetailPage() {
       const data = await res.json().catch(() => ({}));
       if (res.ok && data.success) {
         setTenant(data.tenant);
-        setFeatures(data.features || {});
+        // Keep only real portal sections; a legacy switch such as "orders" is never shown or saved.
+        setFeatures(
+          Object.fromEntries(
+            Object.entries(data.features || {}).filter(([key]) => PORTAL_MODULES.some((m) => m.key === key))
+          ) as Record<string, boolean>
+        );
         setInvitations(data.invitations || []);
         setMembers(data.members || []);
         setTrackingSheetUrl(data.trackingSheetUrl || null);
@@ -274,6 +284,7 @@ export default function ClientDetailPage() {
     if (isSaving) return;
     setIsSaving(true);
     setSaveError('');
+    setSaveFieldError(null);
     setSaveSuccess(false);
     const editableStatus = tenant && !tenant.deleted_at && (tenant.status === 'active' || tenant.status === 'onboarding');
     try {
@@ -295,7 +306,9 @@ export default function ClientDetailPage() {
         setSaveSuccess(true);
         setTimeout(() => setSaveSuccess(false), 4000);
       } else {
-        setSaveError(data.error || 'Your changes were not saved. Please try again.');
+        const text = data.error || 'Your changes were not saved. Please try again.';
+        setSaveError(text);
+        if (typeof data.field === 'string') setSaveFieldError({ field: data.field, message: text });
       }
     } catch {
       setSaveError('Could not reach the server. Your changes were not saved.');
@@ -811,7 +824,11 @@ export default function ClientDetailPage() {
           <Input
             label="Company name"
             value={companyName}
-            onChange={(e) => setCompanyName(e.target.value)}
+            onChange={(e) => {
+              setCompanyName(e.target.value);
+              clearSaveFieldError('name');
+            }}
+            error={saveErrorFor('name')}
             maxLength={255}
             required
           />
@@ -820,7 +837,11 @@ export default function ClientDetailPage() {
             type="tel"
             autoComplete="off"
             value={phone}
-            onChange={(e) => setPhone(e.target.value)}
+            onChange={(e) => {
+              setPhone(e.target.value);
+              clearSaveFieldError('phone');
+            }}
+            error={saveErrorFor('phone')}
             maxLength={30}
             placeholder="e.g. +1 555 234 5678"
           />
@@ -881,7 +902,15 @@ export default function ClientDetailPage() {
         {/* Assigned CSM */}
         <Card style={{ marginBottom: 'var(--space-5)' }}>
           <CardHeader title="Customer Success Manager" subtitle="The Motionz team member who looks after this client." />
-          <Select label="Assigned CSM" value={csmUserId} onChange={(e) => setCsmUserId(e.target.value)}>
+          <Select
+            label="Assigned CSM"
+            value={csmUserId}
+            onChange={(e) => {
+              setCsmUserId(e.target.value);
+              clearSaveFieldError('csm_user_id');
+            }}
+            error={saveErrorFor('csm_user_id')}
+          >
             <option value="">No CSM assigned</option>
             {availableCsms.map((c) => (
               <option key={c.id} value={c.id}>
@@ -926,7 +955,12 @@ export default function ClientDetailPage() {
             Your changes were saved.
           </Notice>
         )}
-        {saveError && <Notice style={{ marginBottom: 'var(--space-4)' }}>{saveError}</Notice>}
+        {saveError && (
+          <Notice ref={saveErrorRef} style={{ marginBottom: 'var(--space-4)' }}>
+            {saveError}
+            {saveFieldError && ['name', 'phone', 'csm_user_id'].includes(saveFieldError.field) ? ' The field is marked above.' : ''}
+          </Notice>
+        )}
 
         <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 'var(--space-3)', marginBottom: 'var(--space-6)' }}>
           <Link
@@ -1000,9 +1034,14 @@ export default function ClientDetailPage() {
                         {roleLabel(member.role)}
                       </span>
                     </div>
-                    <div style={{ fontSize: 'var(--font-size-xs)', color: 'var(--color-text-muted)', marginTop: '4px' }}>
-                      {member.email} {member.phone ? `· ${member.phone}` : ''}
+                    <div style={{ fontSize: 'var(--font-size-xs)', color: 'var(--color-text-muted)', marginTop: '4px', wordBreak: 'break-word' }}>
+                      {member.email}
                     </div>
+                    {member.phone && (
+                      <div style={{ fontSize: 'var(--font-size-xs)', color: 'var(--color-text-muted)', marginTop: '2px', whiteSpace: 'nowrap' }}>
+                        {member.phone}
+                      </div>
+                    )}
 
                     {isSuspended && (
                       <div style={{ marginTop: 'var(--space-2)', fontSize: 'var(--font-size-xs)', color: 'var(--color-status-suspended-text)' }}>

@@ -31,7 +31,7 @@ function Metric({ label, value, hint, href }: { label: string; value: React.Reac
     </Card>
   );
   return href ? (
-    <Link href={href} style={{ textDecoration: 'none', color: 'inherit' }}>
+    <Link href={href} className="admin-metric-link">
       {body}
     </Link>
   ) : (
@@ -105,8 +105,8 @@ export default function AdminDashboardPage() {
       )}
 
       {!data && !error ? (
-        <div style={{ display: 'grid', gap: 'var(--space-4)', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))' }}>
-          {[1, 2, 3, 4].map((i) => (
+        <div className="admin-metric-grid">
+          {[1, 2, 3, 4, 5].map((i) => (
             <Card key={i}>
               <Skeleton height="72px" />
             </Card>
@@ -114,9 +114,15 @@ export default function AdminDashboardPage() {
         </div>
       ) : data ? (
         <>
-          <div style={{ display: 'grid', gap: 'var(--space-4)', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', marginBottom: 'var(--space-6)' }}>
+          {/* Every tile opens the page where its number is managed. */}
+          <div className="admin-metric-grid">
             <Metric label="Active clients" value={data.clients.active} hint={`${data.clients.onboarding} onboarding · ${data.clients.total} total`} href="/admin/clients" />
-            <Metric label="Still in setup" value={data.inSetup} hint={`${data.stuck.length} stuck 14+ days on one step`} />
+            <Metric
+              label="Still in setup"
+              value={data.inSetup}
+              hint={`${data.stuck.length} stuck 14+ days on one step`}
+              href="/admin/clients?setup=in_progress"
+            />
             <Metric
               label="GHL Connect"
               value={`${data.ghl.connected} / ${data.ghl.total}`}
@@ -135,7 +141,7 @@ export default function AdminDashboardPage() {
               hint={data.security.highSeverity ? `${data.security.highSeverity} high severity` : 'None high severity'}
               href="/admin/security-alerts"
             />
-            <Metric label="New clients (30 days)" value={data.clients.newLast30Days} hint={`${data.clients.cancelledOrArchived} archived`} />
+            <Metric label="New clients (30 days)" value={data.clients.newLast30Days} hint={`${data.clients.cancelledOrArchived} archived`} href="/admin/clients" />
           </div>
 
           {data.unmatchedSubmissions > 0 && (

@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { auditLogRepository, securityEventRepository } from '@/lib/db/repositories';
+import { auditLogRepository, securityEventRepository, tenantRepository } from '@/lib/db/repositories';
 import type { SecuritySeverity } from '@/lib/db/schema';
 import { requireAuth, handleAuthError } from '@/lib/auth/guard';
 import { parsePaginationParams, buildPaginationMeta } from '@/lib/utils/pagination';
@@ -7,6 +7,22 @@ import { AUDIT_ACTION_LABELS, SECURITY_EVENT_LABELS, keysMatchingLabel } from '@
 
 const SEVERITIES: SecuritySeverity[] = ['info', 'low', 'medium', 'high', 'critical'];
 const HIGH: SecuritySeverity[] = ['high', 'critical'];
+
+/**
+ * Adds `tenant_name` to every row that belongs to a client, so identical-looking rows
+ * (e.g. many "New lead received from GoHighLevel") can be told apart. Archived clients keep their name.
+ */
+async function withTenantNames<T extends { tenant_id?: string | null }>(rows: T[]): Promise<(T & { tenant_name: string | null })[]> {
+  const ids = Array.from(new Set(rows.map((r) => r.tenant_id).filter((id): id is string => Boolean(id))));
+  const names = new Map<string, string>();
+  await Promise.all(
+    ids.map(async (id) => {
+      const tenant = await tenantRepository.findById(id, { includeArchived: true }).catch(() => null);
+      if (tenant?.name) names.set(id, tenant.name);
+    })
+  );
+  return rows.map((r) => ({ ...r, tenant_name: (r.tenant_id && names.get(r.tenant_id)) || null }));
+}
 
 function parseDate(value: string | null, name: string): string | undefined {
   if (!value) return undefined;
@@ -85,8 +101,8 @@ export async function GET(request: Request) {
     return NextResponse.json({
       success: true,
       range: { from: from || null, to: to || null },
-      ...(audit ? { auditLogs: audit.rows } : {}),
-      ...(security ? { securityEvents: security.rows } : {}),
+      ...(audit ? { auditLogs: await withTenantNames(audit.rows) } : {}),
+      ...(security ? { securityEvents: await withTenantNames(security.rows) } : {}),
       pagination: typeParam === 'security' ? securityPagination : typeParam === 'audit' ? auditPagination : { audit: auditPagination, security: securityPagination },
       summary: {
         ...(security ? { securityTotal: security.total, highSeverity: highSeverity?.total ?? 0 } : {}),
