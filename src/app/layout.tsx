@@ -19,9 +19,12 @@ export const metadata: Metadata = {
   icons: {
     icon: [
       // Served from /icons because the auth middleware only lets /icons/* through unauthenticated.
-      { url: '/icons/favicon.svg', type: 'image/svg+xml' },
+      { url: '/icons/favicon.ico', sizes: '16x16 32x32 48x48', type: 'image/x-icon' },
+      { url: '/icons/favicon-32.png', sizes: '32x32', type: 'image/png' },
+      { url: '/icons/favicon-48.png', sizes: '48x48', type: 'image/png' },
       { url: '/icons/icon-192.png', sizes: '192x192', type: 'image/png' },
     ],
+    shortcut: ['/icons/favicon.ico'],
     apple: [{ url: '/icons/apple-touch-icon.png', sizes: '180x180', type: 'image/png' }],
   },
   appleWebApp: {
@@ -39,7 +42,7 @@ export const viewport: Viewport = {
   width: 'device-width',
   initialScale: 1,
   viewportFit: 'cover',
-  themeColor: '#0E1217',
+  themeColor: '#090703',
   colorScheme: 'dark',
 };
 

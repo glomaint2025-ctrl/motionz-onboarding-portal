@@ -27,8 +27,8 @@ body {
   min-height: 100dvh;
   background-color: var(--color-bg-base);
   background-image:
-    radial-gradient(1200px 600px at 85% -10%, rgba(69, 176, 216, 0.06), transparent 60%),
-    radial-gradient(900px 500px at -10% 110%, rgba(244, 167, 100, 0.035), transparent 60%);
+    radial-gradient(1200px 600px at 85% -10%, rgba(252, 138, 1, 0.055), transparent 60%),
+    radial-gradient(900px 500px at -10% 110%, rgba(252, 138, 1, 0.025), transparent 60%);
   background-attachment: fixed;
   color: var(--color-text-primary);
   overflow-x: hidden;
@@ -74,8 +74,8 @@ a:hover {
 img, svg { flex-shrink: 0; }
 
 ::selection {
-  background: rgba(69, 176, 216, 0.35);
-  color: #ffffff;
+  background: var(--color-primary-selection);
+  color: var(--color-text-primary);
 }
 
 /* Accessible Focus Styles: a clear ring that components' box-shadows can't hide */

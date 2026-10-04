@@ -1,49 +1,39 @@
 import React from 'react';
 
-export interface MotionzMarkProps extends React.SVGProps<SVGSVGElement> {
+export interface MotionzMarkProps
+  extends Omit<React.ImgHTMLAttributes<HTMLImageElement>, 'src' | 'srcSet' | 'width' | 'height' | 'alt'> {
   size?: number;
+  /** Accessible name. When omitted the mark is decorative (hidden from assistive tech). */
   title?: string;
 }
 
-/**
- * Motionz app mark: a rounded tile in the brand gradient with a flowing "M".
- * The same geometry is used for the favicon and PWA icons.
+/*
+ * The client's logo (orange badge with the robot face), pre-rendered from
+ * public/brand/logo.webp at 64/128/256px with rounded corners.
+ * Served from /icons because the auth middleware only lets /icons/* through
+ * unauthenticated (the login page needs the logo before a session exists).
+ * Identical copies live in public/brand/ for use outside the app.
  */
-export const MotionzMark: React.FC<MotionzMarkProps> = ({ size = 32, title, ...props }) => {
-  // Unique per instance: a gradient referenced by id from a hidden (display:none) copy
-  // of the logo would otherwise fail to paint in visible copies.
-  const gradientId = `motionz-mark-${React.useId().replace(/:/g, '')}`;
-  return (
-  <svg
-    xmlns="http://www.w3.org/2000/svg"
+const LOGO_SIZES = [64, 128, 256] as const;
+const logoSrc = (px: number) => `/icons/logo-${LOGO_SIZES.find((s) => s >= px) ?? 256}.png`;
+
+/** Motionz app mark: the client's logo badge as a fixed-size square image. */
+export const MotionzMark: React.FC<MotionzMarkProps> = ({ size = 32, title, className = '', style, ...props }) => (
+  // eslint-disable-next-line @next/next/no-img-element -- tiny static asset; must load without auth and without the image optimizer
+  <img
+    src={logoSrc(size)}
+    srcSet={`${logoSrc(size)} 1x, ${logoSrc(size * 2)} 2x`}
     width={size}
     height={size}
-    viewBox="0 0 48 48"
-    role={title ? 'img' : undefined}
+    alt={title ?? ''}
     aria-hidden={title ? undefined : true}
-    focusable="false"
+    decoding="async"
+    draggable={false}
+    className={`brand-mark ${className}`.trim()}
+    style={{ width: size, height: size, ...style }}
     {...props}
-  >
-    {title && <title>{title}</title>}
-    <defs>
-      <linearGradient id={gradientId} x1="0" y1="0" x2="48" y2="48" gradientUnits="userSpaceOnUse">
-        <stop offset="0" stopColor="#4CC0E6" />
-        <stop offset="0.55" stopColor="#2D8FC4" />
-        <stop offset="1" stopColor="#3466C9" />
-      </linearGradient>
-    </defs>
-    <rect width="48" height="48" rx="12" fill={`url(#${gradientId})`} />
-    <path
-      d="M12.5 33V16.5L24 28l11.5-11.5V33"
-      fill="none"
-      stroke="#FFFFFF"
-      strokeWidth="5"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-    />
-  </svg>
-  );
-};
+  />
+);
 
 export interface MotionzWordmarkProps {
   size?: number;
