@@ -70,7 +70,7 @@ export function useRevealOnMessage<T extends HTMLElement = HTMLDivElement>(messa
   useEffect(() => {
     const el = ref.current;
     if (!message || !el) return;
-    el.scrollIntoView({ block: 'center', behavior: 'smooth' });
+    el.scrollIntoView({ block: 'center' });
     el.focus({ preventScroll: true });
   }, [message]);
   return ref;

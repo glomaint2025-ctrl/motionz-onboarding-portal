@@ -111,7 +111,7 @@ export default function ClientOverviewPage() {
   // The result appears right above the send button; bring it into view and announce it.
   useEffect(() => {
     if (!changeNotice) return;
-    changeNoticeRef.current?.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+    changeNoticeRef.current?.scrollIntoView({ block: 'nearest' });
     changeNoticeRef.current?.focus({ preventScroll: true });
   }, [changeNotice]);
 

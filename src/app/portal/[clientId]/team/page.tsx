@@ -340,7 +340,7 @@ export default function TeamPage() {
   // The error shows right above the send button; bring it into view and announce it.
   useEffect(() => {
     if (!inviteError) return;
-    inviteErrorRef.current?.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+    inviteErrorRef.current?.scrollIntoView({ block: 'nearest' });
     inviteErrorRef.current?.focus({ preventScroll: true });
   }, [inviteError, isSubmitting]);
 

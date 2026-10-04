@@ -223,7 +223,7 @@ export default function AdminScriptTemplatesPage() {
   const titleRef = useRef<HTMLInputElement>(null);
   useEffect(() => {
     if (!adding && editingId === null) return;
-    formRef.current?.scrollIntoView({ block: 'start', behavior: 'smooth' });
+    formRef.current?.scrollIntoView({ block: 'start' });
     titleRef.current?.focus({ preventScroll: true });
   }, [adding, editingId]);
 

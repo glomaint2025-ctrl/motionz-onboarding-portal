@@ -23,7 +23,7 @@ export default function ClientProfilePage() {
   // The result appears right above the save button; bring it into view and announce it.
   useEffect(() => {
     if (!statusMessage) return;
-    statusRef.current?.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+    statusRef.current?.scrollIntoView({ block: 'nearest' });
     statusRef.current?.focus({ preventScroll: true });
   }, [statusMessage, isSaving]);
 
