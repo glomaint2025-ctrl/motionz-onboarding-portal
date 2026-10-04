@@ -13,7 +13,9 @@ import { getSupabaseServiceClient } from '../db/supabase-client';
 
 export const WEBSITE_REQUEST_BUCKET = 'website-requests';
 export const MAX_ATTACHMENTS = 3;
-export const MAX_ATTACHMENT_BYTES = 10 * 1024 * 1024;
+// Vercel rejects request bodies over ~4.5 MB, so all attachments together must stay under 4 MB.
+export const MAX_ATTACHMENT_BYTES = 4 * 1024 * 1024;
+export const MAX_TOTAL_ATTACHMENT_BYTES = 4 * 1024 * 1024;
 export const SIGNED_URL_TTL_SECONDS = 7 * 24 * 60 * 60;
 
 /** Allowed extension -> accepted MIME types (the first one is canonical and used for storage). */
@@ -108,7 +110,7 @@ export function validateAttachment(file: { name: string; type: string; size: num
     throw new AttachmentValidationError(`"${name}" is empty.`);
   }
   if (file.size > MAX_ATTACHMENT_BYTES) {
-    throw new AttachmentValidationError(`"${name}" is larger than 10 MB.`);
+    throw new AttachmentValidationError(`"${name}" is larger than 4 MB.`);
   }
   if (file.bytes && !contentMatchesExtension(ext, file.bytes)) {
     throw new AttachmentValidationError(`"${name}" does not look like a valid .${ext} file.`);

@@ -118,8 +118,8 @@ async function run() {
     multipartReq(clientId, fields, [{ name: 'huge.png', type: 'image/png', bytes: pngBytes(MAX_ATTACHMENT_BYTES + 1) }], session),
     ctx
   );
-  assert.strictEqual(oversize.status, 400, 'a file over 10 MB must be rejected with 400');
-  assert(/10 MB/.test((await oversize.json()).error));
+  assert.strictEqual(oversize.status, 400, 'a file over 4 MB must be rejected with 400');
+  assert(/4 MB/.test((await oversize.json()).error));
   assert.strictEqual(getMockStoredFiles().size, 0);
   assert.strictEqual(requestCount(), 0);
   console.log(' PASS: oversize file is rejected with 400.');

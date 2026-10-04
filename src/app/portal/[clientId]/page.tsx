@@ -18,7 +18,7 @@ interface SetupStep {
 
 // Mirrors the server-side rules in src/lib/storage (the server re-validates every file).
 const MAX_ATTACHMENTS = 3;
-const MAX_ATTACHMENT_BYTES = 10 * 1024 * 1024;
+const MAX_ATTACHMENT_BYTES = 4 * 1024 * 1024; // total across all files (hosting limit)
 const ATTACHMENT_EXTENSIONS = ['png', 'jpg', 'jpeg', 'webp', 'gif', 'svg', 'pdf'];
 const ATTACHMENT_ACCEPT = '.png,.jpg,.jpeg,.webp,.gif,.svg,.pdf,image/png,image/jpeg,image/webp,image/gif,image/svg+xml,application/pdf';
 const WEBSITE_REQUEST_INTRO =
@@ -215,8 +215,8 @@ export default function ClientOverviewPage() {
       const ext = file.name.includes('.') ? file.name.split('.').pop()!.toLowerCase() : '';
       if (!ATTACHMENT_EXTENSIONS.includes(ext)) {
         problems.push(`"${file.name}" is not an image or PDF.`);
-      } else if (file.size > MAX_ATTACHMENT_BYTES) {
-        problems.push(`"${file.name}" is larger than 10 MB.`);
+      } else if (next.reduce((sum, f) => sum + f.size, 0) + file.size > MAX_ATTACHMENT_BYTES) {
+        problems.push(`"${file.name}" was not added: attachments can be 4 MB in total.`);
       } else if (file.size === 0) {
         problems.push(`"${file.name}" is empty.`);
       } else if (next.some((f) => f.name === file.name && f.size === file.size)) {
@@ -700,7 +700,7 @@ export default function ClientOverviewPage() {
                 ))}
               </div>
               <p style={{ margin: 'var(--space-2) 0 0 0', fontSize: 'var(--font-size-xs)', color: 'var(--color-text-muted)' }}>
-                Up to {MAX_ATTACHMENTS} files. Images (PNG, JPG, WEBP, GIF, SVG) or PDF, 10 MB each.
+                Up to {MAX_ATTACHMENTS} files. Images (PNG, JPG, WEBP, GIF, SVG) or PDF, 4 MB in total.
               </p>
               {fileError && (
                 <p role="alert" style={{ margin: 'var(--space-1) 0 0 0', fontSize: 'var(--font-size-xs)', color: 'var(--color-status-danger-text)' }}>

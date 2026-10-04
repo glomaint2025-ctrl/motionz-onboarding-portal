@@ -10,6 +10,7 @@ import {
   AttachmentValidationError,
   MAX_ATTACHMENTS,
   MAX_ATTACHMENT_BYTES,
+  MAX_TOTAL_ATTACHMENT_BYTES,
   removeWebsiteRequestFiles,
   uploadWebsiteRequestFile,
   validateAttachment,
@@ -22,7 +23,7 @@ const TITLE_MAX = 200;
 const DESCRIPTION_MAX = 5000;
 const URL_MAX = 2000;
 /** Upper bound for a whole multipart request: the files plus generous room for the text fields. */
-const MULTIPART_MAX_BYTES = MAX_ATTACHMENTS * MAX_ATTACHMENT_BYTES + 1024 * 1024;
+const MULTIPART_MAX_BYTES = MAX_TOTAL_ATTACHMENT_BYTES + 256 * 1024;
 
 interface PendingAttachment {
   name: string;
@@ -46,6 +47,9 @@ async function readAttachments(form: FormData): Promise<PendingAttachment[]> {
   const files = (entries as unknown as FileLike[]).filter((f) => !(f.size === 0 && !f.name));
   if (files.length > MAX_ATTACHMENTS) {
     throw new AttachmentValidationError(`You can attach up to ${MAX_ATTACHMENTS} files.`);
+  }
+  if (files.reduce((sum, f) => sum + (f.size || 0), 0) > MAX_TOTAL_ATTACHMENT_BYTES) {
+    throw new AttachmentValidationError('Attachments must be 4 MB or less in total.');
   }
   const pending: PendingAttachment[] = [];
   for (const file of files) {
@@ -117,7 +121,7 @@ export async function POST(
     if (isMultipart) {
       const declaredLength = Number(request.headers.get('content-length') || 0);
       if (declaredLength > MULTIPART_MAX_BYTES) {
-        return NextResponse.json({ error: 'Attachments are too large. Each file can be up to 10 MB.' }, { status: 400 });
+        return NextResponse.json({ error: 'Attachments are too large. They can be 4 MB in total.' }, { status: 400 });
       }
       const form = await request.formData().catch(() => null);
       if (!form) {
