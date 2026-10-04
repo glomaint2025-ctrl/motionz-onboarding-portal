@@ -2,7 +2,7 @@
 
 import React, { useCallback, useEffect, useState } from 'react';
 import Link from 'next/link';
-import { Button, Card, CardHeader, Input, Skeleton, StatusBadge, buttonClasses } from '@/components/ui';
+import { Button, Card, CardHeader, Skeleton, StatusBadge, buttonClasses } from '@/components/ui';
 import { Notice, clientStatusLabel } from '@/components/admin/Notice';
 import { formatDateTime } from '@/lib/utils/format';
 
@@ -93,38 +93,53 @@ function ClientRow({ client, onSaved }: { client: GhlClient; onSaved: (message: 
       </div>
 
       {editing && (
-        <form onSubmit={save} style={{ display: 'flex', gap: 'var(--space-2)', alignItems: 'flex-end', flexWrap: 'wrap', marginTop: 'var(--space-3)' }}>
-          <div style={{ flex: '1 1 260px' }}>
-            <Input
-              id={fieldId}
-              label={`GoHighLevel Location ID for ${client.name}`}
-              placeholder="Paste it from the sub-account’s web address"
-              helperText="In GoHighLevel, open the client’s sub-account. The ID is the part of the web address right after /location/."
-              maxLength={64}
-              value={value}
-              onChange={(e) => setValue(e.target.value)}
-              error={error || undefined}
-              autoFocus
-              autoComplete="off"
-              spellCheck={false}
-            />
-          </div>
-          <Button type="submit" variant="primary" size="sm" disabled={busy}>
-            {busy ? 'Saving...' : 'Save'}
-          </Button>
-          <Button
-            type="button"
-            variant="ghost"
-            size="sm"
-            disabled={busy}
-            onClick={() => {
-              setEditing(false);
+        // Label, then input and buttons on one row, then the help text: the buttons line up with the input.
+        <form onSubmit={save} className="admin-inline-edit">
+          <label htmlFor={fieldId} className="ui-label">
+            GoHighLevel Location ID for {client.name}
+          </label>
+          <input
+            id={fieldId}
+            className={`ui-input ${error ? 'ui-input-error' : ''}`.trim()}
+            placeholder="Paste it from the sub-account’s web address"
+            maxLength={64}
+            value={value}
+            onChange={(e) => {
+              setValue(e.target.value);
               setError('');
-              setValue(client.ghl_location_id || '');
             }}
-          >
-            Cancel
-          </Button>
+            aria-invalid={error ? true : undefined}
+            aria-describedby={`${fieldId}-message`}
+            autoFocus
+            autoComplete="off"
+            spellCheck={false}
+          />
+          <div className="admin-inline-edit-actions">
+            <Button type="submit" variant="primary" disabled={busy}>
+              {busy ? 'Saving...' : 'Save'}
+            </Button>
+            <Button
+              type="button"
+              variant="ghost"
+              disabled={busy}
+              onClick={() => {
+                setEditing(false);
+                setError('');
+                setValue(client.ghl_location_id || '');
+              }}
+            >
+              Cancel
+            </Button>
+          </div>
+          {error ? (
+            <span className="ui-error-text admin-inline-edit-note" id={`${fieldId}-message`} role="alert">
+              {error}
+            </span>
+          ) : (
+            <span className="ui-helper-text admin-inline-edit-note" id={`${fieldId}-message`}>
+              In GoHighLevel, open the client’s sub-account. The ID is the part of the web address right after /location/.
+            </span>
+          )}
         </form>
       )}
     </div>

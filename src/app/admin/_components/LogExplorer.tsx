@@ -13,6 +13,8 @@ interface LogRow {
   id: string;
   created_at: string;
   details?: Record<string, unknown> | null;
+  /** The client this entry belongs to, when it has one. */
+  tenant_name?: string | null;
   // security events
   event_type?: string;
   severity?: 'info' | 'low' | 'medium' | 'high' | 'critical';
@@ -97,7 +99,11 @@ const chipStyle: React.CSSProperties = {
 function LogEntry({ kind, row }: { kind: Kind; row: LogRow }) {
   const [showRaw, setShowRaw] = useState(false);
   const title = kind === 'security' ? securityEventLabel(row.event_type || '') : auditActionLabel(row.action || '');
-  const chips = detailChips(row.details, { ip: row.ip_address });
+  // The client comes first, so rows with the same title (e.g. GoHighLevel leads) can be told apart.
+  const chips = [
+    ...(row.tenant_name ? [{ label: 'Client', value: row.tenant_name }] : []),
+    ...detailChips(row.details, { ip: row.ip_address }),
+  ];
   const hasRaw = Boolean(row.details && Object.keys(row.details).length > 0);
 
   return (

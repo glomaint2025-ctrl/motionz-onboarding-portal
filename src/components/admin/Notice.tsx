@@ -1,6 +1,6 @@
 'use client';
 
-import React from 'react';
+import React, { useEffect, useRef } from 'react';
 import { Button } from '@/components/ui';
 
 export interface NoticeProps {
@@ -30,9 +30,12 @@ const TONES: Record<NonNullable<NoticeProps['tone']>, React.CSSProperties> = {
 };
 
 /** One banner style for "that did not work" / "saved" messages across the staff pages. */
-export const Notice: React.FC<NoticeProps> = ({ tone = 'error', children, onRetry, style }) => (
+export const Notice = React.forwardRef<HTMLDivElement, NoticeProps>(({ tone = 'error', children, onRetry, style }, ref) => (
   <div
+    ref={ref}
     role={tone === 'error' ? 'alert' : 'status'}
+    // Focusable from code only (never a tab stop), so a page can move the reader to a new message.
+    tabIndex={-1}
     style={{
       display: 'flex',
       justifyContent: 'space-between',
@@ -54,7 +57,24 @@ export const Notice: React.FC<NoticeProps> = ({ tone = 'error', children, onRetr
       </Button>
     )}
   </div>
-);
+));
+Notice.displayName = 'Notice';
+
+/**
+ * Returns a ref for a message banner (or a form). Each time `message` appears or changes,
+ * the element is scrolled into view and focused, so a result shown far from the button
+ * that caused it is never missed.
+ */
+export function useRevealOnMessage<T extends HTMLElement = HTMLDivElement>(message: unknown) {
+  const ref = useRef<T>(null);
+  useEffect(() => {
+    const el = ref.current;
+    if (!message || !el) return;
+    el.scrollIntoView({ block: 'center', behavior: 'smooth' });
+    el.focus({ preventScroll: true });
+  }, [message]);
+  return ref;
+}
 
 /** Plain labels for the client status stored in the database. Unknown values are shown as-is, never as "Active". */
 export function clientStatusLabel(status: string | null | undefined, isArchived = false): string {

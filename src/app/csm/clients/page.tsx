@@ -37,15 +37,6 @@ function getAvatarGradient(name: string): string {
   return AVATAR_GRADIENTS[index];
 }
 
-function getDisplayDomain(email: string, contact?: string): string {
-  if (!email) return contact || '';
-  const atIndex = email.indexOf('@');
-  if (atIndex !== -1 && atIndex < email.length - 1) {
-    return email.substring(atIndex + 1);
-  }
-  return email;
-}
-
 export default function CSMClientsPage() {
   const [clients, setClients] = useState<AssignedClient[]>([]);
   const [loading, setLoading] = useState(true);
@@ -126,8 +117,6 @@ export default function CSMClientsPage() {
     <div>
       {/* 1. Breadcrumb */}
       <div className="ui-breadcrumb">
-        <Link href="/csm">Home</Link>
-        <span className="ui-breadcrumb-separator">&gt;</span>
         <span className="ui-breadcrumb-current">My Clients</span>
       </div>
 
@@ -290,45 +279,37 @@ export default function CSMClientsPage() {
 
       {/* 5. Modern Data Table */}
       {loading ? (
-        <TableSkeleton rows={5} columns={5} />
+        <TableSkeleton rows={5} columns={4} />
       ) : loadError ? (
         <Notice onRetry={fetchClients}>{loadError}</Notice>
       ) : (
         <div className="ui-modern-table-card">
           <div style={{ width: '100%', overflowX: 'auto' }}>
-            <table className="ui-modern-table">
+            {/* Same compact rules as the admin client table; on phones each row becomes a stacked card. */}
+            <table className="ui-modern-table ui-clients-table">
               <thead>
                 <tr>
-                  <th style={{ width: '40px', textAlign: 'center' }}>#</th>
-                  <th>Client Company</th>
+                  <th>Company</th>
                   <th>Status</th>
-                  <th>Setup Progress</th>
-                  <th style={{ textAlign: 'right', paddingRight: '24px' }}>Actions</th>
+                  <th>Setup progress</th>
+                  <th>Actions</th>
                 </tr>
               </thead>
               <tbody>
                 {displayClients.length === 0 ? (
                   <tr>
-                    <td colSpan={5} style={{ textAlign: 'center', padding: '48px 16px', color: 'var(--color-text-muted)' }}>
+                    <td colSpan={4} style={{ textAlign: 'center', justifyContent: 'center', padding: '48px 16px', color: 'var(--color-text-muted)' }}>
                       {totalClients === 0
                         ? 'No clients are assigned to you yet. Ask a Motionz admin to assign clients to you.'
                         : 'No clients match your search or filter.'}
                     </td>
                   </tr>
                 ) : (
-                  displayClients.map((client, index) => {
-                    const domainSubtext = getDisplayDomain(client.primary_email, client.primary_contact_name);
-                    const rowNumber = (page - 1) * pageSize + index + 1;
-
+                  displayClients.map((client) => {
                     return (
                       <tr key={client.id}>
-                        {/* # */}
-                        <td style={{ textAlign: 'center' }}>
-                          <span className="ui-row-num">{rowNumber}</span>
-                        </td>
-
-                        {/* Company / Organization */}
-                        <td>
+                        {/* Company, with the main contact's email underneath */}
+                        <td className="ui-cell-title" data-label="Company">
                           <div className="ui-company-cell">
                             <div
                               className="ui-company-avatar"
@@ -338,13 +319,13 @@ export default function CSMClientsPage() {
                             </div>
                             <div className="ui-company-info">
                               <span className="ui-company-name">{client.name}</span>
-                              <span className="ui-company-sub">{domainSubtext}</span>
+                              <span className="ui-company-sub">{client.primary_email || client.primary_contact_name || 'No email'}</span>
                             </div>
                           </div>
                         </td>
 
                         {/* Status */}
-                        <td>
+                        <td data-label="Status">
                           {client.status === 'active' ? (
                             <span className="ui-pill-status ui-pill-status-active">
                               <span className="ui-pill-status-dot" />
@@ -364,7 +345,7 @@ export default function CSMClientsPage() {
                         </td>
 
                         {/* Setup Progress */}
-                        <td>
+                        <td data-label="Setup progress">
                           <div className="ui-progress-pill-wrapper">
                             <div className="ui-progress-pill-track">
                               <div
@@ -381,8 +362,8 @@ export default function CSMClientsPage() {
                         </td>
 
                         {/* Actions */}
-                        <td>
-                          <div className="ui-actions-cell" style={{ justifyContent: 'flex-end' }}>
+                        <td className="ui-cell-actions" data-label="Actions">
+                          <div className="ui-actions-cell">
                             <Link href={`/csm/clients/${client.id}/setup`} className={buttonClasses({ variant: 'primary', size: 'sm' })}>
                               Update setup
                             </Link>

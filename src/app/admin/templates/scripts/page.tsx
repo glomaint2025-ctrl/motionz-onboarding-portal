@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import { Card, CardHeader, Button, Input, Select } from '@/components/ui';
 import { interpolateScript } from '@/lib/scripts/template-engine';
@@ -95,11 +95,13 @@ function ScriptFields({
   category,
   content,
   disabled,
+  titleRef,
   onTitle,
   onCategory,
   onContent,
 }: {
   idPrefix: string;
+  titleRef?: React.Ref<HTMLInputElement>;
   title: string;
   category: ScriptCategory;
   content: string;
@@ -112,9 +114,12 @@ function ScriptFields({
     <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-3)' }}>
       <div style={{ display: 'grid', gap: 'var(--space-3)', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))' }}>
         <Input
+          ref={titleRef}
+          id={`${idPrefix}-title`}
           label="Title"
           value={title}
           maxLength={MAX_TITLE}
+          required
           disabled={disabled}
           placeholder="e.g. Pain Point #6"
           onChange={(e) => onTitle(e.target.value)}
@@ -137,6 +142,7 @@ function ScriptFields({
           id={`${idPrefix}-content`}
           rows={10}
           maxLength={MAX_CONTENT}
+          required
           disabled={disabled}
           style={textAreaStyle}
           value={content}
@@ -211,6 +217,20 @@ export default function AdminScriptTemplatesPage() {
 
   const busy = saving || editingId !== null || adding;
 
+  // The add form opens at the top of the page and the edit form inside its card, often
+  // far from the button that opened it: bring the open form into view and start in Title.
+  const formRef = useRef<HTMLFormElement>(null);
+  const titleRef = useRef<HTMLInputElement>(null);
+  useEffect(() => {
+    if (!adding && editingId === null) return;
+    formRef.current?.scrollIntoView({ block: 'start', behavior: 'smooth' });
+    titleRef.current?.focus({ preventScroll: true });
+  }, [adding, editingId]);
+
+  // While a form is open, its own problems are shown inside it, next to the Save button.
+  const formError = notice?.kind === 'error' && (adding || editingId !== null) ? notice.text : '';
+  const formStyle: React.CSSProperties = { scrollMarginTop: 'calc(var(--header-height, 64px) + var(--space-4))' };
+
   const handleStartEdit = (template: ScriptTemplate) => {
     setNotice(null);
     setConfirmDeleteId(null);
@@ -221,6 +241,7 @@ export default function AdminScriptTemplatesPage() {
   };
 
   const handleCancelEdit = () => {
+    setNotice((prev) => (prev?.kind === 'error' ? null : prev));
     setEditingId(null);
     setEditTitle('');
     setEditText('');
@@ -236,6 +257,7 @@ export default function AdminScriptTemplatesPage() {
   };
 
   const handleSave = async (id: string) => {
+    if (saving) return;
     if (!editTitle.trim() || !editText.trim()) {
       setNotice({ kind: 'error', text: 'Title and script are both required.' });
       return;
@@ -264,6 +286,7 @@ export default function AdminScriptTemplatesPage() {
   };
 
   const handleCreate = async () => {
+    if (saving) return;
     if (!newTitle.trim() || !newText.trim()) {
       setNotice({ kind: 'error', text: 'Title and script are both required.' });
       return;
@@ -344,13 +367,22 @@ export default function AdminScriptTemplatesPage() {
         </Button>
       </div>
 
-      {notice && <Notice kind={notice.kind}>{notice.text}</Notice>}
+      {notice && !formError && <Notice kind={notice.kind}>{notice.text}</Notice>}
 
       {adding && (
         <Card style={{ marginBottom: 'var(--space-6)' }}>
+          <form
+            ref={formRef}
+            style={formStyle}
+            onSubmit={(e) => {
+              e.preventDefault();
+              handleCreate();
+            }}
+          >
           <CardHeader title="Add script" subtitle="It appears in client portals as soon as you save." />
           <ScriptFields
             idPrefix="new-script"
+            titleRef={titleRef}
             title={newTitle}
             category={newCategory}
             content={newText}
@@ -359,14 +391,29 @@ export default function AdminScriptTemplatesPage() {
             onCategory={setNewCategory}
             onContent={setNewText}
           />
+          {formError && (
+            <div style={{ marginTop: 'var(--space-3)' }}>
+              <Notice kind="error">{formError}</Notice>
+            </div>
+          )}
           <div style={{ display: 'flex', gap: 'var(--space-2)', justifyContent: 'flex-end', marginTop: 'var(--space-3)' }}>
-            <Button variant="outline" size="sm" onClick={() => setAdding(false)} disabled={saving}>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={() => {
+                setAdding(false);
+                setNotice(null);
+              }}
+              disabled={saving}
+            >
               Cancel
             </Button>
-            <Button variant="primary" size="sm" onClick={handleCreate} disabled={saving}>
+            <Button type="submit" variant="primary" size="sm" disabled={saving}>
               {saving ? 'Adding...' : 'Add script'}
             </Button>
           </div>
+          </form>
         </Card>
       )}
 
@@ -498,9 +545,17 @@ export default function AdminScriptTemplatesPage() {
                       )}
 
                       {isEditing ? (
-                        <div>
+                        <form
+                          ref={formRef}
+                          style={formStyle}
+                          onSubmit={(e) => {
+                            e.preventDefault();
+                            handleSave(tpl.id);
+                          }}
+                        >
                           <ScriptFields
                             idPrefix={`script-${tpl.id}`}
+                            titleRef={titleRef}
                             title={editTitle}
                             category={editCategory}
                             content={editText}
@@ -509,17 +564,22 @@ export default function AdminScriptTemplatesPage() {
                             onCategory={setEditCategory}
                             onContent={setEditText}
                           />
+                          {formError && (
+                            <div style={{ marginTop: 'var(--space-3)' }}>
+                              <Notice kind="error">{formError}</Notice>
+                            </div>
+                          )}
                           <div
                             style={{ display: 'flex', gap: 'var(--space-2)', justifyContent: 'flex-end', marginTop: 'var(--space-3)' }}
                           >
-                            <Button variant="outline" size="sm" onClick={handleCancelEdit} disabled={saving}>
+                            <Button type="button" variant="outline" size="sm" onClick={handleCancelEdit} disabled={saving}>
                               Cancel
                             </Button>
-                            <Button variant="primary" size="sm" onClick={() => handleSave(tpl.id)} disabled={saving}>
+                            <Button type="submit" variant="primary" size="sm" disabled={saving}>
                               {saving ? 'Saving...' : 'Save script'}
                             </Button>
                           </div>
-                        </div>
+                        </form>
                       ) : (
                         <div>
                           <div style={previewLabelStyle}>Sample preview (Jane Doe / Summit Roof Pros):</div>

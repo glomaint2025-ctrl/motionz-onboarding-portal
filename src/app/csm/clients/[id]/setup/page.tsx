@@ -5,7 +5,7 @@ import { useParams } from 'next/navigation';
 import Link from 'next/link';
 import { Card, CardHeader, Select, Button, StatusBadge, buttonClasses } from '@/components/ui';
 import { OnboardingAnswers, OnboardingSubmissionView } from '@/components/onboarding/OnboardingAnswers';
-import { Notice } from '@/components/admin/Notice';
+import { Notice, useRevealOnMessage } from '@/components/admin/Notice';
 
 const STEP_STATUS_LABELS: Record<string, string> = {
   not_started: 'Not started',
@@ -48,6 +48,9 @@ export default function CSMClientSetupEditorPage() {
   const [editUnlocks, setEditUnlocks] = useState('');
   const [editName, setEditName] = useState('');
   const [saveError, setSaveError] = useState('');
+  // Which field the error is about (name, right_now, what_it_is, unlocks, we_need_from_you or status).
+  const [saveErrorField, setSaveErrorField] = useState('');
+  const saveErrorRef = useRevealOnMessage(saveError);
   const [saving, setSaving] = useState(false);
   const [feedbackMessage, setFeedbackMessage] = useState<string | null>(null);
 
@@ -89,24 +92,27 @@ export default function CSMClientSetupEditorPage() {
     setEditUnlocks(step.unlocks);
     setEditName(step.name);
     setSaveError('');
+    setSaveErrorField('');
     setFeedbackMessage(null);
   };
 
   const handleSaveStep = async (stepKey: string) => {
-    const required: [string, string][] = [
-      ['Step name', editName],
-      ['Right now', editRightNow],
-      ['What it is', editWhatItIs],
-      ['Unlocks', editUnlocks],
+    const required: [string, string, string][] = [
+      ['Step name', editName, 'name'],
+      ['Right now', editRightNow, 'right_now'],
+      ['What it is', editWhatItIs, 'what_it_is'],
+      ['Unlocks', editUnlocks, 'unlocks'],
     ];
     const blank = required.find(([, text]) => !text.trim());
     if (blank) {
       setSaveError(`"${blank[0]}" cannot be empty. The client sees this text.`);
+      setSaveErrorField(blank[2]);
       return;
     }
     try {
       setSaving(true);
       setSaveError('');
+      setSaveErrorField('');
       const res = await fetch(`/api/csm/clients/${clientId}/setup`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
@@ -129,12 +135,26 @@ export default function CSMClientSetupEditorPage() {
         setTimeout(() => setFeedbackMessage(null), 3000);
       } else {
         setSaveError(data.error || 'Could not save this step.');
+        setSaveErrorField(typeof data.field === 'string' ? data.field : '');
       }
     } catch {
       setSaveError('Could not reach the server. Your changes were not saved.');
     } finally {
       setSaving(false);
     }
+  };
+
+  /** Props that mark one input as the field the error is about; editing it clears the mark. */
+  const fieldState = (key: string) => (saveErrorField === key ? { 'aria-invalid': true, 'aria-describedby': 'step-field-error' } : {});
+  const fieldClass = (base: string, key: string) => (saveErrorField === key ? `${base} ui-input-error` : base);
+  const fieldNote = (key: string) =>
+    saveErrorField === key ? (
+      <span className="ui-error-text" id="step-field-error">
+        {saveError}
+      </span>
+    ) : null;
+  const clearFieldError = (key: string) => {
+    if (saveErrorField === key) setSaveErrorField('');
   };
 
   if (loading) {
@@ -261,17 +281,35 @@ export default function CSMClientSetupEditorPage() {
                 /* Inline Editing Form for CSM */
                 <div style={{ borderTop: '1px solid var(--color-border-subtle)', paddingTop: 'var(--space-4)', marginTop: 'var(--space-3)' }}>
                   {saveError && (
-                    <Notice style={{ marginBottom: 'var(--space-3)' }}>{saveError}</Notice>
+                    <Notice ref={saveErrorRef} style={{ marginBottom: 'var(--space-3)' }}>
+                      {saveError}
+                    </Notice>
                   )}
                   <div className="ui-form-group">
                     <label className="ui-label" htmlFor={`step-name-${step.step_key}`}>Step name</label>
-                    <input id={`step-name-${step.step_key}`} className="ui-input" value={editName} maxLength={120} required onChange={(e) => setEditName(e.target.value)} />
+                    <input
+                      id={`step-name-${step.step_key}`}
+                      className={fieldClass('ui-input', 'name')}
+                      value={editName}
+                      maxLength={120}
+                      required
+                      {...fieldState('name')}
+                      onChange={(e) => {
+                        setEditName(e.target.value);
+                        clearFieldError('name');
+                      }}
+                    />
+                    {fieldNote('name')}
                   </div>
                   <div style={{ marginBottom: 'var(--space-4)' }}>
                     <Select
                       label="Status"
                       value={editStatus}
-                      onChange={(e) => setEditStatus(e.target.value as any)}
+                      error={saveErrorField === 'status' ? saveError : undefined}
+                      onChange={(e) => {
+                        setEditStatus(e.target.value as any);
+                        clearFieldError('status');
+                      }}
                     >
                       <option value="not_started">{STEP_STATUS_LABELS.not_started}</option>
                       <option value="in_progress">{STEP_STATUS_LABELS.in_progress}</option>
@@ -283,53 +321,72 @@ export default function CSMClientSetupEditorPage() {
                     <label className="ui-label" htmlFor={`step-now-${step.step_key}`}>Right now (what is happening on this step)</label>
                     <textarea
                       id={`step-now-${step.step_key}`}
-                      className="ui-textarea"
+                      className={fieldClass('ui-textarea', 'right_now')}
                       rows={2}
                       maxLength={TEXT_MAX}
                       required
                       value={editRightNow}
-                      onChange={(e) => setEditRightNow(e.target.value)}
+                      {...fieldState('right_now')}
+                      onChange={(e) => {
+                        setEditRightNow(e.target.value);
+                        clearFieldError('right_now');
+                      }}
                     />
-                    <span className="ui-helper-text">The client sees this as the current state of the step.</span>
+                    {fieldNote('right_now') || <span className="ui-helper-text">The client sees this as the current state of the step.</span>}
                   </div>
 
                   <div className="ui-form-group">
                     <label className="ui-label" htmlFor={`step-need-${step.step_key}`}>What we need from the client (optional)</label>
                     <textarea
                       id={`step-need-${step.step_key}`}
-                      className="ui-textarea"
+                      className={fieldClass('ui-textarea', 'we_need_from_you')}
                       rows={2}
                       maxLength={TEXT_MAX}
                       value={editWeNeed}
-                      onChange={(e) => setEditWeNeed(e.target.value)}
+                      {...fieldState('we_need_from_you')}
+                      onChange={(e) => {
+                        setEditWeNeed(e.target.value);
+                        clearFieldError('we_need_from_you');
+                      }}
                       placeholder="e.g. Please add us as an admin on your Facebook page."
                     />
+                    {fieldNote('we_need_from_you')}
                   </div>
 
                   <div className="ui-form-group">
                     <label className="ui-label" htmlFor={`step-what-${step.step_key}`}>What it is (a short description of the step)</label>
                     <textarea
                       id={`step-what-${step.step_key}`}
-                      className="ui-textarea"
+                      className={fieldClass('ui-textarea', 'what_it_is')}
                       rows={2}
                       maxLength={TEXT_MAX}
                       required
                       value={editWhatItIs}
-                      onChange={(e) => setEditWhatItIs(e.target.value)}
+                      {...fieldState('what_it_is')}
+                      onChange={(e) => {
+                        setEditWhatItIs(e.target.value);
+                        clearFieldError('what_it_is');
+                      }}
                     />
+                    {fieldNote('what_it_is')}
                   </div>
 
                   <div className="ui-form-group">
                     <label className="ui-label" htmlFor={`step-unlocks-${step.step_key}`}>Unlocks (what the client gets when this is done)</label>
                     <textarea
                       id={`step-unlocks-${step.step_key}`}
-                      className="ui-textarea"
+                      className={fieldClass('ui-textarea', 'unlocks')}
                       rows={2}
                       maxLength={TEXT_MAX}
                       required
                       value={editUnlocks}
-                      onChange={(e) => setEditUnlocks(e.target.value)}
+                      {...fieldState('unlocks')}
+                      onChange={(e) => {
+                        setEditUnlocks(e.target.value);
+                        clearFieldError('unlocks');
+                      }}
                     />
+                    {fieldNote('unlocks')}
                   </div>
 
                   <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 'var(--space-2)', marginTop: 'var(--space-4)' }}>

@@ -2,6 +2,7 @@
  * Plain-English labels for security events and audit-log actions.
  * Shared by the admin log pages (display) and /api/admin/logs (searching by label).
  */
+import { formatDateTime } from './format';
 
 export const SECURITY_EVENT_LABELS: Record<string, string> = {
   auth_logout: 'Signed out',
@@ -95,6 +96,27 @@ export function titleCaseKey(key: string): string {
   return words.charAt(0).toUpperCase() + words.slice(1);
 }
 
+/** Short words that stay as written inside a Title Case label. */
+const UPPERCASE_WORDS: Record<string, string> = { id: 'ID', url: 'URL', dba: 'DBA', ein: 'EIN', csm: 'CSM', ghl: 'GHL', sms: 'SMS' };
+
+/**
+ * A friendly label for a form field name: "email" -> "Email", "full_name" -> "Full Name",
+ * "businessPhone" -> "Business Phone". Names that already read as a label
+ * ("DBA Business Name", "What is your website?") are returned unchanged.
+ */
+export function fieldLabel(key: string): string {
+  const raw = String(key ?? '').trim();
+  if (!raw) return 'Unknown';
+  const looksLikeKey = /^[a-z0-9]+([_.-][a-z0-9]+)*$/.test(raw) || /^[a-z][a-z0-9]*([A-Z][a-z0-9]*)+$/.test(raw);
+  if (!looksLikeKey) return raw;
+  return raw
+    .replace(/([a-z0-9])([A-Z])/g, '$1 $2')
+    .split(/[\s._-]+/)
+    .filter(Boolean)
+    .map((word) => UPPERCASE_WORDS[word.toLowerCase()] || word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
+    .join(' ');
+}
+
 export function securityEventLabel(eventType: string): string {
   return SECURITY_EVENT_LABELS[eventType] || titleCaseKey(eventType);
 }
@@ -139,6 +161,8 @@ const DETAIL_LABELS: Record<string, string> = {
   status: 'Status',
   ok: 'Worked',
   error: 'Problem',
+  expiresAt: 'Expires',
+  expires_at: 'Expires',
 };
 
 /** Plain names for the roles stored in the database. */
@@ -160,8 +184,19 @@ const ROLE_FIELDS = new Set(['role', 'userRole', 'resolvedRole', 'currentRole', 
 
 /** Shown first, in this order, when present. */
 const KEY_FIELDS = ['email', 'attemptedEmail', 'userEmail', 'role', 'userRole', 'resolvedRole', 'requestedRole', 'reason', 'ip', 'ipAddress', 'ip_address'];
-/** Already shown elsewhere on the row. */
-const HIDDEN_FIELDS = new Set(['timestamp']);
+/** Already shown elsewhere on the row, or internal-only (still available under "Show raw"). */
+const HIDDEN_FIELDS = new Set(['timestamp', 'mode']);
+
+/** Database ids mean nothing to a reader: "invitationId", "invitation_id", "resourceId", "id". */
+const ID_KEY = /(^id$|[a-z]Ids?$|_ids?$)/;
+const UUID_VALUE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+/** "2026-10-07T11:05:03.921Z" and friends. */
+const ISO_TIMESTAMP = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(:\d{2}(\.\d+)?)?(Z|[+-]\d{2}:?\d{2})?$/;
+
+function isInternalDetail(key: string, value: unknown): boolean {
+  if (HIDDEN_FIELDS.has(key) || ID_KEY.test(key)) return true;
+  return typeof value === 'string' && UUID_VALUE.test(value.trim());
+}
 
 export interface DetailChip {
   label: string;
@@ -171,6 +206,8 @@ export interface DetailChip {
 function formatDetailValue(value: unknown): string | null {
   if (value === null || value === undefined || value === '') return null;
   if (typeof value === 'boolean') return value ? 'Yes' : 'No';
+  // Timestamps are shown the same way as every other date in the portal.
+  if (typeof value === 'string' && ISO_TIMESTAMP.test(value.trim())) return formatDateTime(value.trim()) || value;
   if (typeof value === 'string' || typeof value === 'number') return String(value);
   if (Array.isArray(value)) {
     const simple = value.filter((v) => typeof v === 'string' || typeof v === 'number');
@@ -181,12 +218,13 @@ function formatDetailValue(value: unknown): string | null {
 
 /**
  * Turns a details object into "Label: value" chips. Key fields (email, role, reason, IP) come first;
- * nested objects are left to the raw view.
+ * nested objects, internal values (mode) and raw ids are left to the raw view.
  */
 export function detailChips(details: Record<string, unknown> | null | undefined, extra?: { ip?: string | null }, max = 6): DetailChip[] {
   const chips: DetailChip[] = [];
   const seen = new Set<string>();
   const push = (key: string, rawValue: unknown) => {
+    if (isInternalDetail(key, rawValue)) return;
     const value = ROLE_FIELDS.has(key)
       ? Array.isArray(rawValue)
         ? rawValue.map((v) => roleLabel(String(v)))

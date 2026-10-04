@@ -38,6 +38,7 @@ export default function AdminSettingsPage() {
   const [clientsError, setClientsError] = useState('');
   const [linkingId, setLinkingId] = useState<string | null>(null);
   const [linkError, setLinkError] = useState('');
+  const [linkSuccess, setLinkSuccess] = useState('');
   const [message, setMessage] = useState<{ type: 'ok' | 'error'; text: string } | null>(null);
 
   const [loginCodeMode, setLoginCodeMode] = useState<LoginCodeMode>('off');
@@ -145,6 +146,7 @@ export default function AdminSettingsPage() {
     if (!tenantId || linkingId) return;
     setLinkingId(submissionId);
     setLinkError('');
+    setLinkSuccess('');
     try {
       const res = await fetch('/api/admin/settings/notifications', {
         method: 'PUT',
@@ -152,8 +154,11 @@ export default function AdminSettingsPage() {
         body: JSON.stringify({ action: 'link_submission', submissionId, tenantId }),
       });
       const data = await res.json().catch(() => ({}));
-      if (res.ok && data.success) setUnmatched((list) => list.filter((s) => s.id !== submissionId));
-      else setLinkError(data.error || 'Could not link that form to the client. Please try again.');
+      if (res.ok && data.success) {
+        setUnmatched((list) => list.filter((s) => s.id !== submissionId));
+        const clientName = clients.find((c) => c.id === tenantId)?.name;
+        setLinkSuccess(clientName ? `Linked to ${clientName}.` : 'Linked to the client.');
+      } else setLinkError(data.error || 'Could not link that form to the client. Please try again.');
     } catch {
       setLinkError('Could not reach the server. The form was not linked.');
     } finally {
@@ -317,6 +322,11 @@ export default function AdminSettingsPage() {
           subtitle="Forms sent in with an email address that does not match any client yet. Link each one to the right client."
         />
         {linkError && <Notice style={{ marginBottom: 'var(--space-3)' }}>{linkError}</Notice>}
+        {linkSuccess && (
+          <Notice tone="success" style={{ marginBottom: 'var(--space-3)' }}>
+            {linkSuccess}
+          </Notice>
+        )}
         {!loading && !loadError && clientsError && unmatched.length > 0 && (
           <Notice onRetry={load} style={{ marginBottom: 'var(--space-3)' }}>
             {clientsError}

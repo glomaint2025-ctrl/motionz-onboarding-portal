@@ -15,6 +15,12 @@ import {
 import { requireAuth, handleAuthError } from '@/lib/auth/guard';
 import { provisionClientSheet } from '@/lib/integrations/sheets/provision';
 import { createInvitation, resendInvitation, revokeInvitation } from '@/lib/auth/invitations';
+import { PORTAL_MODULES } from '@/lib/portal-modules';
+
+/** Only real portal sections are ever returned or saved; legacy switches such as "orders" are ignored. */
+const MODULE_KEYS = new Set(PORTAL_MODULES.map((m) => m.key));
+const onlyModules = (toggles: Record<string, boolean>): Record<string, boolean> =>
+  Object.fromEntries(Object.entries(toggles).filter(([key]) => MODULE_KEYS.has(key)));
 
 export async function GET(
   request: Request,
@@ -48,7 +54,7 @@ export async function GET(
       tenant,
       csm: csm ? { id: csm.id, name: csm.full_name, email: csm.email } : null,
       steps,
-      features: toggles,
+      features: onlyModules(toggles),
       members,
       invitations,
       trackingSheetUrl: sheetConfig?.config_data?.sheet_url || null,
@@ -81,11 +87,16 @@ export async function PUT(
     const csmChange = 'csm_user_id' in body;
 
     const updates: any = {};
+    // Validation errors name their field, so the form can mark the right input.
     try {
       if (name !== undefined) updates.name = validateText(name, 'Company name', { required: true, max: 255 });
+    } catch (e: any) {
+      return NextResponse.json({ error: e.message, field: 'name' }, { status: 400 });
+    }
+    try {
       if (phone !== undefined) updates.phone = validatePhone(phone) ?? null;
     } catch (e: any) {
-      return NextResponse.json({ error: e.message }, { status: 400 });
+      return NextResponse.json({ error: e.message, field: 'phone' }, { status: 400 });
     }
     // Suspending and archiving have their own buttons (reason, team lock-out, history),
     // so this form may only move a client between Active and Onboarding.
@@ -107,7 +118,10 @@ export async function PUT(
     if (ghl_location_id !== undefined) {
       const loc = typeof ghl_location_id === 'string' ? ghl_location_id.trim() : '';
       if (loc && !/^[A-Za-z0-9_-]{6,64}$/.test(loc)) {
-        return NextResponse.json({ error: 'The GoHighLevel Location ID looks wrong. Copy it from the sub-account URL.' }, { status: 400 });
+        return NextResponse.json(
+          { error: 'The GoHighLevel Location ID looks wrong. Copy it from the sub-account URL.', field: 'ghl_location_id' },
+          { status: 400 }
+        );
       }
       updates.ghl_location_id = loc || null;
     }
@@ -116,7 +130,7 @@ export async function PUT(
     if (csmChange && csm_user_id) {
       const csmUser = await userRepository.findById(String(csm_user_id));
       if (!csmUser || csmUser.role !== 'csm') {
-        return NextResponse.json({ error: 'Choose a valid CSM.' }, { status: 400 });
+        return NextResponse.json({ error: 'Choose a valid CSM.', field: 'csm_user_id' }, { status: 400 });
       }
     }
 
@@ -131,9 +145,9 @@ export async function PUT(
     // Update feature toggles if supplied
     if (feature_toggles && typeof feature_toggles === 'object') {
       await Promise.all(
-        Object.entries(feature_toggles).map(([key, isEnabled]) =>
-          featureToggleRepository.setToggle(tenant.id, key, Boolean(isEnabled))
-        )
+        Object.entries(feature_toggles)
+          .filter(([key]) => MODULE_KEYS.has(key))
+          .map(([key, isEnabled]) => featureToggleRepository.setToggle(tenant.id, key, Boolean(isEnabled)))
       );
     }
 
@@ -341,7 +355,7 @@ export async function PATCH(
       }
 
       const tenantToggles = await featureToggleRepository.getTogglesForTenant(tenant.id);
-      const sanitized = allowed_modules.filter((k: string) => tenantToggles[k] !== false);
+      const sanitized = allowed_modules.filter((k: string) => MODULE_KEYS.has(k) && tenantToggles[k] !== false);
 
       const updatedUser = await userRepository.updatePermissions(targetUser.id, sanitized);
 
@@ -383,9 +397,9 @@ export async function PATCH(
       const tenantToggles = await featureToggleRepository.getTogglesForTenant(tenant.id);
       let sanitizedAllowed: string[] | undefined = undefined;
       if (Array.isArray(allowed_modules)) {
-        sanitizedAllowed = allowed_modules.filter((k: string) => tenantToggles[k] !== false);
+        sanitizedAllowed = allowed_modules.filter((k: string) => MODULE_KEYS.has(k) && tenantToggles[k] !== false);
       } else {
-        sanitizedAllowed = Object.keys(tenantToggles).filter((k: string) => tenantToggles[k] !== false);
+        sanitizedAllowed = PORTAL_MODULES.map((m) => m.key).filter((k) => tenantToggles[k] !== false);
       }
 
       const result = await createInvitation({

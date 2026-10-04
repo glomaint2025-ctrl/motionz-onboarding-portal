@@ -24,6 +24,8 @@ export async function GET(request: Request) {
     const statusParam = searchParams.get('status')?.trim() || 'all';
     const csmParam = searchParams.get('csm')?.trim() || undefined;
     const includeArchived = searchParams.get('includeArchived') !== 'false';
+    // "Still in setup" on the dashboard: live clients whose setup steps are not all done.
+    const setupParam = searchParams.get('setup')?.trim() || '';
 
     // 1. Fetch all tenants with relationships for enrichment
     const allTenants = await tenantRepository.list({
@@ -115,7 +117,11 @@ export async function GET(request: Request) {
         matchesCsm = client.csm_name === csmParam;
       }
 
-      return matchesSearch && matchesStatus && matchesCsm;
+      // Same rule as the dashboard's "Still in setup" number.
+      const setupDone = client.total_steps > 0 && client.completed_steps === client.total_steps;
+      const matchesSetup = setupParam === 'in_progress' ? !isArchived && !setupDone : true;
+
+      return matchesSearch && matchesStatus && matchesCsm && matchesSetup;
     });
 
     // 5. Server-side Pagination
@@ -162,52 +168,53 @@ export async function POST(request: Request) {
     let validContact: string | undefined;
     let normalizedEmail: string;
     let validPhone: string | undefined;
+    // Every validation error names its field, so the form can mark the right input.
+    const invalid = (field: string, error: string) => NextResponse.json({ error, field }, { status: 400 });
     try {
       validName = validateText(name, 'Company name', { required: true, max: 255 })!;
-      // The Add client form requires a contact name; other callers may leave it out, but it must be text.
-      if (primary_contact_name != null && typeof primary_contact_name !== 'string') {
-        return NextResponse.json({ error: 'Contact name must be text.' }, { status: 400 });
-      }
+    } catch (e: any) {
+      return invalid('name', e.message);
+    }
+    // The Add client form requires a contact name; other callers may leave it out, but it must be text.
+    if (primary_contact_name != null && typeof primary_contact_name !== 'string') {
+      return invalid('primary_contact_name', 'Contact name must be text.');
+    }
+    try {
       validContact = validateText(primary_contact_name, 'Contact name', { max: 255 });
-      if (typeof primary_email !== 'string' || !primary_email.trim()) {
-        return NextResponse.json({ error: 'The client’s email address is required.' }, { status: 400 });
-      }
-      if (primary_email.trim().length > 254) {
-        return NextResponse.json({ error: 'That email address is too long.' }, { status: 400 });
-      }
-      try {
-        normalizedEmail = validateEmail(primary_email);
-      } catch {
-        return NextResponse.json({ error: 'Enter a valid email address, for example name@company.com.' }, { status: 400 });
-      }
+    } catch (e: any) {
+      return invalid('primary_contact_name', e.message);
+    }
+    if (typeof primary_email !== 'string' || !primary_email.trim()) {
+      return invalid('primary_email', 'The client’s email address is required.');
+    }
+    if (primary_email.trim().length > 254) {
+      return invalid('primary_email', 'That email address is too long.');
+    }
+    try {
+      normalizedEmail = validateEmail(primary_email);
+    } catch {
+      return invalid('primary_email', 'Enter a valid email address, for example name@company.com.');
+    }
+    try {
       validPhone = validatePhone(phone);
     } catch (e: any) {
-      return NextResponse.json({ error: e.message }, { status: 400 });
+      return invalid('phone', e.message);
     }
     if (slug !== undefined && slug !== null && typeof slug !== 'string') {
       return NextResponse.json({ error: 'The client short name must be text.' }, { status: 400 });
     }
 
     if (isStaffEmail(normalizedEmail)) {
-      return NextResponse.json(
-        { error: '@motionz.ai addresses are for Motionz staff only. Use the client’s own email.' },
-        { status: 400 }
-      );
+      return invalid('primary_email', '@motionz.ai addresses are for Motionz staff only. Use the client’s own email.');
     }
     const existingUser = await userRepository.findByEmail(normalizedEmail);
     if (existingUser) {
-      return NextResponse.json(
-        { error: 'An account with this email already exists.' },
-        { status: 400 }
-      );
+      return invalid('primary_email', 'An account with this email already exists.');
     }
 
     const existingTenant = await tenantRepository.findByEmail(normalizedEmail);
     if (existingTenant) {
-      return NextResponse.json(
-        { error: 'An account with this email already exists.' },
-        { status: 400 }
-      );
+      return invalid('primary_email', 'An account with this email already exists.');
     }
 
     const generatedSlug = await tenantRepository.generateUniqueSlug(slug || validName);
@@ -261,7 +268,10 @@ export async function POST(request: Request) {
     if (isUniqueViolation) {
       const isSlug = /slug/i.test(raw);
       return NextResponse.json(
-        { error: isSlug ? 'A client with this name already exists.' : 'An account with this email already exists.' },
+        {
+          error: isSlug ? 'A client with this name already exists.' : 'An account with this email already exists.',
+          field: isSlug ? 'name' : 'primary_email',
+        },
         { status: 400 }
       );
     }
