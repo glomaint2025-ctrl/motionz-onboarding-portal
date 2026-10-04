@@ -5,7 +5,8 @@ import { assertPortalAccess, handleAuthError } from '@/lib/auth/guard';
 
 /**
  * GET /api/portal/[clientId]/script-templates
- * Master video script templates (raw, with {{client_name}} / {{company_name}} placeholders).
+ * Master video script templates with their category (raw, with {{client_name}} /
+ * {{company_name}} / {{testimonial_name}} placeholders).
  * Interpolation happens client-side so the client can preview custom names live.
  */
 export async function GET(
@@ -28,6 +29,7 @@ export async function GET(
       id: t.id,
       title: t.title,
       script_content: t.script_content,
+      category: t.category,
       sort_order: t.sort_order,
     }));
 

@@ -2,10 +2,12 @@ import assert from 'assert';
 import {
   interpolateScript,
   generateAllScripts,
-  DEFAULT_SCRIPT_TEMPLATES,
+  generateScriptsFromTemplates,
 } from '../../src/lib/scripts/template-engine';
+import { AD_SCRIPT_LIBRARY } from '../../src/lib/scripts/ad-script-library';
 import {
   resetStore,
+  getScriptTemplates,
   getClientScriptPreference,
   setClientScriptPreference,
 } from '../../src/lib/db';
@@ -52,6 +54,18 @@ async function runContentAndToolsTests() {
   assert(allScripts[2].content.includes('Sarah Connor'));
   console.log('PASS: All 3 baseline video scripts generated without AI dependencies');
 
+  // Test 3b: The stored library keeps those 3 educational scripts (AI video) alongside the ad scripts
+  const stored = await getScriptTemplates();
+  const educational = stored.filter((s) => s.category === 'ai_video');
+  assert.strictEqual(educational.length, 3, 'The 3 educational scripts stay in the library as ai_video');
+  assert.strictEqual(stored.length - educational.length, AD_SCRIPT_LIBRARY.length, 'Ad script library is seeded');
+  const storedGenerated = generateScriptsFromTemplates(stored, {
+    client_name: 'Sarah Connor',
+    company_name: 'Apex Restorations',
+  });
+  assert(storedGenerated.every((s) => !s.content.includes('{{')), 'No unreplaced tokens in any stored script');
+  console.log('PASS: Stored script library (educational + ad scripts) personalizes cleanly');
+
   // Test 4: Video preference state management
   const initialPref = await getClientScriptPreference(demoTenantId);
   assert(initialPref !== null, 'Initial preference must exist in mock store');
@@ -69,6 +83,7 @@ async function runContentAndToolsTests() {
 
   const reloaded = await getClientScriptPreference(demoTenantId);
   assert.strictEqual(reloaded?.video_preference, 'self_filmed');
+  assert.deepStrictEqual(reloaded?.selected_scripts, {}, 'Changing the production choice leaves script picks untouched');
   console.log('PASS: Video preference state workflow persisted');
 
   // Test 5: Roof measurement pitch calculations

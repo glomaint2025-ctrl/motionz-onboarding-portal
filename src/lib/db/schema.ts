@@ -1,4 +1,7 @@
-export type UserRole = 'admin' | 'csm' | 'client' | 'client_member';
+import type { ScriptCategory, SelectedScripts } from '../scripts/ad-script-library';
+
+export type { ScriptCategory, SelectedScripts };
+export type UserRole ='admin' | 'csm' | 'client' | 'client_member';
 export type SetupStatus = 'not_started' | 'in_progress' | 'done';
 export type StepOwner = 'we_handle' | 'client_action';
 export type OrderStage = 'ordered' | 'packaged' | 'shipped' | 'delivered' | 'issue';
@@ -183,6 +186,8 @@ export interface ScriptTemplate {
   id: string;
   title: string;
   script_content: string;
+  /** ai_video = educational scripts Motionz produces; the rest are self-filmed ad scripts. */
+  category: ScriptCategory;
   sort_order: number;
   created_at: string;
   updated_at: string;
@@ -194,6 +199,8 @@ export interface ClientScriptPreference {
   video_preference: VideoPreference;
   custom_name?: string;
   custom_company?: string;
+  /** Self-filmed picks: one script id per category (JSONB). */
+  selected_scripts?: SelectedScripts;
   updated_at: string;
 }
 

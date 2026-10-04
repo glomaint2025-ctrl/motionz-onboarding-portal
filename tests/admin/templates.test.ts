@@ -68,7 +68,14 @@ async function run() {
   assert.strictEqual(updatedScript!.title, 'Intro Script');
   assert.strictEqual((await scriptRepository.findTemplateById(scriptId))!.script_content, 'Hi, {{client_name}} from {{company_name}}.');
   assert.strictEqual(await scriptRepository.updateTemplate('missing-id', { title: 'x' }), null);
-  console.log(' PASS: scriptRepository.updateTemplate persists title and content.');
+  assert.strictEqual(updatedScript!.category, 'ai_video', 'editing title/content keeps the category');
+  const libraryCategories = new Set(scripts.map((s) => s.category));
+  for (const category of ['ai_video', 'pain_point', 'testimonials', 'trustworthy', 'bonus']) {
+    assert.ok(libraryCategories.has(category as any), `seeded library includes ${category}`);
+  }
+  const recategorised = await scriptRepository.updateTemplate(scripts[scripts.length - 1].id, { category: 'pain_point' });
+  assert.strictEqual(recategorised!.category, 'pain_point');
+  console.log(' PASS: scriptRepository.updateTemplate persists title, content and category.');
 
   // --- Validation ---
   assert.strictEqual(validateTemplateStepUpdate({ name: '   ' }).ok, false);
@@ -80,6 +87,9 @@ async function run() {
   assert.strictEqual(validateScriptTemplateUpdate({ script_content: 'x'.repeat(5001) }).ok, false);
   const alias = validateScriptTemplateUpdate({ content: ' Body ' });
   assert.ok(alias.ok && alias.value.script_content === 'Body');
+  assert.strictEqual(validateScriptTemplateUpdate({ category: 'not_a_category' }).ok, false);
+  const categoryOnly = validateScriptTemplateUpdate({ category: 'trustworthy' });
+  assert.ok(categoryOnly.ok && categoryOnly.value.category === 'trustworthy');
   console.log(' PASS: input validation rejects empty, oversized and invalid values.');
 
   // --- API guards ---

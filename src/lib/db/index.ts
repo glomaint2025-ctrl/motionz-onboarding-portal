@@ -11,6 +11,7 @@ import {
   UserInvitation,
   ScriptTemplate,
   ClientScriptPreference,
+  SelectedScripts,
   AuditLog,
   SecurityEvent,
 } from './schema';
@@ -168,6 +169,15 @@ export const setClientScriptPreference = async (
   const tenant = await getTenantById(tenantId);
   const resolvedId = tenant ? tenant.id : tenantId;
   return scriptRepository.setPreference(resolvedId, preference, customName, customCompany);
+};
+
+export const setClientSelectedScripts = async (
+  tenantId: string,
+  selected: SelectedScripts
+): Promise<ClientScriptPreference> => {
+  const tenant = await getTenantById(tenantId);
+  const resolvedId = tenant ? tenant.id : tenantId;
+  return scriptRepository.setSelectedScripts(resolvedId, selected);
 };
 
 /**
