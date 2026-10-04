@@ -1,10 +1,12 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { useParams } from 'next/navigation';
-import { Card, CardHeader, Button, StatusBadge, Input, Select, Modal, Skeleton } from '@/components/ui';
-import { PORTAL_MODULES } from '@/lib/portal-modules';
-
+import { Card, CardHeader, Button, StatusBadge, Input, Modal, Skeleton } from '@/components/ui';
+import { Icon } from '@/components/brand/Icon';
+import { MEMBER_SELECTABLE_MODULES, type PortalModule } from '@/lib/portal-modules';
+import { formatDate, formatDateTime } from '@/lib/utils/format';
+import { suspendedPageUrl } from '@/components/portal/suspended';
 
 interface Member {
   id: string;
@@ -13,10 +15,6 @@ interface Member {
   phone?: string;
   role: string;
   status?: 'active' | 'suspended';
-  suspended_at?: string;
-  suspended_reason?: string;
-  suspended_by?: string;
-  suspended_by_role?: 'admin' | 'csm' | 'client';
   allowed_modules?: string[];
   created_at: string;
 }
@@ -31,264 +29,271 @@ interface Invitation {
   expires_at: string;
 }
 
-export default function TeamManagementPage() {
+interface Viewer {
+  email: string;
+  role: string;
+  userId?: string;
+}
+
+/** What an invite or resend produced: the link, and whether the email actually went out. */
+interface InviteResult {
+  email: string;
+  link: string;
+  emailDelivered: boolean;
+}
+
+const ROLE_LABELS: Record<string, string> = {
+  client: 'Account owner',
+  client_member: 'Team member',
+};
+const roleLabel = (role: string) => ROLE_LABELS[role] || 'Team member';
+
+const errorBoxStyle: React.CSSProperties = {
+  padding: 'var(--space-3)',
+  backgroundColor: 'var(--color-status-blocked-bg)',
+  color: 'var(--color-status-blocked-text)',
+  borderRadius: 'var(--radius-md)',
+  fontSize: 'var(--font-size-sm)',
+};
+const successBoxStyle: React.CSSProperties = {
+  padding: 'var(--space-3)',
+  backgroundColor: 'var(--color-status-done-bg)',
+  color: 'var(--color-status-done-text)',
+  borderRadius: 'var(--radius-md)',
+  fontSize: 'var(--font-size-sm)',
+};
+const noteBoxStyle: React.CSSProperties = {
+  padding: 'var(--space-3)',
+  backgroundColor: 'var(--color-bg-surface)',
+  border: '1px solid var(--color-border-subtle)',
+  borderRadius: 'var(--radius-md)',
+  fontSize: 'var(--font-size-xs)',
+  color: 'var(--color-text-muted)',
+  lineHeight: 1.5,
+};
+const cellStyle: React.CSSProperties = { padding: 'var(--space-3)' };
+const headCellStyle: React.CSSProperties = { padding: 'var(--space-2) var(--space-3)', color: 'var(--color-text-muted)' };
+
+/** Invite links always point at the site the owner is currently on. */
+function toLocalLink(link: string): string {
+  if (!link || typeof window === 'undefined') return link || '';
+  try {
+    if (link.startsWith('/')) return `${window.location.origin}${link}`;
+    const parsed = new URL(link);
+    return parsed.origin === window.location.origin ? link : `${window.location.origin}${parsed.pathname}${parsed.search}`;
+  } catch {
+    return link;
+  }
+}
+
+/** Checklist of the sections a team member can be given. */
+function ModulePicker({
+  modules,
+  selected,
+  onChange,
+}: {
+  modules: PortalModule[];
+  selected: string[];
+  onChange: (next: string[]) => void;
+}) {
+  const toggle = (key: string) =>
+    onChange(selected.includes(key) ? selected.filter((k) => k !== key) : [...selected, key]);
+
+  return (
+    <div>
+      <div style={{ display: 'flex', gap: 'var(--space-2)', marginBottom: 'var(--space-3)' }}>
+        <button
+          type="button"
+          className="ui-btn-action-portal"
+          style={{ fontSize: '12px', padding: '4px 10px' }}
+          onClick={() => onChange(modules.map((m) => m.key))}
+        >
+          Select all
+        </button>
+        <button
+          type="button"
+          className="ui-btn-action-portal"
+          style={{ fontSize: '12px', padding: '4px 10px' }}
+          onClick={() => onChange([])}
+        >
+          Clear all
+        </button>
+      </div>
+      <div className="permission-grid" style={{ maxHeight: '260px', overflowY: 'auto', paddingRight: '4px' }}>
+        {modules.map((module) => {
+          const isChecked = selected.includes(module.key);
+          return (
+            <div
+              key={module.key}
+              role="checkbox"
+              aria-checked={isChecked}
+              tabIndex={0}
+              className={`permission-card ${isChecked ? 'is-checked' : ''}`.trim()}
+              onClick={() => toggle(module.key)}
+              onKeyDown={(e) => {
+                if (e.key === ' ' || e.key === 'Enter') {
+                  e.preventDefault();
+                  toggle(module.key);
+                }
+              }}
+            >
+              <div className="permission-checkbox" aria-hidden="true">
+                {isChecked && (
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
+                    <polyline points="20 6 9 17 4 12" />
+                  </svg>
+                )}
+              </div>
+              <div className="permission-label-wrap">
+                <div className="permission-label-row">
+                  <span className="permission-title">{module.label}</span>
+                </div>
+                <span className="permission-desc">{module.description}</span>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+/** The outcome of an invite: says honestly whether the email went out, and offers the link to copy. */
+function InviteResultPanel({ result }: { result: InviteResult }) {
+  const [copyState, setCopyState] = useState<'idle' | 'copied' | 'failed'>('idle');
+
+  const copy = async () => {
+    try {
+      await navigator.clipboard.writeText(result.link);
+      setCopyState('copied');
+      setTimeout(() => setCopyState('idle'), 2500);
+    } catch {
+      setCopyState('failed');
+    }
+  };
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-3)' }}>
+      {result.emailDelivered ? (
+        <div role="status" style={{ ...successBoxStyle, display: 'flex', gap: 'var(--space-2)', alignItems: 'center' }}>
+          <Icon name="check-circle" size={18} />
+          <span>
+            Invite emailed to <strong>{result.email}</strong>. You can also copy the link below and send it yourself.
+          </span>
+        </div>
+      ) : (
+        <div role="alert" style={{ ...errorBoxStyle, display: 'flex', gap: 'var(--space-2)', alignItems: 'center' }}>
+          <Icon name="alert" size={18} />
+          <span>
+            The email to <strong>{result.email}</strong> could not be sent. Copy this link and send it to them yourself.
+          </span>
+        </div>
+      )}
+      <div
+        style={{
+          padding: 'var(--space-3)',
+          backgroundColor: 'var(--color-bg-surface)',
+          border: '1px solid var(--color-border-subtle)',
+          borderRadius: 'var(--radius-md)',
+          fontFamily: 'monospace',
+          fontSize: 'var(--font-size-xs)',
+          wordBreak: 'break-all',
+        }}
+      >
+        {result.link}
+      </div>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-3)', flexWrap: 'wrap' }}>
+        <Button variant="primary" size="sm" onClick={copy}>
+          {copyState === 'copied' ? 'Copied' : 'Copy link'}
+        </Button>
+        <span role="status" style={{ fontSize: 'var(--font-size-xs)', color: 'var(--color-text-muted)' }}>
+          {copyState === 'failed'
+            ? 'Could not copy automatically. Select the link above and copy it.'
+            : 'The link works once and expires in 72 hours.'}
+        </span>
+      </div>
+    </div>
+  );
+}
+
+export default function TeamPage() {
   const params = useParams();
   const clientId = (params?.clientId as string) || 'demo';
 
   const [members, setMembers] = useState<Member[]>([]);
   const [invitations, setInvitations] = useState<Invitation[]>([]);
+  const [viewer, setViewer] = useState<Viewer | null>(null);
+  const [tenantFeatureToggles, setTenantFeatureToggles] = useState<Record<string, boolean>>({});
   const [isLoading, setIsLoading] = useState(true);
-  const [isModalOpen, setIsModalOpen] = useState(false);
+  const [loadError, setLoadError] = useState('');
+  const [attempt, setAttempt] = useState(0);
+
+  // Invite
+  const [isInviteOpen, setIsInviteOpen] = useState(false);
   const [inviteEmail, setInviteEmail] = useState('');
   const [invitePhone, setInvitePhone] = useState('');
+  const [inviteModules, setInviteModules] = useState<string[]>([]);
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [generatedLink, setGeneratedLink] = useState('');
-  const [errorMessage, setErrorMessage] = useState('');
+  const [inviteError, setInviteError] = useState('');
+  const [inviteResult, setInviteResult] = useState<InviteResult | null>(null);
 
-  // Revoke invitation states
+  // Cancel invite
   const [revokeTarget, setRevokeTarget] = useState<Invitation | null>(null);
   const [isRevoking, setIsRevoking] = useState(false);
   const [revokeError, setRevokeError] = useState('');
 
-  // Resend invitation states
+  // Resend invite
   const [resendTarget, setResendTarget] = useState<Invitation | null>(null);
   const [isResending, setIsResending] = useState(false);
   const [resendError, setResendError] = useState('');
-  const [resentLink, setResentLink] = useState('');
+  const [resendResult, setResendResult] = useState<InviteResult | null>(null);
 
-  // Member ban / disable state
+  // Turn access off / on
   const [banTarget, setBanTarget] = useState<Member | null>(null);
   const [isBanning, setIsBanning] = useState(false);
   const [banReason, setBanReason] = useState('');
   const [banError, setBanError] = useState('');
 
-  const [tenantFeatureToggles, setTenantFeatureToggles] = useState<Record<string, boolean>>({});
-  const [selectedInviteModules, setSelectedInviteModules] = useState<string[]>([]);
+  // Change what a member can see
+  const [accessTarget, setAccessTarget] = useState<Member | null>(null);
+  const [accessModules, setAccessModules] = useState<string[]>([]);
+  const [isSavingAccess, setIsSavingAccess] = useState(false);
+  const [accessError, setAccessError] = useState('');
 
-  // Member permissions editing state
-  const [permissionTarget, setPermissionTarget] = useState<Member | null>(null);
-  const [editAllowedModules, setEditAllowedModules] = useState<string[]>([]);
-  const [isSavingPermissions, setIsSavingPermissions] = useState(false);
-  const [permissionError, setPermissionError] = useState('');
-  const [permissionSuccess, setPermissionSuccess] = useState('');
+  // Only the account owner (and Motionz staff) can invite people or change their access.
+  const canManage = viewer?.role === 'client' || viewer?.role === 'admin' || viewer?.role === 'csm';
+  const isSelf = (member: Member) =>
+    Boolean(viewer) && (member.id === viewer!.userId || member.email.toLowerCase() === viewer!.email.toLowerCase());
 
-  const resetModalState = () => {
-    setIsModalOpen(false);
-    setGeneratedLink('');
-    setErrorMessage('');
-    setInviteEmail('');
-    setInvitePhone('');
-    setSelectedInviteModules([]);
-  };
-
-  const handleOpenInviteModal = () => {
-    const defaultModules = PORTAL_MODULES
-      .filter((m) => tenantFeatureToggles[m.key] !== false)
-      .map((m) => m.key);
-    setSelectedInviteModules(defaultModules);
-    setInviteEmail('');
-    setInvitePhone('');
-    setErrorMessage('');
-    setGeneratedLink('');
-    setIsModalOpen(true);
-  };
-
-  const handleOpenPermissions = (member: Member) => {
-    setPermissionTarget(member);
-    setPermissionError('');
-    setPermissionSuccess('');
-    if (Array.isArray(member.allowed_modules)) {
-      setEditAllowedModules(member.allowed_modules);
-    } else {
-      const activeKeys = PORTAL_MODULES
-        .filter((m) => tenantFeatureToggles[m.key] !== false)
-        .map((m) => m.key);
-      setEditAllowedModules(activeKeys);
-    }
-  };
-
-  const handleSavePermissions = async () => {
-    if (!permissionTarget) return;
-    setIsSavingPermissions(true);
-    setPermissionError('');
-    setPermissionSuccess('');
-
-    try {
-      const res = await fetch(`/api/portal/${clientId}/team`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          action: 'update_permissions',
-          memberId: permissionTarget.id,
-          allowed_modules: editAllowedModules,
-        }),
-      });
-
-      const data = await res.json();
-      if (res.ok) {
-        setMembers((prev) =>
-          prev.map((m) =>
-            m.id === permissionTarget.id
-              ? { ...m, allowed_modules: editAllowedModules }
-              : m
-          )
-        );
-        setPermissionSuccess('Member permissions updated successfully.');
-        setTimeout(() => {
-          setPermissionTarget(null);
-          setPermissionSuccess('');
-        }, 700);
-      } else {
-        setPermissionError(data.error || 'Failed to update member permissions.');
-      }
-    } catch {
-      setPermissionError('Network connection error.');
-    } finally {
-      setIsSavingPermissions(false);
-    }
-  };
-
-  const handleToggleMemberBan = async () => {
-    if (!banTarget) return;
-    const isCurrentlySuspended = banTarget.status === 'suspended';
-    const action = isCurrentlySuspended ? 'unsuspend' : 'suspend';
-
-    if (action === 'suspend' && !banReason.trim()) {
-      setBanError('Please enter a reason for disabling access before confirming.');
-      return;
-    }
-
-    setIsBanning(true);
-    setBanError('');
-
-    try {
-      const res = await fetch(`/api/portal/${clientId}/team`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          action,
-          memberId: banTarget.id,
-          reason: banReason || 'Access revoked by team administrator.',
-        }),
-      });
-
-      const data = await res.json();
-      if (res.ok) {
-        setMembers((prev) =>
-          prev.map((m) => (m.id === banTarget.id ? { ...m, ...data.user } : m))
-        );
-        setBanTarget(null);
-        setBanReason('');
-      } else {
-        setBanError(data.error || 'Failed to update member status.');
-      }
-    } catch {
-      setBanError('Network connection error.');
-    } finally {
-      setIsBanning(false);
-    }
-  };
-
-  const handleConfirmResend = async () => {
-    if (!resendTarget) return;
-    setIsResending(true);
-    setResendError('');
-    setResentLink('');
-
-    try {
-      const res = await fetch(`/api/portal/${clientId}/team`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ invitationId: resendTarget.id }),
-      });
-
-      const data = await res.json();
-      if (res.ok) {
-        let link = data.magicLinkUrl || '';
-        if (typeof window !== 'undefined' && link) {
-          try {
-            if (link.startsWith('/')) {
-              link = `${window.location.origin}${link}`;
-            } else {
-              const parsed = new URL(link);
-              if (parsed.origin !== window.location.origin) {
-                link = `${window.location.origin}${parsed.pathname}${parsed.search}`;
-              }
-            }
-          } catch {}
-        }
-        setResentLink(link);
-        // Replace the old invitation with the new refreshed one in state
-        if (data.invitation) {
-          setInvitations((prev) => [
-            data.invitation,
-            ...prev.filter((i) => i.id !== resendTarget.id),
-          ]);
-        }
-      } else {
-        setResendError(data.error || 'Failed to resend invitation.');
-      }
-    } catch {
-      setResendError('Network error while resending invitation.');
-    } finally {
-      setIsResending(false);
-    }
-  };
-
-  const handleConfirmRevoke = async () => {
-    if (!revokeTarget) return;
-    setIsRevoking(true);
-    setRevokeError('');
-
-    try {
-      const res = await fetch(
-        `/api/portal/${clientId}/team?invitationId=${encodeURIComponent(revokeTarget.id)}`,
-        { method: 'DELETE' }
-      );
-
-      if (res.ok) {
-        setInvitations((prev) => prev.filter((i) => i.id !== revokeTarget.id));
-        setRevokeTarget(null);
-      } else {
-        const data = await res.json();
-        setRevokeError(data.error || 'Failed to revoke invitation.');
-      }
-    } catch {
-      setRevokeError('Network error while revoking invitation.');
-    } finally {
-      setIsRevoking(false);
-    }
-  };
+  // Sections that are on for this client and can be given to a team member.
+  const selectableModules = MEMBER_SELECTABLE_MODULES.filter((m) => tenantFeatureToggles[m.key] !== false);
+  const selectableKeys = selectableModules.map((m) => m.key);
 
   useEffect(() => {
     let isMounted = true;
     async function loadTeam() {
+      setIsLoading(true);
+      setLoadError('');
       try {
         const res = await fetch(`/api/portal/${clientId}/team`);
-        if (res.status === 403) {
-          const data = await res.json().catch(() => ({}));
-          if (data?.suspended) {
-            window.location.href = `/auth/suspended?reason=${encodeURIComponent(data.reason || 'Your account access has been suspended.')}`;
-            return;
-          }
+        const data = await res.json().catch(() => ({}));
+        if (res.status === 403 && data?.suspended) {
+          window.location.href = suspendedPageUrl(data);
+          return;
         }
-        if (res.ok) {
-          const data = await res.json();
-          if (isMounted) {
-            const memberList: Member[] = data.members || [];
-            if (data.members) setMembers(memberList);
-            if (data.featureToggles) setTenantFeatureToggles(data.featureToggles);
-            if (data.invitations) {
-              const activeEmails = new Set(memberList.map((m) => m.email.toLowerCase()));
-              const filtered = (data.invitations as Invitation[]).filter(
-                (inv) => !activeEmails.has(inv.email.toLowerCase())
-              );
-              setInvitations(filtered);
-            }
-          }
+        if (!isMounted) return;
+        if (!res.ok) {
+          setLoadError(res.status === 403 ? 'You do not have access to the team list.' : 'Your team could not be loaded.');
+          return;
         }
+        const memberList: Member[] = data.members || [];
+        setMembers(memberList);
+        setViewer(data.viewer || null);
+        setTenantFeatureToggles(data.featureToggles || {});
+        const activeEmails = new Set(memberList.map((m) => m.email.toLowerCase()));
+        setInvitations(((data.invitations || []) as Invitation[]).filter((inv) => !activeEmails.has(inv.email.toLowerCase())));
       } catch {
-        // Fallback remains active
+        if (isMounted) setLoadError('We could not reach the server. Check your connection and try again.');
       } finally {
         if (isMounted) setIsLoading(false);
       }
@@ -297,21 +302,40 @@ export default function TeamManagementPage() {
     return () => {
       isMounted = false;
     };
-  }, [clientId]);
+  }, [clientId, attempt]);
 
-  const activeMembers: Member[] = members;
+  const retry = useCallback(() => setAttempt((n) => n + 1), []);
+
+  /** Empties the invite form but keeps the dialog open, ready for the next person. */
+  const clearInviteForm = () => {
+    setInviteEmail('');
+    setInvitePhone('');
+    setInviteModules(selectableKeys);
+    setInviteError('');
+    setInviteResult(null);
+  };
+
+  const openInvite = () => {
+    clearInviteForm();
+    setIsInviteOpen(true);
+  };
+
+  const closeInvite = () => {
+    if (isSubmitting) return;
+    setIsInviteOpen(false);
+    setInviteResult(null);
+    setInviteError('');
+  };
 
   const handleInviteSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!inviteEmail.trim() || !invitePhone.trim()) {
-      setErrorMessage('Both email and phone number are required.');
+      setInviteError('Please enter both an email and a phone number.');
       return;
     }
 
     setIsSubmitting(true);
-    setErrorMessage('');
-    setGeneratedLink('');
-
+    setInviteError('');
     try {
       const res = await fetch(`/api/portal/${clientId}/team`, {
         method: 'POST',
@@ -320,41 +344,167 @@ export default function TeamManagementPage() {
           email: inviteEmail.trim(),
           phone: invitePhone.trim(),
           role: 'client_member',
-          allowed_modules: selectedInviteModules,
+          allowed_modules: inviteModules,
         }),
       });
-
-      const data = await res.json();
-      if (res.ok) {
-        let link = data.magicLinkUrl || '';
-        if (typeof window !== 'undefined' && link) {
-          try {
-            if (link.startsWith('/')) {
-              link = `${window.location.origin}${link}`;
-            } else {
-              const parsed = new URL(link);
-              if (parsed.origin !== window.location.origin) {
-                link = `${window.location.origin}${parsed.pathname}${parsed.search}`;
-              }
-            }
-          } catch {}
-        }
-        setGeneratedLink(link);
+      const data = await res.json().catch(() => ({}));
+      if (res.ok && data.invitation) {
+        setInviteResult({
+          email: data.invitation.email,
+          link: toLocalLink(data.magicLinkUrl || ''),
+          emailDelivered: Boolean(data.emailDelivered),
+        });
         setInvitations((prev) => [data.invitation, ...prev]);
       } else {
-        setErrorMessage(data.error || 'Failed to send invitation');
+        setInviteError(data.error || 'The invite could not be created. Please try again.');
       }
     } catch {
-      setErrorMessage('Failed to connect to invitation service');
+      setInviteError('We could not reach the server. The invite was not sent.');
     } finally {
       setIsSubmitting(false);
     }
   };
 
-  const copyToClipboard = (text: string) => {
-    navigator.clipboard.writeText(text);
-    alert('Magic-link invitation copied to clipboard!');
+  const closeResend = () => {
+    if (isResending) return;
+    setResendTarget(null);
+    setResendError('');
+    setResendResult(null);
   };
+
+  const handleConfirmResend = async () => {
+    if (!resendTarget) return;
+    setIsResending(true);
+    setResendError('');
+    try {
+      const res = await fetch(`/api/portal/${clientId}/team`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ invitationId: resendTarget.id }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (res.ok) {
+        setResendResult({
+          email: resendTarget.email,
+          link: toLocalLink(data.magicLinkUrl || ''),
+          emailDelivered: Boolean(data.emailDelivered),
+        });
+        if (data.invitation) {
+          setInvitations((prev) => [data.invitation, ...prev.filter((i) => i.id !== resendTarget.id)]);
+        }
+      } else {
+        setResendError(data.error || 'The invite could not be sent again. Please try again.');
+      }
+    } catch {
+      setResendError('We could not reach the server. The invite was not sent again.');
+    } finally {
+      setIsResending(false);
+    }
+  };
+
+  const closeRevoke = () => {
+    if (isRevoking) return;
+    setRevokeTarget(null);
+    setRevokeError('');
+  };
+
+  const handleConfirmRevoke = async () => {
+    if (!revokeTarget) return;
+    setIsRevoking(true);
+    setRevokeError('');
+    try {
+      const res = await fetch(`/api/portal/${clientId}/team?invitationId=${encodeURIComponent(revokeTarget.id)}`, {
+        method: 'DELETE',
+      });
+      if (res.ok) {
+        setInvitations((prev) => prev.filter((i) => i.id !== revokeTarget.id));
+        setRevokeTarget(null);
+      } else {
+        const data = await res.json().catch(() => ({}));
+        setRevokeError(data.error || 'The invite could not be cancelled. Please try again.');
+      }
+    } catch {
+      setRevokeError('We could not reach the server. The invite was not cancelled.');
+    } finally {
+      setIsRevoking(false);
+    }
+  };
+
+  const closeBan = () => {
+    if (isBanning) return;
+    setBanTarget(null);
+    setBanReason('');
+    setBanError('');
+  };
+
+  const handleToggleAccess = async () => {
+    if (!banTarget) return;
+    const action = banTarget.status === 'suspended' ? 'unsuspend' : 'suspend';
+    setIsBanning(true);
+    setBanError('');
+    try {
+      const res = await fetch(`/api/portal/${clientId}/team`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action, memberId: banTarget.id, reason: banReason.trim() }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (res.ok) {
+        setMembers((prev) => prev.map((m) => (m.id === banTarget.id ? { ...m, ...(data.user || {}) } : m)));
+        setBanTarget(null);
+        setBanReason('');
+      } else {
+        setBanError(data.error || 'The change could not be saved. Please try again.');
+      }
+    } catch {
+      setBanError('We could not reach the server. Nothing was changed.');
+    } finally {
+      setIsBanning(false);
+    }
+  };
+
+  const openAccess = (member: Member) => {
+    setAccessTarget(member);
+    setAccessError('');
+    setAccessModules(
+      Array.isArray(member.allowed_modules)
+        ? member.allowed_modules.filter((k) => selectableKeys.includes(k))
+        : selectableKeys
+    );
+  };
+
+  const closeAccess = () => {
+    if (isSavingAccess) return;
+    setAccessTarget(null);
+    setAccessError('');
+  };
+
+  const handleSaveAccess = async () => {
+    if (!accessTarget) return;
+    setIsSavingAccess(true);
+    setAccessError('');
+    try {
+      const res = await fetch(`/api/portal/${clientId}/team`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'update_permissions', memberId: accessTarget.id, allowed_modules: accessModules }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (res.ok) {
+        const saved: string[] = Array.isArray(data.user?.allowed_modules) ? data.user.allowed_modules : accessModules;
+        setMembers((prev) => prev.map((m) => (m.id === accessTarget.id ? { ...m, allowed_modules: saved } : m)));
+        setAccessTarget(null);
+      } else {
+        setAccessError(data.error || 'The change could not be saved. Please try again.');
+      }
+    } catch {
+      setAccessError('We could not reach the server. Nothing was changed.');
+    } finally {
+      setIsSavingAccess(false);
+    }
+  };
+
+  const isBanTargetOff = banTarget?.status === 'suspended';
 
   return (
     <div>
@@ -370,797 +520,401 @@ export default function TeamManagementPage() {
         }}
       >
         <div>
-          <h1 style={{ marginBottom: 'var(--space-1)' }}>Team Members</h1>
+          <h1 style={{ marginBottom: 'var(--space-1)' }}>Team</h1>
           <p style={{ color: 'var(--color-text-secondary)' }}>
-            Manage staff access to your business portal, leads, and onboarding assets.
+            {canManage
+              ? 'Invite the people you work with and choose what each of them can see.'
+              : 'The people who can sign in to this portal. Only the account owner can make changes.'}
           </p>
         </div>
-        <Button variant="primary" onClick={handleOpenInviteModal}>
-          Invite Team Member
-        </Button>
+        {canManage && !isLoading && !loadError && (
+          <Button variant="primary" onClick={openInvite}>
+            Invite someone
+          </Button>
+        )}
       </div>
 
-      {/* Active Team Members List */}
-      <Card style={{ marginBottom: 'var(--space-6)' }}>
-        <CardHeader
-          title="Active Team Members"
-          subtitle={isLoading ? 'Loading team roster...' : `${activeMembers.length} authorized staff members`}
-        />
-        <div style={{ overflowX: 'auto' }}>
-          <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 'var(--font-size-sm)' }}>
-            <thead>
-              <tr style={{ borderBottom: '1px solid var(--color-border-subtle)', textAlign: 'left' }}>
-                <th style={{ padding: 'var(--space-2) var(--space-3)', color: 'var(--color-text-muted)' }}>Name</th>
-                <th style={{ padding: 'var(--space-2) var(--space-3)', color: 'var(--color-text-muted)' }}>Email</th>
-                <th style={{ padding: 'var(--space-2) var(--space-3)', color: 'var(--color-text-muted)' }}>Phone</th>
-                <th style={{ padding: 'var(--space-2) var(--space-3)', color: 'var(--color-text-muted)' }}>Role</th>
-                <th style={{ padding: 'var(--space-2) var(--space-3)', color: 'var(--color-text-muted)' }}>Added Date</th>
-                <th style={{ padding: 'var(--space-2) var(--space-3)', color: 'var(--color-text-muted)' }}>Status</th>
-                <th style={{ padding: 'var(--space-2) var(--space-3)', color: 'var(--color-text-muted)', textAlign: 'right' }}>Actions</th>
-              </tr>
-            </thead>
-            <tbody>
-              {isLoading ? (
-                <>
-                  {[1, 2, 3].map((idx) => (
-                    <tr key={idx} style={{ borderBottom: '1px solid var(--color-border-subtle)' }}>
-                      <td style={{ padding: 'var(--space-3)' }}>
-                        <Skeleton width="130px" height="18px" />
-                      </td>
-                      <td style={{ padding: 'var(--space-3)' }}>
-                        <Skeleton width="180px" height="16px" />
-                      </td>
-                      <td style={{ padding: 'var(--space-3)' }}>
-                        <Skeleton width="120px" height="16px" />
-                      </td>
-                      <td style={{ padding: 'var(--space-3)' }}>
-                        <Skeleton width="140px" height="16px" />
-                      </td>
-                      <td style={{ padding: 'var(--space-3)' }}>
-                        <Skeleton width="85px" height="14px" />
-                      </td>
-                      <td style={{ padding: 'var(--space-3)' }}>
-                        <Skeleton width="65px" height="24px" borderRadius="var(--radius-full)" />
-                      </td>
-                      <td style={{ padding: 'var(--space-3)', textAlign: 'right' }}>
-                        <Skeleton width="80px" height="30px" borderRadius="var(--radius-sm)" />
+      {loadError ? (
+        <Card>
+          <p role="alert" style={{ margin: '0 0 var(--space-3) 0', color: 'var(--color-status-danger-text)' }}>
+            {loadError}
+          </p>
+          <Button variant="secondary" size="sm" onClick={retry}>
+            Try again
+          </Button>
+        </Card>
+      ) : (
+        <>
+          {/* People */}
+          <Card style={{ marginBottom: 'var(--space-6)' }}>
+            <CardHeader
+              title="People"
+              subtitle={isLoading ? undefined : `${members.length} ${members.length === 1 ? 'person' : 'people'}`}
+            />
+            <div style={{ overflowX: 'auto' }}>
+              <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 'var(--font-size-sm)' }}>
+                <thead>
+                  <tr style={{ borderBottom: '1px solid var(--color-border-subtle)', textAlign: 'left' }}>
+                    <th style={headCellStyle}>Name</th>
+                    <th style={headCellStyle}>Email</th>
+                    <th style={headCellStyle}>Phone</th>
+                    <th style={headCellStyle}>Role</th>
+                    <th style={headCellStyle}>Added</th>
+                    <th style={headCellStyle}>Status</th>
+                    {canManage && <th style={{ ...headCellStyle, textAlign: 'right' }}>Actions</th>}
+                  </tr>
+                </thead>
+                <tbody>
+                  {isLoading ? (
+                    [1, 2, 3].map((idx) => (
+                      <tr key={idx} style={{ borderBottom: '1px solid var(--color-border-subtle)' }}>
+                        {[130, 180, 120, 110, 85, 65].map((w) => (
+                          <td key={w} style={cellStyle}>
+                            <Skeleton width={`${w}px`} height="16px" />
+                          </td>
+                        ))}
+                      </tr>
+                    ))
+                  ) : members.length === 0 ? (
+                    <tr>
+                      <td colSpan={canManage ? 7 : 6} style={{ ...cellStyle, color: 'var(--color-text-secondary)' }}>
+                        No one has been added yet.
                       </td>
                     </tr>
-                  ))}
-                </>
-              ) : (
-                activeMembers.map((member) => {
-                  const isSuspended = member.status === 'suspended';
-                  const isPrimaryOwner = member.role === 'client';
+                  ) : (
+                    members.map((member) => {
+                      const isOff = member.status === 'suspended';
+                      // The owner's own access, and your own, cannot be changed from here.
+                      const showActions = canManage && member.role !== 'client' && !isSelf(member);
 
-                  return (
-                    <tr key={member.id} style={{ borderBottom: '1px solid var(--color-border-subtle)' }}>
-                      <td style={{ padding: 'var(--space-3)', fontWeight: 'var(--font-weight-medium)' }}>
-                        {member.full_name}
-                      </td>
-                      <td style={{ padding: 'var(--space-3)', color: 'var(--color-text-secondary)' }}>
-                        {member.email}
-                      </td>
-                      <td style={{ padding: 'var(--space-3)', color: 'var(--color-text-secondary)' }}>
-                        {member.phone || 'Not provided'}
-                      </td>
-                      <td style={{ padding: 'var(--space-3)' }}>
-                        {member.role === 'client' ? 'Portal Administrator' : 'Team Member'}
-                      </td>
-                      <td style={{ padding: 'var(--space-3)', color: 'var(--color-text-muted)', fontSize: 'var(--font-size-xs)' }}>
-                        {new Date(member.created_at).toLocaleDateString()}
-                      </td>
-                      <td style={{ padding: 'var(--space-3)' }}>
-                        {isSuspended ? (
-                          <StatusBadge status="Disabled" variant="suspended" />
-                        ) : (
-                          <StatusBadge status="Active" variant="done" />
-                        )}
-                      </td>
-                      <td style={{ padding: 'var(--space-3)', textAlign: 'right' }}>
-                        {!isPrimaryOwner && (
-                          <div style={{ display: 'flex', gap: '8px', justifyContent: 'flex-end', alignItems: 'center' }}>
-                            <Button
-                              variant="secondary"
-                              size="sm"
-                              onClick={() => handleOpenPermissions(member)}
-                            >
-                              Permissions
-                            </Button>
-                            <Button
-                              variant={isSuspended ? 'secondary' : 'danger'}
-                              size="sm"
-                              onClick={() => {
-                                setBanTarget(member);
-                                setBanReason('');
-                                setBanError('');
-                              }}
-                            >
-                              {isSuspended ? 'Reactivate' : 'Disable Access'}
-                            </Button>
-                          </div>
-                        )}
-                      </td>
-                    </tr>
-                  );
-                })
-              )}
-            </tbody>
-          </table>
-        </div>
-      </Card>
+                      return (
+                        <tr key={member.id} style={{ borderBottom: '1px solid var(--color-border-subtle)' }}>
+                          <td style={{ ...cellStyle, fontWeight: 'var(--font-weight-medium)' }}>
+                            {member.full_name}
+                            {isSelf(member) ? ' (you)' : ''}
+                          </td>
+                          <td style={{ ...cellStyle, color: 'var(--color-text-secondary)' }}>{member.email}</td>
+                          <td style={{ ...cellStyle, color: 'var(--color-text-secondary)' }}>{member.phone || '-'}</td>
+                          <td style={cellStyle}>{roleLabel(member.role)}</td>
+                          <td style={{ ...cellStyle, color: 'var(--color-text-muted)', fontSize: 'var(--font-size-xs)', whiteSpace: 'nowrap' }}>
+                            {formatDate(member.created_at)}
+                          </td>
+                          <td style={cellStyle}>
+                            {isOff ? (
+                              <StatusBadge status="Access off" variant="suspended" />
+                            ) : (
+                              <StatusBadge status="Active" variant="done" />
+                            )}
+                          </td>
+                          {canManage && (
+                            <td style={{ ...cellStyle, textAlign: 'right' }}>
+                              {showActions && (
+                                <div style={{ display: 'flex', gap: '8px', justifyContent: 'flex-end', alignItems: 'center' }}>
+                                  <Button variant="secondary" size="sm" onClick={() => openAccess(member)}>
+                                    Change access
+                                  </Button>
+                                  <Button
+                                    variant={isOff ? 'secondary' : 'danger'}
+                                    size="sm"
+                                    onClick={() => {
+                                      setBanTarget(member);
+                                      setBanReason('');
+                                      setBanError('');
+                                    }}
+                                  >
+                                    {isOff ? 'Turn access on' : 'Turn access off'}
+                                  </Button>
+                                </div>
+                              )}
+                            </td>
+                          )}
+                        </tr>
+                      );
+                    })
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </Card>
 
-      {/* Pending Invitations */}
-      {isLoading ? (
-        <Card>
-          <CardHeader
-            title="Pending Invitations"
-            subtitle="Invitations valid for 72 hours until accepted"
-          />
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-3)' }}>
-            {[1, 2].map((idx) => (
-              <div
-                key={idx}
-                style={{
-                  padding: 'var(--space-3)',
-                  backgroundColor: 'var(--color-bg-surface)',
-                  borderRadius: 'var(--radius-md)',
-                  border: '1px solid var(--color-border-subtle)',
-                  display: 'flex',
-                  justifyContent: 'space-between',
-                  alignItems: 'center',
-                  flexWrap: 'wrap',
-                  gap: 'var(--space-2)',
-                }}
-              >
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-1)' }}>
-                  <Skeleton width="220px" height="18px" />
-                  <Skeleton width="340px" height="14px" />
-                </div>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-2)' }}>
-                  <Skeleton width="130px" height="24px" borderRadius="var(--radius-full)" />
-                  <Skeleton width="65px" height="30px" borderRadius="var(--radius-sm)" />
-                </div>
-              </div>
-            ))}
-          </div>
-        </Card>
-      ) : invitations.length > 0 ? (
-        <Card>
-          <CardHeader
-            title="Pending Invitations"
-            subtitle="Invitations valid for 72 hours until accepted"
-          />
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-3)' }}>
-            {invitations.map((inv) => (
-              <div
-                key={inv.id}
-                style={{
-                  padding: 'var(--space-3)',
-                  backgroundColor: 'var(--color-bg-surface)',
-                  borderRadius: 'var(--radius-md)',
-                  border: '1px solid var(--color-border-subtle)',
-                  display: 'flex',
-                  justifyContent: 'space-between',
-                  alignItems: 'center',
-                  flexWrap: 'wrap',
-                  gap: 'var(--space-2)',
-                }}
-              >
-                <div>
-                  <div style={{ fontWeight: 'var(--font-weight-medium)', fontSize: 'var(--font-size-sm)' }}>
-                    {inv.full_name ? `${inv.full_name} (${inv.email})` : inv.email}
-                  </div>
-                  <div style={{ fontSize: 'var(--font-size-xs)', color: 'var(--color-text-muted)' }}>
-                    Role: {inv.role} | {inv.phone ? `Phone: ${inv.phone} | ` : ''}Expires: {new Date(inv.expires_at).toLocaleString()}
-                  </div>
-                </div>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-2)' }}>
-                  <StatusBadge status="Pending Acceptance" variant="progress" />
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => {
-                      setResendTarget(inv);
-                      setResendError('');
-                      setResentLink('');
+          {/* Pending invites (owner and staff only) */}
+          {canManage && !isLoading && invitations.length > 0 && (
+            <Card>
+              <CardHeader title="Pending invites" subtitle="Each invite link works once and expires after 72 hours." />
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-3)' }}>
+                {invitations.map((inv) => (
+                  <div
+                    key={inv.id}
+                    style={{
+                      padding: 'var(--space-3)',
+                      backgroundColor: 'var(--color-bg-surface)',
+                      borderRadius: 'var(--radius-md)',
+                      border: '1px solid var(--color-border-subtle)',
+                      display: 'flex',
+                      justifyContent: 'space-between',
+                      alignItems: 'center',
+                      flexWrap: 'wrap',
+                      gap: 'var(--space-2)',
                     }}
                   >
-                    Resend Link
-                  </Button>
-                  <Button
-                    variant="danger"
-                    size="sm"
-                    onClick={() => {
-                      setRevokeTarget(inv);
-                      setRevokeError('');
-                    }}
-                  >
-                    Revoke
-                  </Button>
-                </div>
+                    <div>
+                      <div style={{ fontWeight: 'var(--font-weight-medium)', fontSize: 'var(--font-size-sm)' }}>
+                        {inv.full_name ? `${inv.full_name} (${inv.email})` : inv.email}
+                      </div>
+                      <div style={{ fontSize: 'var(--font-size-xs)', color: 'var(--color-text-muted)' }}>
+                        {roleLabel(inv.role)}
+                        {inv.phone ? ` · ${inv.phone}` : ''} {'·'} Expires {formatDateTime(inv.expires_at)}
+                      </div>
+                    </div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-2)', flexWrap: 'wrap' }}>
+                      <StatusBadge status="Waiting for them to accept" variant="progress" />
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => {
+                          setResendTarget(inv);
+                          setResendError('');
+                          setResendResult(null);
+                        }}
+                      >
+                        Send again
+                      </Button>
+                      <Button
+                        variant="danger"
+                        size="sm"
+                        onClick={() => {
+                          setRevokeTarget(inv);
+                          setRevokeError('');
+                        }}
+                      >
+                        Cancel invite
+                      </Button>
+                    </div>
+                  </div>
+                ))}
               </div>
-            ))}
-          </div>
-        </Card>
-      ) : null}
+            </Card>
+          )}
+        </>
+      )}
 
-      {/* Invite Member Modal */}
-      <Modal
-        isOpen={isModalOpen}
-        onClose={resetModalState}
-        title="Invite New Team Member"
-      >
-        {generatedLink ? (
-          <div>
-            <div
-              style={{
-                padding: 'var(--space-3)',
-                backgroundColor: 'var(--color-status-done-bg)',
-                color: 'var(--color-status-done-text)',
-                borderRadius: 'var(--radius-md)',
-                marginBottom: 'var(--space-4)',
-                fontSize: 'var(--font-size-sm)',
-              }}
-            >
-              Invitation generated successfully! Share this single-use link with your team member:
-            </div>
-            <div
-              style={{
-                padding: 'var(--space-3)',
-                backgroundColor: 'var(--color-bg-surface)',
-                border: '1px solid var(--color-border-subtle)',
-                borderRadius: 'var(--radius-md)',
-                fontFamily: 'monospace',
-                fontSize: 'var(--font-size-xs)',
-                wordBreak: 'break-all',
-                marginBottom: 'var(--space-4)',
-              }}
-            >
-              {generatedLink}
-            </div>
-            <div style={{ display: 'flex', gap: 'var(--space-2)', flexWrap: 'wrap' }}>
-              <Button variant="primary" fullWidth onClick={() => copyToClipboard(generatedLink)}>
-                Copy Link to Clipboard
+      {/* Invite someone */}
+      <Modal isOpen={isInviteOpen} onClose={closeInvite} title="Invite someone" dismissOnOverlay={false}>
+        {inviteResult ? (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-4)' }}>
+            <InviteResultPanel result={inviteResult} />
+            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 'var(--space-2)', flexWrap: 'wrap' }}>
+              <Button variant="outline" onClick={clearInviteForm}>
+                Invite another
               </Button>
-              <Button
-                variant="outline"
-                onClick={resetModalState}
-              >
-                Invite Another
+              <Button variant="secondary" onClick={closeInvite}>
+                Done
               </Button>
             </div>
           </div>
         ) : (
           <form onSubmit={handleInviteSubmit} style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-4)' }}>
-            {errorMessage && (
-              <div
-                style={{
-                  padding: 'var(--space-3)',
-                  backgroundColor: 'var(--color-status-blocked-bg)',
-                  color: 'var(--color-status-blocked-text)',
-                  borderRadius: 'var(--radius-md)',
-                  fontSize: 'var(--font-size-sm)',
-                }}
-              >
-                {errorMessage}
+            {inviteError && (
+              <div role="alert" style={errorBoxStyle}>
+                {inviteError}
               </div>
             )}
 
             <Input
-              label="Colleague Email Address"
+              label="Their email"
               type="email"
-              placeholder="e.g. colleague@abcroofing.com"
+              placeholder="name@company.com"
               value={inviteEmail}
               onChange={(e) => setInviteEmail(e.target.value)}
+              maxLength={254}
+              autoComplete="off"
               required
             />
 
             <Input
-              label="Phone Number"
+              label="Their phone number"
               type="tel"
-              placeholder="e.g. +1 (555) 234-5678"
+              placeholder="+1 555 234 5678"
               value={invitePhone}
               onChange={(e) => setInvitePhone(e.target.value)}
+              maxLength={30}
+              autoComplete="off"
               required
             />
 
             <div>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
-                <label style={{ fontSize: 'var(--font-size-xs)', fontWeight: 'var(--font-weight-medium)', color: 'var(--color-text-secondary)' }}>
-                  Module & Feature Access
-                </label>
-                <div style={{ display: 'flex', gap: '6px' }}>
-                  <button
-                    type="button"
-                    style={{
-                      background: 'none',
-                      border: 'none',
-                      color: 'var(--color-primary-text)',
-                      fontSize: '11px',
-                      cursor: 'pointer',
-                      padding: 0,
-                    }}
-                    onClick={() => {
-                      const allActive = PORTAL_MODULES
-                        .filter((m) => tenantFeatureToggles[m.key] !== false)
-                        .map((m) => m.key);
-                      setSelectedInviteModules(allActive);
-                    }}
-                  >
-                    Select All
-                  </button>
-                  <span style={{ color: 'var(--color-text-muted)', fontSize: '11px' }}>|</span>
-                  <button
-                    type="button"
-                    style={{
-                      background: 'none',
-                      border: 'none',
-                      color: 'var(--color-text-muted)',
-                      fontSize: '11px',
-                      cursor: 'pointer',
-                      padding: 0,
-                    }}
-                    onClick={() => setSelectedInviteModules([])}
-                  >
-                    Deselect All
-                  </button>
-                </div>
+              <div style={{ fontSize: 'var(--font-size-sm)', fontWeight: 'var(--font-weight-medium)', marginBottom: 'var(--space-2)' }}>
+                What they can see
               </div>
-              <div className="permission-grid" style={{ maxHeight: '220px', overflowY: 'auto', paddingRight: '4px' }}>
-                {PORTAL_MODULES.filter((module) => tenantFeatureToggles[module.key] !== false).map((module) => {
-                  const isChecked = selectedInviteModules.includes(module.key);
-
-                  return (
-                    <div
-                      key={module.key}
-                      className={`permission-card ${isChecked ? 'is-checked' : ''}`.trim()}
-                      onClick={() => {
-                        setSelectedInviteModules((prev) =>
-                          prev.includes(module.key)
-                            ? prev.filter((k) => k !== module.key)
-                            : [...prev, module.key]
-                        );
-                      }}
-                      style={{ padding: '8px 10px', gap: '8px' }}
-                    >
-                      <div className="permission-checkbox" style={{ width: '16px', height: '16px', marginTop: '1px' }}>
-                        {isChecked && (
-                          <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
-                            <polyline points="20 6 9 17 4 12" />
-                          </svg>
-                        )}
-                      </div>
-                      <div className="permission-label-wrap">
-                        <div className="permission-label-row">
-                          <span className="permission-title" style={{ fontSize: '12px' }}>{module.label}</span>
-                        </div>
-                        <span className="permission-desc" style={{ fontSize: '10px' }}>{module.description}</span>
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
+              <ModulePicker modules={selectableModules} selected={inviteModules} onChange={setInviteModules} />
             </div>
 
             <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 'var(--space-2)', marginTop: 'var(--space-2)', flexWrap: 'wrap' }}>
-              <Button variant="outline" type="button" onClick={resetModalState}>
+              <Button variant="outline" type="button" onClick={closeInvite} disabled={isSubmitting}>
                 Cancel
               </Button>
               <Button variant="primary" type="submit" disabled={isSubmitting || !inviteEmail.trim() || !invitePhone.trim()}>
-                {isSubmitting ? 'Generating Invitation...' : 'Send Magic-Link Invitation'}
+                {isSubmitting ? 'Sending...' : 'Send invite'}
               </Button>
             </div>
           </form>
         )}
       </Modal>
 
-      {/* Revoke Invitation Confirmation Modal */}
+      {/* Cancel an invite */}
       <Modal
         isOpen={Boolean(revokeTarget)}
-        onClose={() => {
-          if (!isRevoking) {
-            setRevokeTarget(null);
-            setRevokeError('');
-          }
-        }}
-        title="Revoke Invitation"
+        onClose={closeRevoke}
+        title="Cancel this invite?"
         footer={
           <div style={{ display: 'flex', gap: 'var(--space-2)', justifyContent: 'flex-end', width: '100%' }}>
-            <Button
-              variant="outline"
-              onClick={() => {
-                setRevokeTarget(null);
-                setRevokeError('');
-              }}
-              disabled={isRevoking}
-            >
-              Cancel
+            <Button variant="outline" onClick={closeRevoke} disabled={isRevoking}>
+              Keep invite
             </Button>
-            <Button
-              variant="danger"
-              onClick={handleConfirmRevoke}
-              disabled={isRevoking}
-            >
-              {isRevoking ? 'Revoking...' : 'Yes, Revoke Invitation'}
+            <Button variant="danger" onClick={handleConfirmRevoke} disabled={isRevoking}>
+              {isRevoking ? 'Cancelling...' : 'Cancel invite'}
             </Button>
           </div>
         }
       >
         <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-3)' }}>
           {revokeError && (
-            <div
-              style={{
-                padding: 'var(--space-2) var(--space-3)',
-                backgroundColor: 'rgba(239, 68, 68, 0.1)',
-                color: 'var(--color-danger, #ef4444)',
-                borderRadius: 'var(--radius-sm)',
-                fontSize: 'var(--font-size-sm)',
-                border: '1px solid rgba(239, 68, 68, 0.3)',
-              }}
-            >
+            <div role="alert" style={errorBoxStyle}>
               {revokeError}
             </div>
           )}
           <p style={{ margin: 0, color: 'var(--color-text-secondary)', fontSize: 'var(--font-size-sm)' }}>
-            Are you sure you want to revoke and delete the pending invitation for <strong style={{ color: 'var(--color-text-primary)' }}>{revokeTarget?.email}</strong>?
+            The invite for <strong style={{ color: 'var(--color-text-primary)' }}>{revokeTarget?.email}</strong> will be
+            cancelled.
           </p>
-          <div
-            style={{
-              padding: 'var(--space-3)',
-              backgroundColor: 'var(--color-bg-surface)',
-              border: '1px solid var(--color-border-subtle)',
-              borderRadius: 'var(--radius-md)',
-              fontSize: 'var(--font-size-xs)',
-              color: 'var(--color-text-muted)',
-              lineHeight: 1.5,
-            }}
-          >
-            ⚠️ Once revoked, the invitation link will immediately become invalid. The recipient will not be able to complete account setup or set a password with it.
+          <div style={noteBoxStyle}>
+            The link they were sent stops working straight away. You can invite them again later.
           </div>
         </div>
       </Modal>
 
-      {/* Resend Invitation Confirmation & Result Modal */}
+      {/* Send an invite again */}
       <Modal
         isOpen={Boolean(resendTarget)}
-        onClose={() => {
-          if (!isResending) {
-            setResendTarget(null);
-            setResendError('');
-            setResentLink('');
-          }
-        }}
-        title={resentLink ? 'New Invitation Link Generated' : 'Resend Magic-Link Invitation'}
+        onClose={closeResend}
+        title={resendResult ? 'New invite link' : 'Send this invite again?'}
+        dismissOnOverlay={!resendResult}
         footer={
-          resentLink ? (
-            <div style={{ display: 'flex', gap: 'var(--space-2)', justifyContent: 'flex-end', width: '100%' }}>
-              <Button
-                variant="outline"
-                onClick={() => {
-                  setResendTarget(null);
-                  setResendError('');
-                  setResentLink('');
-                }}
-              >
-                Close
+          <div style={{ display: 'flex', gap: 'var(--space-2)', justifyContent: 'flex-end', width: '100%' }}>
+            {resendResult ? (
+              <Button variant="secondary" onClick={closeResend}>
+                Done
               </Button>
-              <Button
-                variant="primary"
-                onClick={() => copyToClipboard(resentLink)}
-              >
-                Copy Link
-              </Button>
-            </div>
-          ) : (
-            <div style={{ display: 'flex', gap: 'var(--space-2)', justifyContent: 'flex-end', width: '100%' }}>
-              <Button
-                variant="outline"
-                onClick={() => {
-                  setResendTarget(null);
-                  setResendError('');
-                  setResentLink('');
-                }}
-                disabled={isResending}
-              >
-                Cancel
-              </Button>
-              <Button
-                variant="primary"
-                onClick={handleConfirmResend}
-                disabled={isResending}
-              >
-                {isResending ? 'Regenerating...' : 'Regenerate & Resend Link'}
-              </Button>
-            </div>
-          )
+            ) : (
+              <>
+                <Button variant="outline" onClick={closeResend} disabled={isResending}>
+                  Cancel
+                </Button>
+                <Button variant="primary" onClick={handleConfirmResend} disabled={isResending}>
+                  {isResending ? 'Sending...' : 'Send again'}
+                </Button>
+              </>
+            )}
+          </div>
         }
       >
-        {resentLink ? (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-3)' }}>
-            <div
-              style={{
-                padding: 'var(--space-3)',
-                backgroundColor: 'var(--color-status-done-bg)',
-                color: 'var(--color-status-done-text)',
-                borderRadius: 'var(--radius-md)',
-                fontSize: 'var(--font-size-sm)',
-              }}
-            >
-              The previous invitation was revoked, and a fresh 72-hour magic link has been created for <strong>{resendTarget?.email}</strong>:
-            </div>
-            <div
-              style={{
-                padding: 'var(--space-3)',
-                backgroundColor: 'var(--color-bg-surface)',
-                border: '1px solid var(--color-border-subtle)',
-                borderRadius: 'var(--radius-md)',
-                fontFamily: 'monospace',
-                fontSize: 'var(--font-size-xs)',
-                wordBreak: 'break-all',
-              }}
-            >
-              {resentLink}
-            </div>
-            <p style={{ margin: 0, fontSize: 'var(--font-size-xs)', color: 'var(--color-text-muted)' }}>
-              Share this updated link with your team member. The old link will no longer work.
-            </p>
-          </div>
+        {resendResult ? (
+          <InviteResultPanel result={resendResult} />
         ) : (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-3)' }}>
             {resendError && (
-              <div
-                style={{
-                  padding: 'var(--space-2) var(--space-3)',
-                  backgroundColor: 'rgba(239, 68, 68, 0.1)',
-                  color: 'var(--color-danger, #ef4444)',
-                  borderRadius: 'var(--radius-sm)',
-                  fontSize: 'var(--font-size-sm)',
-                  border: '1px solid rgba(239, 68, 68, 0.3)',
-                }}
-              >
+              <div role="alert" style={errorBoxStyle}>
                 {resendError}
               </div>
             )}
             <p style={{ margin: 0, color: 'var(--color-text-secondary)', fontSize: 'var(--font-size-sm)' }}>
-              Are you sure you want to resend the invitation to <strong style={{ color: 'var(--color-text-primary)' }}>{resendTarget?.email}</strong>?
+              We will email a new invite link to{' '}
+              <strong style={{ color: 'var(--color-text-primary)' }}>{resendTarget?.email}</strong>.
             </p>
-            <div
-              style={{
-                padding: 'var(--space-3)',
-                backgroundColor: 'var(--color-bg-surface)',
-                border: '1px solid var(--color-border-subtle)',
-                borderRadius: 'var(--radius-md)',
-                fontSize: 'var(--font-size-xs)',
-                color: 'var(--color-text-muted)',
-                lineHeight: 1.5,
-              }}
-            >
-              ℹ️ Resending will automatically <strong>revoke the old link</strong> immediately so it cannot be used, and generate a brand-new token with a fresh 72-hour expiration window.
+            <div style={noteBoxStyle}>
+              The old link stops working, and the new one is good for 72 hours.
             </div>
           </div>
         )}
       </Modal>
 
-      {/* Member Suspension / Disable Modal */}
+      {/* Turn access off / on */}
       <Modal
         isOpen={Boolean(banTarget)}
-        onClose={() => {
-          if (!isBanning) {
-            setBanTarget(null);
-            setBanReason('');
-            setBanError('');
-          }
-        }}
-        title={banTarget?.status === 'suspended' ? 'Reactivate Team Member' : 'Disable Member Access'}
+        onClose={closeBan}
+        title={isBanTargetOff ? 'Turn access back on?' : 'Turn access off?'}
+        dismissOnOverlay={false}
         footer={
           <div style={{ display: 'flex', gap: 'var(--space-2)', justifyContent: 'flex-end', width: '100%' }}>
-            <Button
-              variant="outline"
-              onClick={() => {
-                setBanTarget(null);
-                setBanReason('');
-                setBanError('');
-              }}
-              disabled={isBanning}
-            >
+            <Button variant="outline" onClick={closeBan} disabled={isBanning}>
               Cancel
             </Button>
-            <Button
-              variant={banTarget?.status === 'suspended' ? 'primary' : 'danger'}
-              onClick={handleToggleMemberBan}
-              disabled={isBanning || (banTarget?.status !== 'suspended' && !banReason.trim())}
-            >
-              {isBanning
-                ? 'Processing...'
-                : banTarget?.status === 'suspended'
-                ? 'Confirm Reactivation'
-                : 'Confirm Disable Access'}
+            <Button variant={isBanTargetOff ? 'primary' : 'danger'} onClick={handleToggleAccess} disabled={isBanning}>
+              {isBanning ? 'Saving...' : isBanTargetOff ? 'Turn access on' : 'Turn access off'}
             </Button>
           </div>
         }
       >
         <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-3)' }}>
           {banError && (
-            <div
-              style={{
-                padding: 'var(--space-2) var(--space-3)',
-                backgroundColor: 'rgba(239, 68, 68, 0.1)',
-                color: 'var(--color-danger, #ef4444)',
-                borderRadius: 'var(--radius-sm)',
-                fontSize: 'var(--font-size-sm)',
-                border: '1px solid rgba(239, 68, 68, 0.3)',
-              }}
-            >
+            <div role="alert" style={errorBoxStyle}>
               {banError}
             </div>
           )}
 
-          {banTarget?.status === 'suspended' ? (
+          {isBanTargetOff ? (
             <p style={{ margin: 0, color: 'var(--color-text-secondary)', fontSize: 'var(--font-size-sm)' }}>
-              Are you sure you want to reactivate access for <strong>{banTarget?.full_name}</strong> ({banTarget?.email})? They will immediately regain portal access.
+              <strong>{banTarget?.full_name}</strong> ({banTarget?.email}) will be able to sign in again straight away.
             </p>
           ) : (
             <>
               <p style={{ margin: 0, color: 'var(--color-text-secondary)', fontSize: 'var(--font-size-sm)' }}>
-                Are you sure you want to disable access for <strong>{banTarget?.full_name}</strong> ({banTarget?.email})?
+                <strong>{banTarget?.full_name}</strong> ({banTarget?.email}) will no longer be able to use this portal.
               </p>
               <Input
-                label="Reason for Disabling Access"
-                placeholder="e.g. Employee departed from business, role change"
+                label="Reason (optional)"
+                placeholder="For example: no longer works here"
                 value={banReason}
-                onChange={(e) => {
-                  setBanReason(e.target.value);
-                  if (banError) setBanError('');
-                }}
-                required
-                helperText="This reason will be displayed to the user and recorded in the audit log."
+                onChange={(e) => setBanReason(e.target.value)}
+                maxLength={500}
+                helperText="Saved in your account history. They will not see it."
               />
-              <div
-                style={{
-                  padding: 'var(--space-3)',
-                  backgroundColor: 'var(--color-bg-surface)',
-                  border: '1px solid var(--color-border-subtle)',
-                  borderRadius: 'var(--radius-md)',
-                  fontSize: 'var(--font-size-xs)',
-                  color: 'var(--color-text-muted)',
-                  lineHeight: 1.5,
-                }}
-              >
-                The member will be immediately logged out on their next request and redirected to the access restriction page.
+              <div style={noteBoxStyle}>
+                They are signed out the next time they open a page. You can turn their access back on at any time.
               </div>
             </>
           )}
         </div>
       </Modal>
 
-      {/* Edit Member Permissions Modal */}
+      {/* Change what a member can see */}
       <Modal
-        isOpen={Boolean(permissionTarget)}
-        onClose={() => {
-          if (!isSavingPermissions) {
-            setPermissionTarget(null);
-            setPermissionError('');
-            setPermissionSuccess('');
-          }
-        }}
-        title={`Member Permissions: ${permissionTarget?.full_name || permissionTarget?.email || ''}`}
+        isOpen={Boolean(accessTarget)}
+        onClose={closeAccess}
+        title={`What ${accessTarget?.full_name || accessTarget?.email || 'they'} can see`}
+        dismissOnOverlay={false}
         footer={
           <div style={{ display: 'flex', gap: 'var(--space-2)', justifyContent: 'flex-end', width: '100%', flexWrap: 'wrap' }}>
-            <Button
-              variant="outline"
-              onClick={() => {
-                setPermissionTarget(null);
-                setPermissionError('');
-                setPermissionSuccess('');
-              }}
-              disabled={isSavingPermissions}
-            >
+            <Button variant="outline" onClick={closeAccess} disabled={isSavingAccess}>
               Cancel
             </Button>
-            <Button
-              variant="primary"
-              onClick={handleSavePermissions}
-              disabled={isSavingPermissions}
-            >
-              {isSavingPermissions ? 'Saving Permissions...' : 'Save Permissions'}
+            <Button variant="primary" onClick={handleSaveAccess} disabled={isSavingAccess}>
+              {isSavingAccess ? 'Saving...' : 'Save'}
             </Button>
           </div>
         }
       >
         <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-4)' }}>
-          {permissionError && (
-            <div
-              style={{
-                padding: 'var(--space-2) var(--space-3)',
-                backgroundColor: 'rgba(239, 68, 68, 0.1)',
-                color: 'var(--color-danger, #ef4444)',
-                borderRadius: 'var(--radius-sm)',
-                fontSize: 'var(--font-size-sm)',
-                border: '1px solid rgba(239, 68, 68, 0.3)',
-              }}
-            >
-              {permissionError}
+          {accessError && (
+            <div role="alert" style={errorBoxStyle}>
+              {accessError}
             </div>
           )}
-
-          {permissionSuccess && (
-            <div
-              style={{
-                padding: 'var(--space-2) var(--space-3)',
-                backgroundColor: 'var(--color-status-done-bg)',
-                color: 'var(--color-status-done-text)',
-                borderRadius: 'var(--radius-sm)',
-                fontSize: 'var(--font-size-sm)',
-                border: '1px solid rgba(16, 185, 129, 0.3)',
-              }}
-            >
-              {permissionSuccess}
-            </div>
-          )}
-
-          <div>
-            <div style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-secondary)', marginBottom: 'var(--space-2)' }}>
-              Configure accessible sections for <strong style={{ color: 'var(--color-text-primary)' }}>{permissionTarget?.email}</strong>. Modules toggled off will be hidden from their portal navigation and blocked.
-            </div>
-            <div style={{ display: 'flex', gap: 'var(--space-2)', marginBottom: 'var(--space-3)' }}>
-              <button
-                type="button"
-                className="ui-btn-action-portal"
-                style={{ fontSize: '12px', padding: '4px 10px' }}
-                onClick={() => {
-                  const allActive = PORTAL_MODULES
-                    .filter((m) => tenantFeatureToggles[m.key] !== false)
-                    .map((m) => m.key);
-                  setEditAllowedModules(allActive);
-                }}
-              >
-                Select All
-              </button>
-              <button
-                type="button"
-                className="ui-btn-action-portal"
-                style={{ fontSize: '12px', padding: '4px 10px' }}
-                onClick={() => setEditAllowedModules([])}
-              >
-                Clear All
-              </button>
-            </div>
-          </div>
-
-          <div className="permission-grid">
-            {PORTAL_MODULES.filter((module) => tenantFeatureToggles[module.key] !== false).map((module) => {
-              const isChecked = editAllowedModules.includes(module.key);
-
-              return (
-                <div
-                  key={module.key}
-                  className={`permission-card ${isChecked ? 'is-checked' : ''}`.trim()}
-                  onClick={() => {
-                    setEditAllowedModules((prev) =>
-                      prev.includes(module.key)
-                        ? prev.filter((k) => k !== module.key)
-                        : [...prev, module.key]
-                    );
-                  }}
-                >
-                  <div className="permission-checkbox">
-                    {isChecked && (
-                      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
-                        <polyline points="20 6 9 17 4 12" />
-                      </svg>
-                    )}
-                  </div>
-                  <div className="permission-label-wrap">
-                    <div className="permission-label-row">
-                      <span className="permission-title">{module.label}</span>
-                    </div>
-                    <span className="permission-desc">{module.description}</span>
-                  </div>
-                </div>
-              );
-            })}
-          </div>
+          <p style={{ margin: 0, fontSize: 'var(--font-size-sm)', color: 'var(--color-text-secondary)' }}>
+            Tick the sections <strong style={{ color: 'var(--color-text-primary)' }}>{accessTarget?.email}</strong> should
+            see. Anything left unticked is hidden from them.
+          </p>
+          <ModulePicker modules={selectableModules} selected={accessModules} onChange={setAccessModules} />
         </div>
       </Modal>
     </div>

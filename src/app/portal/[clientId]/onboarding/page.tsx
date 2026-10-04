@@ -1,21 +1,28 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { useParams, useRouter } from 'next/navigation';
-import { Card, CardHeader, Button, StatusBadge } from '@/components/ui';
-import { QuickLinksBar } from '@/components/onboarding/QuickLinksBar';
+import { Card, CardHeader, Button, StatusBadge, Skeleton } from '@/components/ui';
 import { SetupCard } from '@/components/onboarding/SetupCard';
 import { GHLOnboardingFormEmbed } from '@/components/onboarding/GHLOnboardingFormEmbed';
 import { A2PFormEmbed } from '@/components/onboarding/A2PFormEmbed';
 import { calculateSetupProgress } from '@/lib/onboarding/progress';
 import { ClientSetupStep } from '@/lib/db/schema';
 
-export default function OnboardingRoadmapPage() {
+/** A step still needs attention when it is not done and is either the client's to do or under way. */
+const needsAction = (step: ClientSetupStep) =>
+  step.status !== 'done' && (step.owner === 'client_action' || step.status === 'in_progress');
+
+export default function SetupProgressPage() {
   const params = useParams();
   const router = useRouter();
   const clientId = (params?.clientId as string) || 'demo';
 
   const [steps, setSteps] = useState<ClientSetupStep[]>([]);
+  const [featureToggles, setFeatureToggles] = useState<Record<string, boolean>>({});
+  const [isLoading, setIsLoading] = useState(true);
+  const [loadError, setLoadError] = useState('');
+  const [attempt, setAttempt] = useState(0);
   const [filter, setFilter] = useState<'all' | 'action_required' | 'completed'>('all');
   const [isGHLFormOpen, setIsGHLFormOpen] = useState(false);
   const [isA2PFormOpen, setIsA2PFormOpen] = useState(false);
@@ -24,39 +31,48 @@ export default function OnboardingRoadmapPage() {
   useEffect(() => {
     let isMounted = true;
     async function loadSteps() {
+      setIsLoading(true);
+      setLoadError('');
       try {
         const res = await fetch(`/api/portal/${clientId}/data`);
-        if (res.ok) {
-          const data = await res.json();
-          if (isMounted) {
-            setSteps(data.setupSteps || []);
-            const isClient = data.viewer?.role === 'client' || data.viewer?.role === 'client_member';
-            setPrefillEmail(isClient ? data.viewer.email : data.tenant?.primary_email);
-          }
+        const data = await res.json().catch(() => ({}));
+        if (!isMounted) return;
+        if (!res.ok) {
+          setLoadError(data.error || 'Your setup steps could not be loaded.');
+          return;
         }
+        setSteps(data.setupSteps || []);
+        setFeatureToggles(data.featureToggles || {});
+        const isClient = data.viewer?.role === 'client' || data.viewer?.role === 'client_member';
+        setPrefillEmail(isClient ? data.viewer.email : data.tenant?.primary_email);
       } catch {
-        // Leave the list empty; the page shows its empty state
+        if (isMounted) setLoadError('We could not reach the server. Check your connection and try again.');
+      } finally {
+        if (isMounted) setIsLoading(false);
       }
     }
     loadSteps();
     return () => {
       isMounted = false;
     };
-  }, [clientId]);
+  }, [clientId, attempt]);
 
-  const activeSteps: ClientSetupStep[] = steps;
+  const retry = useCallback(() => setAttempt((n) => n + 1), []);
 
-  const progress = calculateSetupProgress(activeSteps);
+  const progress = calculateSetupProgress(steps);
+  const actionCount = steps.filter(needsAction).length;
+  const doneCount = steps.filter((s) => s.status === 'done').length;
 
-  const filteredSteps = activeSteps.filter((step) => {
-    if (filter === 'action_required') {
-      return step.owner === 'client_action' || step.status === 'in_progress';
-    }
-    if (filter === 'completed') {
-      return step.status === 'done';
-    }
+  const filteredSteps = steps.filter((step) => {
+    if (filter === 'action_required') return needsAction(step);
+    if (filter === 'completed') return step.status === 'done';
     return true;
   });
+
+  const trackingEnabled = featureToggles.tracking !== false;
+  const bookCallEnabled = featureToggles.book_call !== false;
+  // The texting form opens from its own step. If this client has no such step, offer it with the other form.
+  const hasA2PStep = steps.some((s) => s.step_key === 'ghl_a2p');
 
   const handleStepAction = (stepKey: string) => {
     if (stepKey === 'google_sheet') {
@@ -66,128 +82,203 @@ export default function OnboardingRoadmapPage() {
     }
   };
 
-  return (
-    <div>
-      {/* Page Header */}
-      <div style={{ marginBottom: 'var(--space-6)' }}>
-        <h1 style={{ marginBottom: 'var(--space-1)' }}>Onboarding & Setup Roadmap</h1>
-        <p style={{ color: 'var(--color-text-secondary)' }}>
-          Track the five foundational milestones required to launch and scale your commercial operations.
-        </p>
-      </div>
+  const header = (
+    <div style={{ marginBottom: 'var(--space-6)' }}>
+      <h1 style={{ marginBottom: 'var(--space-1)' }}>Setup Progress</h1>
+      <p style={{ color: 'var(--color-text-secondary)' }}>
+        The steps to get your campaigns live. We handle most of them and tell you when we need something from you.
+      </p>
+    </div>
+  );
 
-      {/* Top Quick Links Bar */}
-      <QuickLinksBar
-        clientId={clientId}
-        onOpenGHLForm={() => setIsGHLFormOpen(true)}
-        onOpenA2PForm={() => setIsA2PFormOpen(true)}
-      />
-
-      {/* Setup Progress Overview Card */}
-      <Card style={{ marginBottom: 'var(--space-6)' }}>
-        <CardHeader
-          title="Overall Setup Completion"
-          subtitle={`${progress.completedSteps} of ${progress.totalSteps} Milestones Completed`}
-          action={<StatusBadge status={`${progress.percentage}% Complete`} variant="progress" />}
-        />
-
-        <div
-          style={{
-            width: '100%',
-            height: '10px',
-            backgroundColor: 'var(--color-bg-surface)',
-            borderRadius: 'var(--radius-full)',
-            overflow: 'hidden',
-            marginBottom: 'var(--space-4)',
-          }}
-        >
-          <div
-            style={{
-              width: `${progress.percentage}%`,
-              height: '100%',
-              backgroundColor: 'var(--color-primary)',
-              transition: 'width var(--transition-normal)',
-            }}
-          />
-        </div>
-
-        <div
-          style={{
-            display: 'flex',
-            justifyContent: 'space-between',
-            alignItems: 'center',
-            flexWrap: 'wrap',
-            gap: 'var(--space-3)',
-            fontSize: 'var(--font-size-sm)',
-            color: 'var(--color-text-secondary)',
-          }}
-        >
-          <div>
-            Current active focus:{' '}
-            <strong style={{ color: 'var(--color-text-primary)' }}>
-              {progress.currentStep?.name || 'All Steps Complete'}
-            </strong>
-          </div>
-
-          <div style={{ display: 'flex', gap: 'var(--space-2)', flexWrap: 'wrap' }}>
-            <Button
-              variant={filter === 'all' ? 'primary' : 'outline'}
-              size="sm"
-              onClick={() => setFilter('all')}
-            >
-              All Steps ({activeSteps.length})
-            </Button>
-            <Button
-              variant={filter === 'action_required' ? 'primary' : 'outline'}
-              size="sm"
-              onClick={() => setFilter('action_required')}
-            >
-              Action Required ({activeSteps.filter((s) => s.owner === 'client_action' || s.status === 'in_progress').length})
-            </Button>
-            <Button
-              variant={filter === 'completed' ? 'primary' : 'outline'}
-              size="sm"
-              onClick={() => setFilter('completed')}
-            >
-              Completed ({activeSteps.filter((s) => s.status === 'done').length})
-            </Button>
-          </div>
-        </div>
-      </Card>
-
-      {/* Confirmed 5 Setup Milestone Cards */}
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-4)', marginBottom: 'var(--space-6)' }}>
-        {filteredSteps.map((step, idx) => (
-          <SetupCard
-            key={step.step_key}
-            step={step}
-            stepNumber={step.sort_order || idx + 1}
-            onActionClick={handleStepAction}
-          />
+  if (isLoading) {
+    return (
+      <div>
+        {header}
+        <Card style={{ marginBottom: 'var(--space-6)' }}>
+          <Skeleton width="220px" height="20px" style={{ marginBottom: 'var(--space-3)' }} />
+          <Skeleton width="100%" height="10px" borderRadius="var(--radius-full)" style={{ marginBottom: 'var(--space-4)' }} />
+          <Skeleton width="60%" height="16px" />
+        </Card>
+        {[1, 2, 3].map((i) => (
+          <Card key={i} style={{ marginBottom: 'var(--space-4)' }}>
+            <Skeleton width="240px" height="22px" style={{ marginBottom: 'var(--space-3)' }} />
+            <Skeleton width="100%" height="72px" borderRadius="var(--radius-md)" />
+          </Card>
         ))}
       </div>
+    );
+  }
 
-      {/* Support Callout */}
-      <Card>
+  if (loadError) {
+    return (
+      <div>
+        {header}
+        <Card>
+          <p role="alert" style={{ margin: '0 0 var(--space-3) 0', color: 'var(--color-status-danger-text)' }}>
+            {loadError}
+          </p>
+          <Button variant="secondary" size="sm" onClick={retry}>
+            Try again
+          </Button>
+        </Card>
+      </div>
+    );
+  }
+
+  return (
+    <div>
+      {header}
+
+      {/* Progress overview */}
+      <Card style={{ marginBottom: 'var(--space-6)' }}>
         <CardHeader
-          title="Need Assistance with Your Setup?"
-          subtitle="Motionz Customer Success Managers monitor your onboarding progress daily"
+          title="Overall progress"
+          subtitle={
+            progress.totalSteps > 0
+              ? `${progress.completedSteps} of ${progress.totalSteps} steps done`
+              : 'Your Motionz team will add your setup steps here.'
+          }
           action={
-            <Button
-              variant="secondary"
-              size="sm"
-              onClick={() => router.push(`/portal/${clientId}/book-call`)}
-            >
-              Schedule Review Call
-            </Button>
+            progress.totalSteps > 0 ? (
+              <StatusBadge status={`${progress.percentage}% done`} variant={progress.isComplete ? 'done' : 'progress'} />
+            ) : undefined
           }
         />
-        <p style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-secondary)', margin: 0 }}>
-          If you have questions regarding domain DNS propagation, Facebook business permissions, or carrier A2P 10DLC registration, contact your assigned CSM directly or book a strategy session.
-        </p>
+
+        {progress.totalSteps > 0 && (
+          <>
+            <div
+              role="progressbar"
+              aria-valuemin={0}
+              aria-valuemax={100}
+              aria-valuenow={progress.percentage}
+              aria-label="Setup progress"
+              style={{
+                width: '100%',
+                height: '10px',
+                backgroundColor: 'var(--color-bg-surface)',
+                borderRadius: 'var(--radius-full)',
+                overflow: 'hidden',
+                marginBottom: 'var(--space-4)',
+              }}
+            >
+              <div
+                style={{
+                  width: `${progress.percentage}%`,
+                  height: '100%',
+                  backgroundColor: 'var(--color-primary)',
+                  transition: 'width var(--transition-normal)',
+                }}
+              />
+            </div>
+
+            <div
+              style={{
+                display: 'flex',
+                justifyContent: 'space-between',
+                alignItems: 'center',
+                flexWrap: 'wrap',
+                gap: 'var(--space-3)',
+                fontSize: 'var(--font-size-sm)',
+                color: 'var(--color-text-secondary)',
+              }}
+            >
+              <div>
+                {progress.isComplete ? (
+                  <strong style={{ color: 'var(--color-text-primary)' }}>All steps are done</strong>
+                ) : (
+                  <>
+                    Current step:{' '}
+                    <strong style={{ color: 'var(--color-text-primary)' }}>{progress.currentStep?.name}</strong>
+                  </>
+                )}
+              </div>
+
+              <div style={{ display: 'flex', gap: 'var(--space-2)', flexWrap: 'wrap' }}>
+                <Button variant={filter === 'all' ? 'primary' : 'outline'} size="sm" onClick={() => setFilter('all')}>
+                  All steps ({steps.length})
+                </Button>
+                <Button
+                  variant={filter === 'action_required' ? 'primary' : 'outline'}
+                  size="sm"
+                  onClick={() => setFilter('action_required')}
+                >
+                  Needs action ({actionCount})
+                </Button>
+                <Button
+                  variant={filter === 'completed' ? 'primary' : 'outline'}
+                  size="sm"
+                  onClick={() => setFilter('completed')}
+                >
+                  Done ({doneCount})
+                </Button>
+              </div>
+            </div>
+          </>
+        )}
       </Card>
 
-      {/* Embedded GoHighLevel Intake Form Modal */}
+      {/* The forms we need from the client. The texting form opens from its own step when there is one. */}
+      <Card style={{ marginBottom: 'var(--space-6)' }}>
+        <CardHeader
+          title="Tell us about your business"
+          subtitle="We use your answers to build your ads, website and follow-up messages."
+          action={
+            <div style={{ display: 'flex', gap: 'var(--space-2)', flexWrap: 'wrap', justifyContent: 'flex-end' }}>
+              <Button variant="secondary" size="sm" onClick={() => setIsGHLFormOpen(true)}>
+                Open onboarding form
+              </Button>
+              {!hasA2PStep && (
+                <Button variant="secondary" size="sm" onClick={() => setIsA2PFormOpen(true)}>
+                  Open texting form
+                </Button>
+              )}
+            </div>
+          }
+        />
+      </Card>
+
+      {/* Step cards */}
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-4)', marginBottom: 'var(--space-6)' }}>
+        {filteredSteps.length === 0 ? (
+          <Card>
+            <p style={{ margin: 0, color: 'var(--color-text-secondary)' }}>
+              {steps.length === 0
+                ? 'No setup steps yet. Your Motionz team will add them here.'
+                : filter === 'action_required'
+                  ? 'Nothing needs your attention right now.'
+                  : 'No steps are done yet.'}
+            </p>
+          </Card>
+        ) : (
+          filteredSteps.map((step, idx) => (
+            <SetupCard
+              key={step.step_key}
+              step={step}
+              stepNumber={step.sort_order || idx + 1}
+              onActionClick={handleStepAction}
+              showTrackingLink={trackingEnabled}
+            />
+          ))
+        )}
+      </div>
+
+      {/* One help callout */}
+      {bookCallEnabled && (
+        <Card>
+          <CardHeader
+            title="Need help? Book a call"
+            subtitle="Your CSM can walk you through any step."
+            action={
+              <Button variant="secondary" size="sm" onClick={() => router.push(`/portal/${clientId}/book-call`)}>
+                Book a call
+              </Button>
+            }
+          />
+        </Card>
+      )}
+
       <GHLOnboardingFormEmbed
         isModal={true}
         isOpen={isGHLFormOpen}
@@ -195,11 +286,11 @@ export default function OnboardingRoadmapPage() {
         prefillEmail={prefillEmail}
       />
 
-      {/* Embedded A2P Carrier Verification Form Modal */}
       <A2PFormEmbed
         isModal={true}
         isOpen={isA2PFormOpen}
         onClose={() => setIsA2PFormOpen(false)}
+        prefillEmail={prefillEmail}
       />
     </div>
   );

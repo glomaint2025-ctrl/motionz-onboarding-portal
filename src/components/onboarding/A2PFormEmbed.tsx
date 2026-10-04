@@ -2,22 +2,28 @@
 
 import React, { useState } from 'react';
 import { Card, CardHeader, Button, Modal } from '@/components/ui';
+import { PORTAL_LINKS, ghlFormUrl } from '@/lib/portal-links';
 
 export interface A2PFormEmbedProps {
   formId?: string;
   isModal?: boolean;
   isOpen?: boolean;
   onClose?: () => void;
+  /** Pre-fills the form's email so the submission is matched to this client's portal. */
+  prefillEmail?: string;
 }
 
+const TITLE = 'Texting registration form';
+
 export const A2PFormEmbed: React.FC<A2PFormEmbedProps> = ({
-  formId = 'SH2jCt6DkV69gF6YHPni',
+  formId = PORTAL_LINKS.a2pFormId,
   isModal = false,
   isOpen = false,
   onClose = () => {},
+  prefillEmail,
 }) => {
   const [iframeLoaded, setIframeLoaded] = useState(false);
-  const formUrl = `https://api.leadconnectorhq.com/widget/form/${formId}`;
+  const formUrl = ghlFormUrl(formId, prefillEmail);
 
   const renderContent = () => (
     <div>
@@ -32,7 +38,8 @@ export const A2PFormEmbed: React.FC<A2PFormEmbedProps> = ({
           marginBottom: 'var(--space-4)',
         }}
       >
-        <strong>Carrier 10DLC Compliance Notice:</strong> Cellular networks (AT&T, Verizon, T-Mobile) require accurate Employer Identification Numbers (EIN) and matching legal business names for A2P texting verification.
+        <strong>Before you start:</strong> US phone carriers check these details before they let a business text
+        its leads. Enter your EIN and your legal business name exactly as they appear on your tax records.
       </div>
 
       <div
@@ -65,14 +72,14 @@ export const A2PFormEmbed: React.FC<A2PFormEmbedProps> = ({
             }}
           >
             <div style={{ fontWeight: 'var(--font-weight-medium)', marginBottom: 'var(--space-2)' }}>
-              Loading Carrier A2P Verification Engine...
+              Loading the form...
             </div>
             <span style={{ fontSize: 'var(--font-size-xs)', color: 'var(--color-text-muted)', marginBottom: 'var(--space-4)' }}>
-              Connecting to secure form instance ({formId})
+              Taking a while? You can open it in a new tab instead.
             </span>
             <a href={formUrl} target="_blank" rel="noopener noreferrer">
               <Button variant="secondary" size="sm">
-                Open in Dedicated Tab
+                Open in new tab
               </Button>
             </a>
           </div>
@@ -89,7 +96,7 @@ export const A2PFormEmbed: React.FC<A2PFormEmbedProps> = ({
           scrolling="yes"
           id={`msgsndr-form-${formId}`}
           onLoad={() => setIframeLoaded(true)}
-          title="GoHighLevel A2P 10DLC Carrier Verification Form"
+          title={TITLE}
         />
       </div>
     </div>
@@ -97,11 +104,11 @@ export const A2PFormEmbed: React.FC<A2PFormEmbedProps> = ({
 
   if (isModal) {
     return (
-      <Modal isOpen={isOpen} onClose={onClose} title="Carrier A2P 10DLC Verification Form">
+      <Modal isOpen={isOpen} onClose={onClose} title={TITLE} dismissOnOverlay={false}>
         {renderContent()}
         <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 'var(--space-4)' }}>
           <Button variant="secondary" onClick={onClose}>
-            Close Form
+            Close
           </Button>
         </div>
       </Modal>
@@ -111,12 +118,12 @@ export const A2PFormEmbed: React.FC<A2PFormEmbedProps> = ({
   return (
     <Card>
       <CardHeader
-        title="Carrier A2P 10DLC Verification Form"
-        subtitle="GoHighLevel Form #SH2jCt6DkV69gF6YHPni"
+        title={TITLE}
+        subtitle="Needed before we can text your leads"
         action={
           <a href={formUrl} target="_blank" rel="noopener noreferrer">
             <Button variant="outline" size="sm">
-              Open Fullscreen Tab
+              Open in new tab
             </Button>
           </a>
         }

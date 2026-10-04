@@ -27,7 +27,6 @@ export const Sidebar: React.FC<SidebarProps> = ({
   const pathname = usePathname();
   const groups = getNavGroups(role, clientId, featureToggles);
   const tag = role === 'admin' ? 'Admin' : role === 'csm' ? 'CSM' : undefined;
-  const showHelp = role === 'client' && (!featureToggles || featureToggles.book_call !== false);
 
   return (
     <aside className="desktop-sidebar" aria-label="Sidebar">
@@ -60,20 +59,6 @@ export const Sidebar: React.FC<SidebarProps> = ({
           </div>
         ))}
       </nav>
-
-      {showHelp && (
-        <div className="sidebar-footer">
-          <Link href={`/portal/${clientId}/book-call`} className="sidebar-help">
-            <span className="logo-tile logo-tile-sm logo-tile-warm" style={{ width: 32, height: 32 }}>
-              <Icon name="help" size={18} />
-            </span>
-            <span>
-              <span className="sidebar-help-title">Need a hand?</span>
-              <span className="sidebar-help-sub">Book a call with your CSM</span>
-            </span>
-          </Link>
-        </div>
-      )}
     </aside>
   );
 };

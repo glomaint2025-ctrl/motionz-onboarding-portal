@@ -1,8 +1,25 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getTenantById, getLeads, getAppointments, DEMO_TENANT_UUID } from '@/lib/db';
+import { getTenantById, DEMO_TENANT_UUID } from '@/lib/db';
+import { leadRepository } from '@/lib/db/repositories/leads.repository';
 import { assertPortalAccess, handleAuthError } from '@/lib/auth/guard';
 import { assertModuleEnabled } from '@/lib/auth/modules';
 
+const DEFAULT_PAGE_SIZE = 25;
+const MAX_PAGE_SIZE = 100;
+const SEARCH_MAX = 100;
+const WEEK_MS = 7 * 24 * 60 * 60 * 1000;
+
+function positiveInt(value: string | null, fallback: number): number {
+  const parsed = value ? parseInt(value, 10) : NaN;
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
+}
+
+/**
+ * GET /api/portal/[clientId]/leads?page=&pageSize=&search=&stage=
+ * One page of the client's leads (newest first) plus real totals:
+ *  - total / totalPages: leads matching the current search and stage
+ *  - counts.all, counts.newThisWeek, counts.byStage: across every lead the client has
+ */
 export async function GET(
   request: NextRequest,
   { params }: { params: { clientId: string } }
@@ -21,14 +38,38 @@ export async function GET(
     const session = await assertPortalAccess(request, targetTenant, rawClientId);
     await assertModuleEnabled(session, tenantId, 'leads');
 
-    // Fetch strictly leads and appointments - no excess data
-    const [leads, appointments] = await Promise.all([
-      getLeads(tenantId),
-      getAppointments(tenantId),
+    const { searchParams } = new URL(request.url);
+    const pageSize = Math.min(positiveInt(searchParams.get('pageSize'), DEFAULT_PAGE_SIZE), MAX_PAGE_SIZE);
+    const requestedPage = positiveInt(searchParams.get('page'), 1);
+    const search = (searchParams.get('search') || '').trim().slice(0, SEARCH_MAX);
+    const stageParam = (searchParams.get('stage') || '').trim().slice(0, SEARCH_MAX);
+    const stage = stageParam && stageParam.toUpperCase() !== 'ALL' ? stageParam : undefined;
+
+    const [firstTry, all, newThisWeek, byStage] = await Promise.all([
+      leadRepository.query(tenantId, { search, stage, limit: pageSize, offset: (requestedPage - 1) * pageSize }),
+      leadRepository.countByTenant(tenantId),
+      leadRepository.countByTenant(tenantId, { since: new Date(Date.now() - WEEK_MS).toISOString() }),
+      leadRepository.stageCounts(tenantId),
     ]);
 
+    // A page past the end (for example after a filter change) falls back to the last real page.
+    const totalPages = Math.max(1, Math.ceil(firstTry.total / pageSize));
+    const page = Math.min(requestedPage, totalPages);
+    const result =
+      page === requestedPage
+        ? firstTry
+        : await leadRepository.query(tenantId, { search, stage, limit: pageSize, offset: (page - 1) * pageSize });
+
     return NextResponse.json(
-      { leads, appointments },
+      {
+        leads: result.leads,
+        total: result.total,
+        page,
+        pageSize,
+        totalPages,
+        counts: { all, newThisWeek, byStage },
+        connected: Boolean(targetTenant?.ghl_location_id),
+      },
       {
         headers: {
           'Cache-Control': 'no-store, no-cache, must-revalidate',

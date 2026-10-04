@@ -2,6 +2,7 @@
 
 import React, { useState } from 'react';
 import { Card, CardHeader } from '@/components/ui';
+import { formatDate, formatDateTime } from '@/lib/utils/format';
 
 export interface OnboardingSubmissionView {
   id: string;
@@ -21,7 +22,7 @@ export const OnboardingAnswers: React.FC<{ submissions: OnboardingSubmissionView
         title="Onboarding form answers"
         subtitle={
           current
-            ? `Submitted ${new Date(current.submitted_at).toLocaleString()}${current.submitter_email ? ` by ${current.submitter_email}` : ''}`
+            ? `Submitted ${formatDateTime(current.submitted_at)}${current.submitter_email ? ` by ${current.submitter_email}` : ''}`
             : 'Answers appear here as soon as the client submits the onboarding form.'
         }
       />
@@ -39,7 +40,7 @@ export const OnboardingAnswers: React.FC<{ submissions: OnboardingSubmissionView
                   className={i === index ? 'ui-pill-status ui-pill-status-active' : 'ui-pill-status'}
                   style={{ cursor: 'pointer', border: 'none' }}
                 >
-                  {i === 0 ? 'Latest' : new Date(s.submitted_at).toLocaleDateString()}
+                  {i === 0 ? 'Latest' : formatDate(s.submitted_at)}
                 </button>
               ))}
             </div>

@@ -241,6 +241,7 @@ async function runCrudApiTests() {
 
   // PUT: Update Profile
   const profileReq = makeJsonRequest('/api/portal/abc-roofing/profile', 'PUT', {
+    name: 'ABC Roofing',
     phone: '(555) 333-4444',
     primary_contact_name: 'John Updated Smith',
   }, {

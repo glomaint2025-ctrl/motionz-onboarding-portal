@@ -13,8 +13,6 @@ export default function ClientProfilePage() {
   const [email, setEmail] = useState('');
   const [phone, setPhone] = useState('');
   const [tenantStatus, setTenantStatus] = useState<string>('');
-  const [ghlLocationId, setGhlLocationId] = useState<string>('');
-  const [csm, setCsm] = useState<{ name?: string; email?: string } | null>(null);
   const [viewerRole, setViewerRole] = useState<string | null>(null);
   const [loadError, setLoadError] = useState('');
   const [isLoading, setIsLoading] = useState(true);
@@ -38,11 +36,6 @@ export default function ClientProfilePage() {
           setEmail(data.tenant.primary_email || '');
           setPhone(data.tenant.phone || '');
           setTenantStatus(data.tenant.status || '');
-          const ghl = Array.isArray(data.integrations)
-            ? data.integrations.find((i: any) => i.integration_type === 'ghl' && i.is_active)
-            : null;
-          setGhlLocationId(data.tenant.ghl_location_id || ghl?.config_data?.location_id || '');
-          setCsm(data.csm || null);
           setViewerRole(data.viewer?.role || null);
         }
       } catch {
@@ -59,6 +52,11 @@ export default function ClientProfilePage() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!name.trim() || !primaryContact.trim()) {
+      setStatusMessage('Please enter your business name and a contact name.');
+      setIsError(true);
+      return;
+    }
     setIsSaving(true);
     setStatusMessage('');
     setIsError(false);
@@ -81,9 +79,9 @@ export default function ClientProfilePage() {
           setPrimaryContact(data.tenant.primary_contact_name || '');
           setPhone(data.tenant.phone || '');
         }
-        setStatusMessage('Company profile updated.');
+        setStatusMessage('Your changes were saved.');
       } else {
-        setStatusMessage(data.error || 'Failed to update profile.');
+        setStatusMessage(data.error || 'Your changes could not be saved. Please try again.');
         setIsError(true);
       }
     } catch {
@@ -109,7 +107,7 @@ export default function ClientProfilePage() {
       <div style={{ marginBottom: 'var(--space-6)' }}>
         <h1 style={{ marginBottom: 'var(--space-1)' }}>Company Profile</h1>
         <p style={{ color: 'var(--color-text-secondary)' }}>
-          Your business name, primary contact details, and account information.
+          Your business name and contact details.
         </p>
       </div>
 
@@ -131,6 +129,7 @@ export default function ClientProfilePage() {
 
       {statusMessage && (
         <div
+          role={isError ? 'alert' : 'status'}
           style={{
             padding: 'var(--space-3)',
             backgroundColor: isError ? 'var(--color-status-blocked-bg)' : 'var(--color-status-done-bg)',
@@ -154,7 +153,7 @@ export default function ClientProfilePage() {
         {/* Profile Edit Form */}
         <Card>
           <CardHeader
-            title="Business Contact Information"
+            title="Business details"
             subtitle={
               readOnly
                 ? 'Only the account owner can change these details.'
@@ -178,38 +177,42 @@ export default function ClientProfilePage() {
           ) : (
             <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-4)' }}>
               <Input
-                label="Legal Business Name"
+                label="Business name"
                 value={name}
                 onChange={(e) => setName(e.target.value)}
                 disabled={readOnly}
+                maxLength={255}
                 required
               />
               <Input
-                label="Primary Contact Person"
+                label="Main contact name"
                 value={primaryContact}
                 onChange={(e) => setPrimaryContact(e.target.value)}
                 disabled={readOnly}
+                maxLength={255}
                 required
               />
               <Input
-                label="Primary Business Email"
+                label="Email"
                 type="email"
                 value={email}
                 disabled
                 helperText="Your login email. Contact your CSM to change it."
               />
               <Input
-                label="Business Phone Number"
+                label="Phone number"
                 type="tel"
                 value={phone}
                 onChange={(e) => setPhone(e.target.value)}
                 disabled={readOnly}
+                maxLength={30}
+                helperText={readOnly ? undefined : 'Leave empty to remove the number.'}
                 placeholder={readOnly ? '' : 'e.g. +1 555 234 5678'}
               />
 
               {!readOnly && (
                 <Button type="submit" variant="primary" disabled={isSaving}>
-                  {isSaving ? 'Saving Changes...' : 'Save Profile Changes'}
+                  {isSaving ? 'Saving...' : 'Save changes'}
                 </Button>
               )}
             </form>
@@ -218,50 +221,16 @@ export default function ClientProfilePage() {
 
         {/* Account information (real values only; unknown values are labelled as such) */}
         <Card>
-          <CardHeader title="Account Information" subtitle="How your portal is set up with Motionz" />
+          <CardHeader title="Account" />
           {isLoading ? (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-4)' }}>
-              {[1, 2, 3, 4].map((i) => (
-                <Skeleton key={i} width="100%" height="32px" />
-              ))}
+              <Skeleton width="100%" height="32px" />
             </div>
           ) : (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-4)', fontSize: 'var(--font-size-sm)' }}>
               <div>
                 <span style={{ fontSize: 'var(--font-size-xs)', color: 'var(--color-text-muted)', display: 'block' }}>
-                  Client Identifier
-                </span>
-                <span style={{ fontFamily: 'monospace', fontWeight: 'var(--font-weight-medium)' }}>{clientId}</span>
-              </div>
-
-              <div>
-                <span style={{ fontSize: 'var(--font-size-xs)', color: 'var(--color-text-muted)', display: 'block' }}>
-                  GoHighLevel Location ID
-                </span>
-                {ghlLocationId ? (
-                  <span style={{ fontFamily: 'monospace', fontWeight: 'var(--font-weight-medium)' }}>{ghlLocationId}</span>
-                ) : (
-                  <span style={{ color: 'var(--color-text-muted)' }}>Not connected yet</span>
-                )}
-              </div>
-
-              <div>
-                <span style={{ fontSize: 'var(--font-size-xs)', color: 'var(--color-text-muted)', display: 'block' }}>
-                  Your CSM
-                </span>
-                {csm && (csm.name || csm.email) ? (
-                  <span>
-                    {csm.name || csm.email}
-                    {csm.name && csm.email ? ` (${csm.email})` : ''}
-                  </span>
-                ) : (
-                  <span style={{ color: 'var(--color-text-muted)' }}>Not assigned yet</span>
-                )}
-              </div>
-
-              <div>
-                <span style={{ fontSize: 'var(--font-size-xs)', color: 'var(--color-text-muted)', display: 'block' }}>
-                  Account Status
+                  Account status
                 </span>
                 {tenantStatus ? (
                   <span style={{ fontWeight: 'var(--font-weight-medium)' }}>{statusLabels[tenantStatus] || tenantStatus}</span>

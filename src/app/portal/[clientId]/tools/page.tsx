@@ -1,13 +1,12 @@
 'use client';
 
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
 import { buttonClasses } from '@/components/ui';
 import { Icon, type IconName } from '@/components/brand/Icon';
 import { SlackLogo } from '@/components/brand/SlackLogo';
 import { SkoolLogo } from '@/components/brand/SkoolLogo';
-import { GoogleSheetsLogo } from '@/components/brand/GoogleSheetsLogo';
 import { PORTAL_LINKS } from '@/lib/portal-links';
 
 interface ToolItem {
@@ -17,6 +16,8 @@ interface ToolItem {
   actionText: string;
   href: string;
   isExternal: boolean;
+  /** Module that must be switched on for this card to show. */
+  featureKey?: string;
   visual: React.ReactNode;
   featured?: boolean;
 }
@@ -28,7 +29,7 @@ interface ToolSection {
   items: ToolItem[];
 }
 
-function IconTile({ name, tone = 'icon' }: { name: IconName; tone?: 'icon' | 'warm' | 'green' }) {
+function IconTile({ name, tone = 'icon' }: { name: IconName; tone?: 'icon' | 'green' }) {
   return (
     <span className={`logo-tile logo-tile-${tone}`} aria-hidden="true">
       <Icon name={name} size={24} />
@@ -48,7 +49,27 @@ export default function ToolsAndResourcesPage() {
   const params = useParams();
   const clientId = (params?.clientId as string) || 'demo';
 
-  const sections: ToolSection[] = [
+  // Cards for sections that are switched off are hidden. Until the settings load, only the
+  // always-available cards (Slack, Skool) are shown.
+  const [featureToggles, setFeatureToggles] = useState<Record<string, boolean> | null>(null);
+
+  useEffect(() => {
+    let isMounted = true;
+    fetch(`/api/portal/${clientId}/data`)
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data) => {
+        if (isMounted && data) setFeatureToggles(data.featureToggles || {});
+      })
+      .catch(() => {});
+    return () => {
+      isMounted = false;
+    };
+  }, [clientId]);
+
+  const isOn = (item: ToolItem) =>
+    !item.featureKey || (featureToggles !== null && featureToggles[item.featureKey] !== false);
+
+  const allSections: ToolSection[] = [
     {
       id: 'connect',
       title: 'Stay connected',
@@ -85,64 +106,18 @@ export default function ToolsAndResourcesPage() {
       ],
     },
     {
-      id: 'setup',
-      title: 'Get set up',
-      subtitle: 'A couple of forms we need before your campaigns go live.',
-      items: [
-        {
-          title: 'Onboarding Form',
-          category: 'Business details',
-          description: 'Tell us about your business so we can build your ads, website and follow-up campaigns.',
-          actionText: 'Open onboarding form',
-          href: `/portal/${clientId}/onboarding`,
-          isExternal: false,
-          visual: <IconTile name="form" />,
-        },
-        {
-          title: 'Texting Registration (A2P 10DLC)',
-          category: 'Carrier compliance',
-          description: 'US carriers require this before we can text your leads. It keeps your messages from being blocked.',
-          actionText: 'Open A2P form',
-          href: `/portal/${clientId}/onboarding`,
-          isExternal: false,
-          visual: <IconTile name="message" />,
-        },
-        {
-          title: 'Book a Call with Your CSM',
-          category: 'One-on-one help',
-          description: 'Pick a time to walk through your setup, campaigns or results with your Motionz CSM.',
-          actionText: 'Pick a time',
-          href: `/portal/${clientId}/book-call`,
-          isExternal: false,
-          visual: <IconTile name="calendar" tone="warm" />,
-        },
-      ],
-    },
-    {
       id: 'grow',
       title: 'Win more jobs',
-      subtitle: 'Everyday tools for quoting, filming and tracking results.',
+      subtitle: 'Everyday tools for quoting and filming.',
       items: [
-        {
-          title: 'Results Tracking Sheet',
-          category: 'Google Sheets',
-          description: 'Log calls and outcomes, and track leads, appointments, jobs won and revenue in your own Google Sheet.',
-          actionText: 'Open tracking',
-          href: `/portal/${clientId}/tracking`,
-          isExternal: false,
-          visual: (
-            <LogoTile>
-              <GoogleSheetsLogo size={28} title="" />
-            </LogoTile>
-          ),
-        },
         {
           title: 'Roof Measurement',
           category: 'Estimating',
-          description: 'Measure a roof from its address and get the area, pitch and squares for your quote.',
+          description: "Measure a roof's area, squares and pitch from an address.",
           actionText: 'Measure a roof',
           href: `/portal/${clientId}/roof-measurement`,
           isExternal: false,
+          featureKey: 'roof_measurement',
           visual: <IconTile name="roof" tone="green" />,
         },
         {
@@ -152,11 +127,16 @@ export default function ToolsAndResourcesPage() {
           actionText: 'View scripts',
           href: `/portal/${clientId}/video-scripts`,
           isExternal: false,
+          featureKey: 'video_scripts',
           visual: <IconTile name="video" />,
         },
       ],
     },
   ];
+
+  const sections = allSections
+    .map((section) => ({ ...section, items: section.items.filter(isOn) }))
+    .filter((section) => section.items.length > 0);
 
   return (
     <div>

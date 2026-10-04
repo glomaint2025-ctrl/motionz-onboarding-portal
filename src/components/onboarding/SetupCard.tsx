@@ -8,16 +8,21 @@ export interface SetupCardProps {
   step: ClientSetupStep;
   stepNumber: number;
   onActionClick?: (stepKey: string) => void;
+  /** False when the Results Tracking section is switched off for this viewer. */
+  showTrackingLink?: boolean;
 }
 
 export const SetupCard: React.FC<SetupCardProps> = ({
   step,
   stepNumber,
   onActionClick,
+  showTrackingLink = true,
 }) => {
   const isClientAction = step.owner === 'client_action';
   const isDone = step.status === 'done';
   const isInProgress = step.status === 'in_progress';
+  const showTracking = step.step_key === 'google_sheet' && showTrackingLink;
+  const showA2PForm = step.step_key === 'ghl_a2p';
 
   return (
     <Card style={{ marginBottom: 'var(--space-4)' }}>
@@ -44,17 +49,17 @@ export const SetupCard: React.FC<SetupCardProps> = ({
                 padding: '2px 8px',
                 borderRadius: 'var(--radius-full)',
                 backgroundColor: isClientAction ? 'var(--color-primary)' : 'var(--color-bg-surface)',
-                color: isClientAction ? '#ffffff' : 'var(--color-text-secondary)',
+                color: isClientAction ? 'var(--color-on-primary)' : 'var(--color-text-secondary)',
                 border: isClientAction ? 'none' : '1px solid var(--color-border-subtle)',
               }}
             >
-              {isClientAction ? 'YOUR ACTION' : 'WE HANDLE'}
+              {isClientAction ? 'Your action' : 'We handle this'}
             </span>
           </div>
           <span style={{ fontSize: 'var(--font-size-xs)', color: 'var(--color-text-muted)', marginTop: '2px', display: 'block' }}>
             {isClientAction
-              ? 'Requires your direct input or access confirmation'
-              : 'Handled entirely by the Motionz technical and onboarding team'}
+              ? 'We need something from you for this step'
+              : 'The Motionz team takes care of this step'}
           </span>
         </div>
 
@@ -79,7 +84,7 @@ export const SetupCard: React.FC<SetupCardProps> = ({
       >
         <div>
           <span style={{ fontSize: 'var(--font-size-xs)', color: 'var(--color-text-muted)', display: 'block', marginBottom: '2px' }}>
-            What It Is
+            What it is
           </span>
           <p style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-primary)', margin: 0 }}>
             {step.what_it_is}
@@ -88,7 +93,7 @@ export const SetupCard: React.FC<SetupCardProps> = ({
 
         <div>
           <span style={{ fontSize: 'var(--font-size-xs)', color: 'var(--color-text-muted)', display: 'block', marginBottom: '2px' }}>
-            Right Now
+            Right now
           </span>
           <p style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-secondary)', margin: 0 }}>
             {step.right_now}
@@ -118,33 +123,34 @@ export const SetupCard: React.FC<SetupCardProps> = ({
             marginBottom: 'var(--space-4)',
           }}
         >
-          <strong>We Need From You:</strong> {step.we_need_from_you}
+          <strong>We need from you:</strong> {step.we_need_from_you}
         </div>
       )}
 
       {/* Action Footer */}
+      {(showTracking || showA2PForm) && (
       <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 'var(--space-2)' }}>
-        {step.step_key === 'google_sheet' && (
+        {showTracking && (
           <Button
             variant="outline"
             size="sm"
             onClick={() => onActionClick && onActionClick(step.step_key)}
           >
-            View Tracking Tab
+            Open Results Tracking
           </Button>
         )}
 
-        {step.step_key === 'ghl_a2p' && (
+        {showA2PForm && (
           <Button
             variant="primary"
             size="sm"
             onClick={() => onActionClick && onActionClick(step.step_key)}
           >
-            Complete A2P Form
+            Open texting form
           </Button>
         )}
-
       </div>
+      )}
     </Card>
   );
 };
