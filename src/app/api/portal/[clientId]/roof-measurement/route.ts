@@ -45,7 +45,11 @@ export async function POST(request: NextRequest, { params }: { params: { clientI
     }
 
     const result = await measureRoof(address);
-    await roofMeasurementRepository.create({
+
+    // Saving the history must never hide a successful measurement from the user.
+    const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+    await roofMeasurementRepository
+      .create({
       tenant_id: tenant.id,
       address: result.formattedAddress,
       planar_area_sqft: result.footprintSqFt,
@@ -53,15 +57,17 @@ export async function POST(request: NextRequest, { params }: { params: { clientI
       pitch: result.predominantPitch,
       squares: result.squares,
       result_data: result as unknown as Record<string, any>,
-      created_by: session?.email,
-    });
+      created_by: session && UUID.test(session.userId) ? session.userId : undefined,
+    })
+      .catch((err: any) => console.error('[roof] Could not save measurement history:', err?.message));
 
     return NextResponse.json({ success: true, result });
   } catch (error: any) {
     if (error instanceof RoofServiceError) {
       return NextResponse.json({ error: error.message, code: error.code }, { status: error.statusCode });
     }
-    if (error.statusCode === 401 || error.statusCode === 403 || error.code) return handleAuthError(error);
-    return NextResponse.json({ error: 'Roof measurement failed.' }, { status: 500 });
+    if (error.statusCode === 401 || error.statusCode === 403) return handleAuthError(error);
+    console.error('[roof] Measurement failed:', error?.message);
+    return NextResponse.json({ error: 'Roof measurement failed. Please try again.' }, { status: 500 });
   }
 }
