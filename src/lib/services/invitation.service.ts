@@ -18,6 +18,8 @@ export interface CreateInvitationParams {
   email: string;
   role: UserRole;
   phone?: string;
+  /** Invitee's name, used for the account created on acceptance. */
+  fullName?: string;
   createdBy?: string;
   expiresInHours?: number;
   baseUrl?: string;
@@ -26,6 +28,14 @@ export interface CreateInvitationParams {
   allowed_modules?: string[];
   /** Which email to send with the link. 'login' for self-requested sign-in links; false to skip. Defaults to 'invite'. */
   notify?: 'invite' | 'login' | false;
+}
+
+/** "john.doe_smith" -> "John Doe Smith" */
+export function titleCaseFromEmail(email: string): string {
+  const local = (email.split('@')[0] || '').split('+')[0];
+  const words = local.split(/[._\-\s]+/).filter(Boolean);
+  if (words.length === 0) return email;
+  return words.map((w) => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase()).join(' ');
 }
 
 export class InvitationService {
@@ -64,6 +74,7 @@ export class InvitationService {
       email,
       role,
       phone: params.phone,
+      full_name: typeof params.fullName === 'string' && params.fullName.trim() ? params.fullName.trim().slice(0, 120) : undefined,
       allowed_modules: params.allowed_modules,
       token_hash: tokenHash,
       expires_at: expiresAt,
@@ -134,7 +145,7 @@ export class InvitationService {
 
     const now = new Date();
     if (new Date(invitation.expires_at) < now) {
-      return { valid: false, error: 'This invitation link has expired (72-hour window exceeded).' };
+      return { valid: false, error: 'This invitation link has expired. Ask for a new one.' };
     }
 
     return { valid: true, email: invitation.email };
@@ -185,7 +196,7 @@ export class InvitationService {
         tenant_id: invitation.tenant_id,
         details: { reason: 'Invitation expired', invitationId: invitation.id },
       });
-      throw new AppError('This invitation link has expired (72-hour window exceeded).', 410, 'INVITATION_EXPIRED');
+      throw new AppError('This invitation link has expired. Ask for a new one.', 410, 'INVITATION_EXPIRED');
     }
 
     // Atomically claim invitation to prevent concurrent double-acceptance race conditions
@@ -214,22 +225,34 @@ export class InvitationService {
     // Upsert or fetch existing application user record
     let user = await userRepository.findByEmail(invitation.email);
     if (!user) {
+      // Name: what the inviter typed; else the client's primary contact for the account owner;
+      // else a readable version of the email address.
+      let fullName = invitation.full_name?.trim();
+      if (!fullName && invitation.role === 'client' && invitation.tenant_id) {
+        const tenant = await tenantRepository.findById(invitation.tenant_id).catch(() => null);
+        fullName = tenant?.primary_contact_name?.trim() || undefined;
+      }
       user = await userRepository.create({
         id: authUserId,
         email: invitation.email,
-        full_name: invitation.email.split('@')[0].replace(/[._]/g, ' '),
+        full_name: fullName || titleCaseFromEmail(invitation.email),
         role: invitation.role,
         tenant_id: invitation.tenant_id,
         phone: invitation.phone,
-        allowed_modules: invitation.allowed_modules,
       });
     } else {
       user = await userRepository.update(user.id, {
         tenant_id: invitation.tenant_id,
         role: invitation.role,
-        allowed_modules: invitation.allowed_modules ?? user.allowed_modules,
         ...(invitation.phone ? { phone: invitation.phone } : {}),
+        ...(invitation.full_name?.trim() ? { full_name: invitation.full_name.trim() } : {}),
       });
+    }
+
+    // Module restrictions go through updatePermissions, which works whether or not the
+    // users table has an allowed_modules column (it also records them in tenant settings).
+    if (Array.isArray(invitation.allowed_modules)) {
+      user = await userRepository.updatePermissions(user.id, invitation.allowed_modules);
     }
 
     await auditLogRepository.create({
@@ -326,6 +349,9 @@ export class InvitationService {
       email: existing.email,
       role: existing.role,
       phone: existing.phone,
+      fullName: existing.full_name,
+      // Keep the invitee's module restrictions: a resent link must not widen access.
+      allowed_modules: existing.allowed_modules,
       createdBy: params.actorEmail,
       allowExistingUser: true,
       expiresInHours: 72,

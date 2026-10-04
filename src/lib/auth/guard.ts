@@ -192,10 +192,14 @@ export async function requireAuth(
   return { session };
 }
 
+const CLIENT_ERROR_STATUSES = new Set([400, 404, 409, 410, 422, 429]);
+
 /**
- * Formats auth and authorization errors into consistent, safe JSON responses.
+ * Formats errors thrown in API routes into consistent, safe JSON responses:
+ * 401/403 as auth errors, coded client errors with their own message, everything else a generic 500.
  */
 export function handleAuthError(err: any): NextResponse {
+  err = err ?? {};
   const isSuspended = err.code === 'ACCOUNT_SUSPENDED' || err.code === 'TENANT_SUSPENDED';
 
   const statusCode =
@@ -204,14 +208,31 @@ export function handleAuthError(err: any): NextResponse {
      err.message?.includes('Forbidden') || err.message?.includes('cross-tenant') ? 403 :
      err.message?.includes('Authentication') || err.message?.includes('Unauthorized') ? 401 : 500);
 
+  // Client-correctable errors (validation, not found, conflict, gone, rate limit): the message
+  // was written for the user, so pass it through with its status.
+  const isCodedError = err instanceof AppError || (typeof err?.statusCode === 'number' && typeof err?.code === 'string');
+  if (!isSuspended && isCodedError && CLIENT_ERROR_STATUSES.has(statusCode)) {
+    return NextResponse.json(
+      { error: err.message || 'This request could not be completed.', code: err.code || 'BAD_REQUEST', suspended: false },
+      { status: statusCode }
+    );
+  }
+
+  // Anything that is not an auth problem is a server fault: log it, never leak internals.
+  if (!isSuspended && statusCode !== 401 && statusCode !== 403) {
+    console.error('[API] Unhandled error:', err);
+    return NextResponse.json(
+      { error: 'Something went wrong. Please try again.', code: 'INTERNAL_ERROR', suspended: false },
+      { status: 500 }
+    );
+  }
+
   const safeMessage =
     isSuspended
       ? err.message
       : statusCode === 401
       ? 'Authentication required. Please sign in.'
-      : statusCode === 403
-      ? err.message || 'You do not have permission to perform this action.'
-      : 'An unexpected authentication error occurred.';
+      : err.message || 'You do not have permission to perform this action.';
 
   const response = NextResponse.json(
     {

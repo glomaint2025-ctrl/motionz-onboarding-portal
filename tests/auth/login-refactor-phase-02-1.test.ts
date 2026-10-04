@@ -136,6 +136,7 @@ async function runPhase021Tests() {
 
   const clientVerifyReq = makeJsonRequest('/api/auth/verify', 'POST', {
     token: clientToken,
+    password: 'test-password-1',
   });
   const clientVerifyRes = await authVerifyHandler(clientVerifyReq);
   assert.strictEqual(clientVerifyRes.status, 200);
@@ -178,6 +179,7 @@ async function runPhase021Tests() {
 
   const memberVerifyReq = makeJsonRequest('/api/auth/verify', 'POST', {
     token: memberToken,
+    password: 'test-password-1',
   });
   const memberVerifyRes = await authVerifyHandler(memberVerifyReq);
   assert.strictEqual(memberVerifyRes.status, 200);

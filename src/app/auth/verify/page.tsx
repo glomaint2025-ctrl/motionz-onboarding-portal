@@ -18,6 +18,8 @@ function VerifyContent() {
   const [confirmPassword, setConfirmPassword] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // The invite was accepted but the password could not be stored: the form cannot be retried.
+  const [passwordNotSaved, setPasswordNotSaved] = useState(false);
 
   useEffect(() => {
     if (!token) {
@@ -48,10 +50,16 @@ function VerifyContent() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!token || tokenStatus !== 'valid') return;
+    if (!token || tokenStatus !== 'valid' || submitting) return;
 
+    // Same rules the server enforces
     if (password.length < 8) {
       setError('Password must be at least 8 characters long.');
+      return;
+    }
+
+    if (password.length > 200) {
+      setError('Password must be 200 characters or fewer.');
       return;
     }
 
@@ -63,6 +71,7 @@ function VerifyContent() {
     setSubmitting(true);
     setError(null);
 
+    let redirecting = false;
     try {
       const res = await fetch('/api/auth/verify', {
         method: 'POST',
@@ -70,11 +79,13 @@ function VerifyContent() {
         body: JSON.stringify({ token, password }),
       });
 
-      const data = await res.json();
+      const data = await res.json().catch(() => null);
 
-      if (!res.ok) {
-        setError(data?.error || 'Verification failed.');
+      if (!res.ok || !data?.success) {
+        setError(data?.error || 'We could not finish setting up your account. Please try again.');
+        if (data?.code === 'PASSWORD_NOT_SAVED') setPasswordNotSaved(true);
       } else {
+        redirecting = true;
         // Trigger browser credential manager save prompt
         const saveEmail = data.user?.email || invitedEmail;
         if (typeof window !== 'undefined' && 'PasswordCredential' in window && (window as any).PasswordCredential && saveEmail) {
@@ -91,10 +102,11 @@ function VerifyContent() {
         }
         router.push(data.redirectTo || '/portal/demo');
       }
-    } catch (err: any) {
-      setError(err.message || 'Network error during account setup.');
+    } catch {
+      setError('We could not reach the server. Check your connection and try again.');
     } finally {
-      setSubmitting(false);
+      // Stay disabled while the browser navigates to the portal after a confirmed success.
+      if (!redirecting) setSubmitting(false);
     }
   };
 
@@ -160,7 +172,16 @@ function VerifyContent() {
                 </div>
               )}
 
-              <form onSubmit={handleSubmit} method="POST" autoComplete="on">
+              {passwordNotSaved && (
+                <Link
+                  href="/auth/forgot-password"
+                  className={buttonClasses({ variant: 'primary', size: 'lg', fullWidth: true })}
+                >
+                  Set my password
+                </Link>
+              )}
+
+              <form onSubmit={handleSubmit} method="POST" autoComplete="on" hidden={passwordNotSaved}>
                 <Input
                   id="setup-password"
                   name="new-password"
@@ -189,7 +210,7 @@ function VerifyContent() {
                   variant="primary"
                   size="lg"
                   fullWidth
-                  disabled={submitting}
+                  disabled={submitting || passwordNotSaved}
                   style={{ marginTop: 'var(--space-2)' }}
                 >
                   {submitting ? 'Setting up...' : 'Save password and continue'}

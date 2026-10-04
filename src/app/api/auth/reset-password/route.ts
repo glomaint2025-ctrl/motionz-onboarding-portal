@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { createHash } from 'crypto';
 import { userRepository, tenantRepository, passwordResetRepository, auditLogRepository, securityEventRepository } from '@/lib/db/repositories';
-import { getSupabaseServiceClient } from '@/lib/db/supabase-client';
+import { setAuthPassword } from '@/lib/auth/invitations';
 import { enforceRateLimit, getClientIp } from '@/lib/auth/security-utils';
 
 export async function POST(request: Request) {
@@ -27,6 +27,10 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'Password must be at least 8 characters long.' }, { status: 400 });
     }
 
+    if (password.length > 200) {
+      return NextResponse.json({ error: 'Password must be 200 characters or fewer.' }, { status: 400 });
+    }
+
     const tokenHash = createHash('sha256').update(token).digest('hex');
     const resetRecord = await passwordResetRepository.findByTokenHash(tokenHash);
 
@@ -39,7 +43,7 @@ export async function POST(request: Request) {
     }
 
     if (new Date(resetRecord.expires_at) < new Date()) {
-      return NextResponse.json({ error: 'This password reset link has expired (60-minute window exceeded).' }, { status: 400 });
+      return NextResponse.json({ error: 'This password reset link has expired. Please request a new one.' }, { status: 400 });
     }
 
     const user = await userRepository.findByEmail(resetRecord.email);
@@ -47,18 +51,18 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'Associated user account not found.' }, { status: 404 });
     }
 
-    // 1. Mark token as used
-    await passwordResetRepository.markUsed(resetRecord.id);
-
-    // 2. Synchronize to Supabase Auth if configured
-    const supabase = getSupabaseServiceClient();
-    if (supabase) {
-      try {
-        await supabase.auth.admin.updateUserById(user.id, { password });
-      } catch (err) {
-        console.error('[AUTH] Supabase Auth password update error:', err);
-      }
+    // 1. Save the new password (creates the sign-in identity if this account never had one).
+    //    The link stays usable if this fails, so the user can simply try again.
+    const saved = await setAuthPassword({ userId: user.id, email: user.email, password });
+    if (!saved.ok) {
+      return NextResponse.json(
+        { error: 'We could not save your new password. Please try again in a moment.' },
+        { status: 500 }
+      );
     }
+
+    // 2. Only now is the link spent
+    await passwordResetRepository.markUsed(resetRecord.id);
 
     // 3. Update application user record
     await userRepository.update(user.id, {
@@ -99,8 +103,9 @@ export async function POST(request: Request) {
       message: 'Password has been successfully updated. You can now log in with your new credentials.',
     });
   } catch (err: any) {
+    console.error('[AUTH] Password reset failed:', err);
     return NextResponse.json(
-      { error: err.message || 'Failed to reset password.' },
+      { error: 'We could not reset your password. Please try again.' },
       { status: 500 }
     );
   }

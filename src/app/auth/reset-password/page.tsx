@@ -30,11 +30,17 @@ function ResetPasswordForm() {
       return;
     }
 
-    if (password !== confirmPassword) {
-      setErrorMessage('Passwords do not match. Please verify.');
+    if (password.length > 200) {
+      setErrorMessage('Password must be 200 characters or fewer.');
       return;
     }
 
+    if (password !== confirmPassword) {
+      setErrorMessage('Passwords do not match. Please re-enter.');
+      return;
+    }
+
+    if (loading) return;
     setLoading(true);
     setErrorMessage('');
 
@@ -45,14 +51,15 @@ function ResetPasswordForm() {
         body: JSON.stringify({ token, password }),
       });
 
-      const data = await res.json();
-      if (res.ok) {
+      const data = await res.json().catch(() => null);
+      // Success is shown only when the server confirms the password was saved.
+      if (res.ok && data?.success === true) {
         setIsSuccess(true);
       } else {
-        setErrorMessage(data.error || 'Failed to reset password.');
+        setErrorMessage(data?.error || 'We could not update your password. Please try again.');
       }
     } catch {
-      setErrorMessage('Network error while resetting password.');
+      setErrorMessage('We could not reach the server. Check your connection and try again.');
     } finally {
       setLoading(false);
     }

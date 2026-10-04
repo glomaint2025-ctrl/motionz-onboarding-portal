@@ -99,7 +99,7 @@ async function runCrudApiTests() {
   console.log(' PASS: Client magic link generated with valid token.');
 
   // Verify token
-  const verifyReq = makeJsonRequest('/api/auth/verify', 'POST', { token });
+  const verifyReq = makeJsonRequest('/api/auth/verify', 'POST', { token, password: 'test-password-1' });
   const verifyRes = await authVerifyHandler(verifyReq);
   assert.strictEqual(verifyRes.status, 200);
   const verifyBody = await verifyRes.json();

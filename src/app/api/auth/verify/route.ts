@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
-import { verifyInvitationToken } from '@/lib/auth/invitations';
+import { verifyInvitationToken, setAuthPassword } from '@/lib/auth/invitations';
+import { invitationService } from '@/lib/services/invitation.service';
 import { createSessionToken, SESSION_COOKIE_NAME } from '@/lib/auth/session';
 import { enforceRateLimit, getClientIp, sanitizeRedirectUrl } from '@/lib/auth/security-utils';
 import { securityEventRepository } from '@/lib/db/repositories';
@@ -14,7 +15,6 @@ export async function GET(request: Request) {
       return NextResponse.json({ error: 'Token is required.' }, { status: 400 });
     }
 
-    const { invitationService } = await import('@/lib/services/invitation.service');
     const result = await invitationService.validateInvitation(token);
 
     if (!result.valid) {
@@ -51,11 +51,27 @@ export async function POST(request: Request) {
       );
     }
 
-    const body = await request.json();
+    const body = await request.json().catch(() => ({}));
     const { token, password, redirect } = body;
 
     if (!token || typeof token !== 'string') {
       return NextResponse.json({ error: 'Token is required.' }, { status: 400 });
+    }
+
+    // Everything that can be checked is checked BEFORE the single-use invitation is consumed.
+    if (typeof password !== 'string' || password.length < 8) {
+      return NextResponse.json({ error: 'Password must be at least 8 characters long.' }, { status: 400 });
+    }
+    if (password.length > 200) {
+      return NextResponse.json({ error: 'Password must be 200 characters or fewer.' }, { status: 400 });
+    }
+
+    const precheck = await invitationService.validateInvitation(token);
+    if (!precheck.valid) {
+      return NextResponse.json(
+        { error: precheck.error || 'This invitation is invalid or has expired.' },
+        { status: 400 }
+      );
     }
 
     const result = await verifyInvitationToken(token);
@@ -67,36 +83,18 @@ export async function POST(request: Request) {
       );
     }
 
-    // If password provided upon invitation claim, persist in Supabase Auth
-    const userEmail = result.user?.email;
-    const userId = result.user?.id;
-    if (password && typeof password === 'string' && userEmail && userId) {
-      const { getSupabaseServiceClient } = await import('@/lib/db/supabase-client');
-      const supabase = getSupabaseServiceClient();
-      if (supabase) {
-        try {
-          const { data: listData } = await supabase.auth.admin.listUsers();
-          const existingAuth = listData?.users?.find(
-            (u) => u.email?.toLowerCase() === userEmail.toLowerCase()
-          );
-
-          if (existingAuth) {
-            await supabase.auth.admin.updateUserById(existingAuth.id, {
-              password,
-              email_confirm: true,
-            });
-          } else {
-            await supabase.auth.admin.createUser({
-              id: userId,
-              email: userEmail,
-              password,
-              email_confirm: true,
-            });
-          }
-        } catch (err: any) {
-          console.error('[AUTH] Failed to sync password to Supabase Auth:', err);
-        }
-      }
+    // The account now exists; save its password. If that fails, say so plainly rather than
+    // signing the user in to an account they will not be able to get back into.
+    const saved = await setAuthPassword({ userId: result.user.id, email: result.user.email, password });
+    if (!saved.ok) {
+      return NextResponse.json(
+        {
+          error:
+            'Your account is set up, but we could not save your password. Go to the sign-in page and use "Forgot password" to choose one.',
+          code: 'PASSWORD_NOT_SAVED',
+        },
+        { status: 500 }
+      );
     }
 
     const resolvedTenant = resolveTenantId(result.tenantId || 'demo');

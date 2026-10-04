@@ -99,7 +99,7 @@ async function runAuthAndRbacTests() {
   assert.strictEqual(verifyRevoked.success, false, 'Revoked token must be rejected');
   assert(verifyRevoked.error?.includes('revoked'), 'Revocation reason reported');
 
-  // 2.5: Expiration enforcement (72-hour window exceeded)
+  // 2.5: Expiration enforcement
   const { rawToken: expiredToken } = await createInvitation({
     tenantId: demoTenantId,
     email: 'expired.client@abcroofing.com',

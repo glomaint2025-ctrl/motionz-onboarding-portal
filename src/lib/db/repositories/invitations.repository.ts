@@ -4,7 +4,53 @@ import { getStore } from '../mock-db';
 import { UserInvitation } from '../schema';
 import { DatabaseError, NotFoundError } from '../../errors';
 
+/**
+ * Optional invitation fields (module restrictions, invitee name). Older databases have no
+ * columns for these, so they are also kept in tenants.settings.invitation_meta[invitationId]
+ * (the same approach users.repository uses for user_permissions) and merged back on read.
+ */
+type InvitationMeta = { allowed_modules?: string[]; full_name?: string };
+
+function isMissingColumnError(error: any): boolean {
+  const message = String(error?.message || '');
+  return error?.code === 'PGRST204' || error?.code === '42703' || message.includes('schema cache') || message.includes('column');
+}
+
 export class InvitationRepository {
+  private async readTenantSettings(supabase: any, tenantId: string): Promise<Record<string, any> | null> {
+    try {
+      const { data } = await supabase.from('tenants').select('settings').eq('id', tenantId).maybeSingle();
+      return data ? ((data.settings || {}) as Record<string, any>) : null;
+    } catch {
+      return null;
+    }
+  }
+
+  private async saveMeta(supabase: any, tenantId: string, invitationId: string, meta: InvitationMeta): Promise<void> {
+    const settings = await this.readTenantSettings(supabase, tenantId);
+    if (!settings) throw new DatabaseError('Failed to save invitation details: client not found.');
+    const invitationMeta = { ...(settings.invitation_meta || {}), [invitationId]: meta };
+    const { error } = await supabase
+      .from('tenants')
+      .update({ settings: { ...settings, invitation_meta: invitationMeta } })
+      .eq('id', tenantId);
+    if (error) throw new DatabaseError(`Failed to save invitation details: ${error.message}`, error);
+  }
+
+  /** Fills in allowed_modules / full_name from tenant settings when the row itself does not carry them. */
+  private async withMeta<T extends UserInvitation | null>(supabase: any, row: T): Promise<T> {
+    if (!row || !row.tenant_id) return row;
+    if (row.allowed_modules != null && row.full_name != null) return row;
+    const settings = await this.readTenantSettings(supabase, row.tenant_id);
+    const meta = settings?.invitation_meta?.[row.id] as InvitationMeta | undefined;
+    if (!meta) return row;
+    return {
+      ...row,
+      allowed_modules: row.allowed_modules ?? meta.allowed_modules,
+      full_name: row.full_name ?? meta.full_name,
+    };
+  }
+
   async findByTokenHash(tokenHash: string): Promise<UserInvitation | null> {
     const supabase = getSupabaseServiceClient();
     if (supabase) {
@@ -15,7 +61,7 @@ export class InvitationRepository {
         .maybeSingle();
 
       if (error) throw new DatabaseError(`Failed to find invitation: ${error.message}`, error);
-      return data as UserInvitation | null;
+      return this.withMeta(supabase, data as UserInvitation | null);
     }
 
     const store = getStore();
@@ -32,7 +78,7 @@ export class InvitationRepository {
         .maybeSingle();
 
       if (error) throw new DatabaseError(`Failed to find invitation: ${error.message}`, error);
-      return data as UserInvitation | null;
+      return this.withMeta(supabase, data as UserInvitation | null);
     }
 
     const store = getStore();
@@ -90,13 +136,37 @@ export class InvitationRepository {
 
     const supabase = getSupabaseServiceClient();
     if (supabase) {
-      const { data, error } = await supabase
+      const meta: InvitationMeta = {};
+      if (newRecord.allowed_modules !== undefined) meta.allowed_modules = newRecord.allowed_modules;
+      if (newRecord.full_name) meta.full_name = newRecord.full_name;
+      const hasMeta = Object.keys(meta).length > 0;
+
+      let { data, error } = await supabase
         .from('user_invitations')
         .insert(newRecord)
         .select('*')
         .single();
 
+      let metaInSettingsOnly = false;
+      if (error && hasMeta && isMissingColumnError(error)) {
+        // Database without the optional columns: store the row without them.
+        const { allowed_modules: _modules, full_name: _name, ...coreRecord } = newRecord;
+        ({ data, error } = await supabase.from('user_invitations').insert(coreRecord).select('*').single());
+        metaInSettingsOnly = true;
+      }
+
       if (error) throw new DatabaseError(`Failed to create invitation: ${error.message}`, error);
+
+      if (metaInSettingsOnly) {
+        // Restrictions must never be silently dropped: if they cannot be saved, the invite is withdrawn.
+        try {
+          await this.saveMeta(supabase, newRecord.tenant_id, id, meta);
+        } catch (err) {
+          await supabase.from('user_invitations').update({ revoked_at: now }).eq('id', id);
+          throw err;
+        }
+        return { ...(data as UserInvitation), ...meta };
+      }
       return data as UserInvitation;
     }
 
