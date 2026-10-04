@@ -94,7 +94,7 @@ export default function ClientOverviewPage() {
   const [viewerRole, setViewerRole] = useState<string | null>(null);
   const [loadError, setLoadError] = useState('');
   const [companyName, setCompanyName] = useState('');
-  const [contactName, setContactName] = useState('');
+  const [viewerName, setViewerName] = useState('');
   const [featureToggles, setFeatureToggles] = useState<Record<string, boolean>>({});
 
   // Website change request state
@@ -106,6 +106,14 @@ export default function ClientOverviewPage() {
   const [changeFiles, setChangeFiles] = useState<File[]>([]);
   const [fileError, setFileError] = useState('');
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const changeNoticeRef = useRef<HTMLDivElement>(null);
+
+  // The result appears right above the send button; bring it into view and announce it.
+  useEffect(() => {
+    if (!changeNotice) return;
+    changeNoticeRef.current?.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+    changeNoticeRef.current?.focus({ preventScroll: true });
+  }, [changeNotice]);
 
   useEffect(() => {
     let isMounted = true;
@@ -126,7 +134,7 @@ export default function ClientOverviewPage() {
           const data = await res.json();
           if (isMounted) {
             if (data.tenant?.name) setCompanyName(data.tenant.name);
-            setContactName(typeof data.tenant?.primary_contact_name === 'string' ? data.tenant.primary_contact_name : '');
+            setViewerName(typeof data.viewer?.full_name === 'string' ? data.viewer.full_name : '');
             if (data.setupSteps) setSteps(data.setupSteps);
             // The real total from the server, not the length of a capped list.
             setLeadCount(typeof data.leadCount === 'number' ? data.leadCount : 0);
@@ -258,8 +266,8 @@ export default function ClientOverviewPage() {
   const showContractCard = featureToggles?.contracts !== false && viewerRole !== 'client_member';
 
   const onboardingEnabled = !featureToggles || featureToggles.onboarding !== false;
-  // Hero: first name of the primary contact, else the company name, else no name at all.
-  const greetingName = contactName.trim().split(/\s+/)[0] || companyName.trim();
+  // Hero: the signed-in person's own first name, else the company name, else no name at all.
+  const greetingName = viewerName.trim().split(/\s+/)[0] || companyName.trim();
   const showProgress = onboardingEnabled && totalSteps > 0;
   const pendingIndex = activeSteps.findIndex((s) => s.status !== 'done');
   const phaseLabel = !showProgress
@@ -471,7 +479,10 @@ export default function ClientOverviewPage() {
                   </div>
                   <div className="ui-stat-info">
                     <span className="ui-stat-label">Contract</span>
-                    <span className="ui-stat-value" style={{ color: contractState === 'signed' ? 'var(--color-status-done-text)' : 'var(--color-status-warning-text)' }}>
+                    <span
+                      className="ui-stat-value"
+                      style={contractState === 'none' ? { color: 'var(--color-text-muted)' } : undefined}
+                    >
                       {contractState === 'signed' ? 'Signed' : contractState === 'sent' ? 'Awaiting signature' : 'Not available yet'}
                     </span>
                     {contractState !== 'none' && (
@@ -496,21 +507,6 @@ export default function ClientOverviewPage() {
           <p style={{ margin: '0 0 var(--space-4) 0', color: 'var(--color-text-secondary)', fontSize: 'var(--font-size-sm)', lineHeight: 1.55 }}>
             {WEBSITE_REQUEST_INTRO}
           </p>
-          {changeNotice && (
-            <div
-              role={changeNotice.isError ? 'alert' : 'status'}
-              style={{
-                padding: 'var(--space-3)',
-                backgroundColor: changeNotice.isError ? 'var(--color-status-blocked-bg)' : 'var(--color-status-done-bg)',
-                color: changeNotice.isError ? 'var(--color-status-blocked-text)' : 'var(--color-status-done-text)',
-                borderRadius: 'var(--radius-md)',
-                marginBottom: 'var(--space-4)',
-                fontSize: 'var(--font-size-sm)',
-              }}
-            >
-              {changeNotice.text}
-            </div>
-          )}
           <form onSubmit={handleWebsiteChangeSubmit} style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-3)' }}>
             <Input
               label="Request Title"
@@ -640,6 +636,22 @@ export default function ClientOverviewPage() {
                 </p>
               )}
             </div>
+            {changeNotice && (
+              <div
+                ref={changeNoticeRef}
+                tabIndex={-1}
+                role={changeNotice.isError ? 'alert' : 'status'}
+                style={{
+                  padding: 'var(--space-3)',
+                  backgroundColor: changeNotice.isError ? 'var(--color-status-blocked-bg)' : 'var(--color-status-done-bg)',
+                  color: changeNotice.isError ? 'var(--color-status-blocked-text)' : 'var(--color-status-done-text)',
+                  borderRadius: 'var(--radius-md)',
+                  fontSize: 'var(--font-size-sm)',
+                }}
+              >
+                {changeNotice.text}
+              </div>
+            )}
             <Button
               type="submit"
               variant="primary"

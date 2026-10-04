@@ -4,6 +4,7 @@ import { isStaffEmail } from '@/lib/auth/staff';
 import { getTenantById, getTeamMembers, listTeamMemberInvitations, getFeatureToggles, logAuditEvent, DEMO_TENANT_UUID } from '@/lib/db';
 import { assertPortalAccess, handleAuthError } from '@/lib/auth/guard';
 import { hasPermission } from '@/lib/auth/permissions';
+import { assertModuleEnabled } from '@/lib/auth/modules';
 import { isMemberSelectableModule, MEMBER_SELECTABLE_MODULES } from '@/lib/portal-modules';
 import { publicTeamMember, publicInvitation } from '../../public-fields';
 import { createInvitation, revokeInvitation, resendInvitation } from '@/lib/auth/invitations';
@@ -14,6 +15,9 @@ import { enforceRateLimit } from '@/lib/auth/security-utils';
 import type { UserInvitation } from '@/lib/db/schema';
 
 /** Inviting, removing and changing people's access is for the account owner (and Motionz staff). */
+const NO_PAGES_MESSAGE = 'Choose at least one page this person can see.';
+const FULL_NAME_MAX = 100;
+
 const ownerOnly = () =>
   NextResponse.json({ error: 'Only the account owner can do this.', code: 'FORBIDDEN' }, { status: 403 });
 
@@ -33,6 +37,8 @@ export async function GET(
 
     // Enforce active account, tenant suspension, and tenant isolation
     const session = await assertPortalAccess(request, targetTenant, rawClientId);
+    // The team list is only for people who can open the Team page (staff are never blocked).
+    await assertModuleEnabled(session, tenantId, 'team');
     // Pending invitations hold other people's emails and phone numbers: owner and staff only.
     const canManage = !session || hasPermission(session.role, 'team:invite');
 
@@ -113,6 +119,10 @@ export async function POST(
 
     const body = (await request.json().catch(() => ({}))) || {};
     const { email, phone, allowed_modules } = body;
+    const fullName =
+      typeof body.fullName === 'string' && body.fullName.trim()
+        ? body.fullName.trim().replace(/\s+/g, ' ').slice(0, FULL_NAME_MAX)
+        : undefined;
 
     let normalizedEmail: string;
     try {
@@ -167,12 +177,17 @@ export async function POST(
     // Team members can never be given owner-only sections (the contract, managing the team).
     if (assignedRole === 'client_member') {
       resolvedAllowedModules = resolvedAllowedModules.filter(isMemberSelectableModule);
+      // A team member with no pages would sign in to an almost empty portal.
+      if (resolvedAllowedModules.length === 0) {
+        return NextResponse.json({ error: NO_PAGES_MESSAGE }, { status: 400 });
+      }
     }
 
     const inviteResult = await createInvitation({
       tenantId,
       email: normalizedEmail,
       role: assignedRole,
+      fullName,
       phone: validPhone,
       allowed_modules: resolvedAllowedModules,
       createdBy: actorEmail,
@@ -513,6 +528,11 @@ export async function PUT(
           // Team members can never be given owner-only sections (the contract, managing the team).
           (targetUser.role !== 'client_member' || isMemberSelectableModule(k))
       );
+
+      // A team member with no pages would sign in to an almost empty portal.
+      if (targetUser.role === 'client_member' && sanitizedAllowed.length === 0) {
+        return NextResponse.json({ error: NO_PAGES_MESSAGE }, { status: 400 });
+      }
 
       const updatedUser = await userRepository.updatePermissions(targetUser.id, sanitizedAllowed);
 

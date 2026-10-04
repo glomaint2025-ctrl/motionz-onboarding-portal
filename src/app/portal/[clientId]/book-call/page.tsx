@@ -59,8 +59,8 @@ export default function BookCallPage() {
         <h1 style={{ marginBottom: 'var(--space-1)' }}>Book a Call</h1>
         <p style={{ color: 'var(--color-text-secondary)' }}>
           {csmName
-            ? `Pick a time to talk with ${csmName}, your Motionz CSM.`
-            : 'Pick a time to talk with your Motionz CSM.'}
+            ? `Pick a time to talk with ${csmName}, your CSM.`
+            : 'Pick a time to talk with your CSM.'}
         </p>
       </div>
 

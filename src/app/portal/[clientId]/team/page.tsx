@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useParams } from 'next/navigation';
 import { Card, CardHeader, Button, StatusBadge, Input, Modal, Skeleton } from '@/components/ui';
 import { Icon } from '@/components/brand/Icon';
@@ -71,7 +71,36 @@ const noteBoxStyle: React.CSSProperties = {
   color: 'var(--color-text-muted)',
   lineHeight: 1.5,
 };
-const cellStyle: React.CSSProperties = { padding: 'var(--space-3)' };
+const cellStyle: React.CSSProperties = { padding: 'var(--space-3)', verticalAlign: 'top' };
+const NO_PAGES_MESSAGE = 'Choose at least one page this person can see.';
+
+/**
+ * The people list is a table on wide screens and stacked cards on phones, so nothing is cut off.
+ * Email and phone sit under the name to keep the table narrow enough for a tablet.
+ */
+const TEAM_LAYOUT_CSS = `
+.team-people-table { width: 100%; border-collapse: collapse; font-size: var(--font-size-sm); table-layout: auto; }
+.team-contact { display: block; font-size: var(--font-size-xs); font-weight: var(--font-weight-normal, 400); color: var(--color-text-secondary); overflow-wrap: anywhere; line-height: 1.5; }
+.team-actions { display: flex; gap: 8px; justify-content: flex-end; align-items: center; flex-wrap: wrap; }
+.team-cell-label { display: none; }
+@media (max-width: 640px) {
+  .team-people-table thead { display: none; }
+  .team-people-table, .team-people-table tbody { display: block; }
+  .team-people-table tr {
+    display: block;
+    padding: var(--space-3);
+    margin-bottom: var(--space-3);
+    border: 1px solid var(--color-border-subtle) !important;
+    border-radius: var(--radius-md);
+    background-color: var(--color-bg-surface);
+  }
+  .team-people-table td { display: block; padding: 0 0 var(--space-2) 0 !important; text-align: left !important; }
+  .team-people-table td:last-child { padding-bottom: 0 !important; }
+  .team-people-table td:empty { display: none; }
+  .team-cell-label { display: inline; color: var(--color-text-muted); font-size: var(--font-size-xs); margin-right: 6px; }
+  .team-actions { justify-content: flex-start; padding-top: var(--space-1); }
+}
+`;
 const headCellStyle: React.CSSProperties = { padding: 'var(--space-2) var(--space-3)', color: 'var(--color-text-muted)' };
 
 /** Invite links always point at the site the owner is currently on. */
@@ -232,6 +261,8 @@ export default function TeamPage() {
   const [isInviteOpen, setIsInviteOpen] = useState(false);
   const [inviteEmail, setInviteEmail] = useState('');
   const [invitePhone, setInvitePhone] = useState('');
+  const [inviteName, setInviteName] = useState('');
+  const inviteErrorRef = useRef<HTMLDivElement>(null);
   const [inviteModules, setInviteModules] = useState<string[]>([]);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [inviteError, setInviteError] = useState('');
@@ -306,10 +337,18 @@ export default function TeamPage() {
 
   const retry = useCallback(() => setAttempt((n) => n + 1), []);
 
+  // The error shows right above the send button; bring it into view and announce it.
+  useEffect(() => {
+    if (!inviteError) return;
+    inviteErrorRef.current?.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+    inviteErrorRef.current?.focus({ preventScroll: true });
+  }, [inviteError, isSubmitting]);
+
   /** Empties the invite form but keeps the dialog open, ready for the next person. */
   const clearInviteForm = () => {
     setInviteEmail('');
     setInvitePhone('');
+    setInviteName('');
     setInviteModules(selectableKeys);
     setInviteError('');
     setInviteResult(null);
@@ -333,6 +372,10 @@ export default function TeamPage() {
       setInviteError('Please enter both an email and a phone number.');
       return;
     }
+    if (inviteModules.length === 0) {
+      setInviteError(NO_PAGES_MESSAGE);
+      return;
+    }
 
     setIsSubmitting(true);
     setInviteError('');
@@ -343,6 +386,7 @@ export default function TeamPage() {
         body: JSON.stringify({
           email: inviteEmail.trim(),
           phone: invitePhone.trim(),
+          fullName: inviteName.trim() || undefined,
           role: 'client_member',
           allowed_modules: inviteModules,
         }),
@@ -481,6 +525,10 @@ export default function TeamPage() {
 
   const handleSaveAccess = async () => {
     if (!accessTarget) return;
+    if (accessModules.length === 0) {
+      setAccessError(NO_PAGES_MESSAGE);
+      return;
+    }
     setIsSavingAccess(true);
     setAccessError('');
     try {
@@ -551,13 +599,12 @@ export default function TeamPage() {
               title="People"
               subtitle={isLoading ? undefined : `${members.length} ${members.length === 1 ? 'person' : 'people'}`}
             />
-            <div style={{ overflowX: 'auto' }}>
-              <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 'var(--font-size-sm)' }}>
+            <style>{TEAM_LAYOUT_CSS}</style>
+            <div>
+              <table className="team-people-table">
                 <thead>
                   <tr style={{ borderBottom: '1px solid var(--color-border-subtle)', textAlign: 'left' }}>
                     <th style={headCellStyle}>Name</th>
-                    <th style={headCellStyle}>Email</th>
-                    <th style={headCellStyle}>Phone</th>
                     <th style={headCellStyle}>Role</th>
                     <th style={headCellStyle}>Added</th>
                     <th style={headCellStyle}>Status</th>
@@ -568,7 +615,7 @@ export default function TeamPage() {
                   {isLoading ? (
                     [1, 2, 3].map((idx) => (
                       <tr key={idx} style={{ borderBottom: '1px solid var(--color-border-subtle)' }}>
-                        {[130, 180, 120, 110, 85, 65].map((w) => (
+                        {[180, 110, 85, 65].map((w) => (
                           <td key={w} style={cellStyle}>
                             <Skeleton width={`${w}px`} height="16px" />
                           </td>
@@ -577,7 +624,7 @@ export default function TeamPage() {
                     ))
                   ) : members.length === 0 ? (
                     <tr>
-                      <td colSpan={canManage ? 7 : 6} style={{ ...cellStyle, color: 'var(--color-text-secondary)' }}>
+                      <td colSpan={canManage ? 5 : 4} style={{ ...cellStyle, color: 'var(--color-text-secondary)' }}>
                         No one has been added yet.
                       </td>
                     </tr>
@@ -592,11 +639,12 @@ export default function TeamPage() {
                           <td style={{ ...cellStyle, fontWeight: 'var(--font-weight-medium)' }}>
                             {member.full_name}
                             {isSelf(member) ? ' (you)' : ''}
+                            <span className="team-contact">{member.email}</span>
+                            {member.phone && <span className="team-contact">{member.phone}</span>}
                           </td>
-                          <td style={{ ...cellStyle, color: 'var(--color-text-secondary)' }}>{member.email}</td>
-                          <td style={{ ...cellStyle, color: 'var(--color-text-secondary)' }}>{member.phone || '-'}</td>
-                          <td style={cellStyle}>{roleLabel(member.role)}</td>
+                          <td style={{ ...cellStyle, whiteSpace: 'nowrap' }}>{roleLabel(member.role)}</td>
                           <td style={{ ...cellStyle, color: 'var(--color-text-muted)', fontSize: 'var(--font-size-xs)', whiteSpace: 'nowrap' }}>
+                            <span className="team-cell-label">Added</span>
                             {formatDate(member.created_at)}
                           </td>
                           <td style={cellStyle}>
@@ -609,7 +657,7 @@ export default function TeamPage() {
                           {canManage && (
                             <td style={{ ...cellStyle, textAlign: 'right' }}>
                               {showActions && (
-                                <div style={{ display: 'flex', gap: '8px', justifyContent: 'flex-end', alignItems: 'center' }}>
+                                <div className="team-actions">
                                   <Button variant="secondary" size="sm" onClick={() => openAccess(member)}>
                                     Change access
                                   </Button>
@@ -714,11 +762,14 @@ export default function TeamPage() {
           </div>
         ) : (
           <form onSubmit={handleInviteSubmit} style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-4)' }}>
-            {inviteError && (
-              <div role="alert" style={errorBoxStyle}>
-                {inviteError}
-              </div>
-            )}
+            <Input
+              label="Their name (optional)"
+              placeholder="First and last name"
+              value={inviteName}
+              onChange={(e) => setInviteName(e.target.value)}
+              maxLength={100}
+              autoComplete="off"
+            />
 
             <Input
               label="Their email"
@@ -747,13 +798,24 @@ export default function TeamPage() {
                 What they can see
               </div>
               <ModulePicker modules={selectableModules} selected={inviteModules} onChange={setInviteModules} />
+              {inviteModules.length === 0 && (
+                <p role="status" style={{ margin: 'var(--space-2) 0 0 0', fontSize: 'var(--font-size-xs)', color: 'var(--color-status-danger-text)' }}>
+                  {NO_PAGES_MESSAGE}
+                </p>
+              )}
             </div>
+
+            {inviteError && (
+              <div ref={inviteErrorRef} tabIndex={-1} role="alert" style={errorBoxStyle}>
+                {inviteError}
+              </div>
+            )}
 
             <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 'var(--space-2)', marginTop: 'var(--space-2)', flexWrap: 'wrap' }}>
               <Button variant="outline" type="button" onClick={closeInvite} disabled={isSubmitting}>
                 Cancel
               </Button>
-              <Button variant="primary" type="submit" disabled={isSubmitting || !inviteEmail.trim() || !invitePhone.trim()}>
+              <Button variant="primary" type="submit" disabled={isSubmitting || !inviteEmail.trim() || !invitePhone.trim() || inviteModules.length === 0}>
                 {isSubmitting ? 'Sending...' : 'Send invite'}
               </Button>
             </div>
@@ -898,7 +960,7 @@ export default function TeamPage() {
             <Button variant="outline" onClick={closeAccess} disabled={isSavingAccess}>
               Cancel
             </Button>
-            <Button variant="primary" onClick={handleSaveAccess} disabled={isSavingAccess}>
+            <Button variant="primary" onClick={handleSaveAccess} disabled={isSavingAccess || accessModules.length === 0}>
               {isSavingAccess ? 'Saving...' : 'Save'}
             </Button>
           </div>
@@ -915,6 +977,11 @@ export default function TeamPage() {
             see. Anything left unticked is hidden from them.
           </p>
           <ModulePicker modules={selectableModules} selected={accessModules} onChange={setAccessModules} />
+          {accessModules.length === 0 && (
+            <p role="status" style={{ margin: 0, fontSize: 'var(--font-size-xs)', color: 'var(--color-status-danger-text)' }}>
+              {NO_PAGES_MESSAGE}
+            </p>
+          )}
         </div>
       </Modal>
     </div>

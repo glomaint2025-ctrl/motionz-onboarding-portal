@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getTenantById, DEMO_TENANT_UUID } from '@/lib/db';
+import { getTenantById, getTenantIntegrations, DEMO_TENANT_UUID } from '@/lib/db';
 import { leadRepository } from '@/lib/db/repositories/leads.repository';
 import { assertPortalAccess, handleAuthError } from '@/lib/auth/guard';
 import { assertModuleEnabled } from '@/lib/auth/modules';
@@ -45,12 +45,20 @@ export async function GET(
     const stageParam = (searchParams.get('stage') || '').trim().slice(0, SEARCH_MAX);
     const stage = stageParam && stageParam.toUpperCase() !== 'ALL' ? stageParam : undefined;
 
-    const [firstTry, all, newThisWeek, byStage] = await Promise.all([
+    const [firstTry, all, newThisWeek, byStage, integrations] = await Promise.all([
       leadRepository.query(tenantId, { search, stage, limit: pageSize, offset: (requestedPage - 1) * pageSize }),
       leadRepository.countByTenant(tenantId),
       leadRepository.countByTenant(tenantId, { since: new Date(Date.now() - WEEK_MS).toISOString() }),
       leadRepository.stageCounts(tenantId),
+      getTenantIntegrations(tenantId),
     ]);
+
+    // Connected when the location is saved on the client or on their GoHighLevel integration.
+    // Leads only ever arrive from GoHighLevel, so having leads also means it is connected.
+    const ghlConnected =
+      Boolean(targetTenant?.ghl_location_id) ||
+      integrations.some((i: any) => i.integration_type === 'ghl' && i.is_active !== false && Boolean(i.config_data?.location_id)) ||
+      all > 0;
 
     // A page past the end (for example after a filter change) falls back to the last real page.
     const totalPages = Math.max(1, Math.ceil(firstTry.total / pageSize));
@@ -68,7 +76,8 @@ export async function GET(
         pageSize,
         totalPages,
         counts: { all, newThisWeek, byStage },
-        connected: Boolean(targetTenant?.ghl_location_id),
+        ghlConnected,
+        connected: ghlConnected,
       },
       {
         headers: {

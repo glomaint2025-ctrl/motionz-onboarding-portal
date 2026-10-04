@@ -150,6 +150,13 @@ async function run() {
     for (const field of SERVER_ONLY_USER_FIELDS) assert.strictEqual(m[field], undefined, `${field} must not be returned`);
   }
 
+  // A member whose pages do not include Team cannot read the team list at all.
+  const member2 = createSessionToken('user-member-2', 'mike@abcroofing.com', 'client_member', tenant!.id);
+  const blockedTeam = await teamGet(req(teamPath, 'GET', undefined, member2), ctx);
+  assert.strictEqual(blockedTeam.status, 403, 'a member without the Team page must not get the member list');
+  assert.strictEqual((await blockedTeam.json()).members, undefined);
+
+  // A member whose (older) page list still includes Team sees people, never invitations.
   const memberTeam = await (await teamGet(req(teamPath, 'GET', undefined, member), ctx)).json();
   assert.deepStrictEqual(memberTeam.invitations, []);
   assert.strictEqual(memberTeam.viewer.role, 'client_member');

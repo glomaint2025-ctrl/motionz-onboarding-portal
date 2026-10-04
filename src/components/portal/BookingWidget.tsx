@@ -6,8 +6,8 @@ import { PORTAL_LINKS } from '@/lib/portal-links';
 
 export interface BookingWidgetProps {
   calendarId?: string;
+  /** Optional card heading. The Book a Call page already has its own title, so it is off by default. */
   title?: string;
-  subtitle?: string;
   /** Prefilled on the GHL booking form: CSM calls are matched to the client by email. */
   prefillEmail?: string;
   prefillName?: string;
@@ -23,8 +23,7 @@ export function ghlBookingUrl(calendarId: string, prefill: { email?: string; nam
 
 export const BookingWidget: React.FC<BookingWidgetProps> = ({
   calendarId = PORTAL_LINKS.csmBookingCalendarId,
-  title = 'Book a Call With Your CSM',
-  subtitle = 'Pick a time that works for you',
+  title,
   prefillEmail,
   prefillName,
 }) => {
@@ -33,21 +32,27 @@ export const BookingWidget: React.FC<BookingWidgetProps> = ({
 
   return (
     <Card>
-      <CardHeader
-        title={title}
-        subtitle={subtitle}
-        action={
-          <a href={bookingUrl} target="_blank" rel="noopener noreferrer">
-            <Button variant="outline" size="sm">
-              Open in New Tab
-            </Button>
-          </a>
-        }
-      />
+      {title && <CardHeader title={title} />}
 
-      <div style={{ marginBottom: 'var(--space-4)', color: 'var(--color-text-secondary)', fontSize: 'var(--font-size-sm)' }}>
-        Choose an available time below. Please book with{' '}
-        {prefillEmail ? <strong>{prefillEmail}</strong> : 'your portal email address'} so the call shows up in your portal.
+      <div
+        style={{
+          display: 'flex',
+          flexWrap: 'wrap',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          gap: 'var(--space-3)',
+          marginBottom: 'var(--space-4)',
+        }}
+      >
+        <div style={{ flex: '1 1 260px', color: 'var(--color-text-secondary)', fontSize: 'var(--font-size-sm)' }}>
+          Choose an available time below. Please book with{' '}
+          {prefillEmail ? <strong>{prefillEmail}</strong> : 'your portal email address'} so the call shows up in your portal.
+        </div>
+        <a href={bookingUrl} target="_blank" rel="noopener noreferrer">
+          <Button variant="outline" size="sm">
+            Open in New Tab
+          </Button>
+        </a>
       </div>
 
       <div
@@ -92,7 +97,7 @@ export const BookingWidget: React.FC<BookingWidgetProps> = ({
 
         <iframe
           src={bookingUrl}
-          title="Book a call with your Motionz CSM"
+          title="Book a call with your CSM"
           loading="lazy"
           sandbox="allow-scripts allow-same-origin allow-forms allow-popups allow-popups-to-escape-sandbox"
           style={{

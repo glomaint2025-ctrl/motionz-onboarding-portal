@@ -67,11 +67,7 @@ export default function ContractPage() {
             <Card key={contract.id}>
               <CardHeader
                 title={contract.title}
-                subtitle={
-                  contract.signed_at
-                    ? `Signed ${formatDate(contract.signed_at)}`
-                    : 'Awaiting signature'
-                }
+                subtitle={contract.signed_at ? `Signed on ${formatDate(contract.signed_at)}` : undefined}
                 action={
                   <StatusBadge
                     status={contract.signed_at ? 'Signed' : 'Awaiting signature'}

@@ -6,7 +6,12 @@ import { Icon } from '@/components/brand/Icon';
 import { MotionzMark } from '@/components/brand/MotionzLogo';
 
 export interface HeaderProps {
+  /** The workspace shown on the left (the client's company, or the staff area). */
   companyName?: string;
+  /** The signed-in person shown in the account menu. Falls back to the role label alone. */
+  userName?: string;
+  /** Shows a placeholder in the account menu while the person's name loads. */
+  isUserLoading?: boolean;
   portalTitle?: string;
   userRole?: string;
   onMenuToggle?: () => void;
@@ -28,6 +33,8 @@ function initialsFrom(text: string): string {
 
 export const Header: React.FC<HeaderProps> = ({
   companyName = '',
+  userName = '',
+  isUserLoading = false,
   portalTitle = '',
   userRole = '',
   onMenuToggle,
@@ -42,7 +49,8 @@ export const Header: React.FC<HeaderProps> = ({
 
   const displayName = companyName.trim();
   const showSkeleton = !displayName && isLoading;
-  const avatarText = initialsFrom(displayName || userRole || '');
+  const personName = userName.trim();
+  const avatarText = isUserLoading && !personName ? '' : initialsFrom(personName || userRole || '');
 
   // Close the user menu on outside click or Escape.
   useEffect(() => {
@@ -107,13 +115,17 @@ export const Header: React.FC<HeaderProps> = ({
             onClick={() => setIsUserMenuOpen((prev) => !prev)}
             aria-haspopup="menu"
             aria-expanded={isUserMenuOpen}
-            aria-label={`Account menu${displayName ? ` for ${displayName}` : ''}`}
+            aria-label={`Account menu${personName ? ` for ${personName}` : ''}`}
           >
             <span className="user-avatar" aria-hidden="true">
               {avatarText || <Icon name="user" size={16} />}
             </span>
             <span className="user-menu-meta">
-              {displayName && <span className="user-menu-name">{displayName}</span>}
+              {personName ? (
+                <span className="user-menu-name">{personName}</span>
+              ) : (
+                isUserLoading && <span className="ui-skeleton header-skeleton" aria-label="Loading your name" />
+              )}
               {userRole && <span className="user-menu-role">{userRole}</span>}
             </span>
             <span className="user-menu-chevron" aria-hidden="true">
@@ -128,7 +140,7 @@ export const Header: React.FC<HeaderProps> = ({
                   {avatarText || <Icon name="user" size={18} />}
                 </span>
                 <span style={{ minWidth: 0 }}>
-                  {displayName && <span className="user-menu-name" style={{ display: 'block' }}>{displayName}</span>}
+                  {personName && <span className="user-menu-name" style={{ display: 'block' }}>{personName}</span>}
                   {userRole && <span className="user-menu-role">{userRole}</span>}
                 </span>
               </div>
