@@ -3,8 +3,72 @@ import { getSupabaseServiceClient } from '../supabase-client';
 import { getStore } from '../mock-db';
 import { SecurityEvent, SecuritySeverity } from '../schema';
 import { DatabaseError } from '../../errors';
+import { sanitizeFilterTerm } from './audit-logs.repository';
+
+export interface SecurityEventQuery {
+  /** Inclusive ISO timestamps on created_at. */
+  from?: string;
+  to?: string;
+  severities?: SecuritySeverity[];
+  /** Free text: matched against the event type and the email fields in details. */
+  q?: string;
+  /** Extra event types to match (e.g. resolved from friendly labels). */
+  eventTypes?: string[];
+  limit?: number;
+  offset?: number;
+}
+
+/** Keys inside details that hold an email address, across the events the app records. */
+const DETAIL_EMAIL_KEYS = ['email', 'attemptedEmail', 'userEmail'];
 
 export class SecurityEventRepository {
+  /** Date-range / severity / search query, newest first, with the total match count for pagination. */
+  async query(options: SecurityEventQuery = {}): Promise<{ rows: SecurityEvent[]; total: number }> {
+    const limit = options.limit ?? 50;
+    const offset = options.offset ?? 0;
+    const term = options.q ? sanitizeFilterTerm(options.q) : '';
+    const eventTypes = (options.eventTypes || []).filter((t) => /^[\w.]+$/.test(t));
+
+    const supabase = getSupabaseServiceClient();
+    if (supabase) {
+      let query = supabase
+        .from('security_events')
+        .select('*', { count: 'exact' })
+        .order('created_at', { ascending: false })
+        .range(offset, offset + limit - 1);
+      if (options.from) query = query.gte('created_at', options.from);
+      if (options.to) query = query.lte('created_at', options.to);
+      if (options.severities?.length) query = query.in('severity', options.severities);
+      if (term) {
+        const like = `%${term}%`;
+        const parts = [`event_type.ilike.${like}`, ...DETAIL_EMAIL_KEYS.map((k) => `details->>${k}.ilike.${like}`)];
+        if (eventTypes.length) parts.push(`event_type.in.(${eventTypes.join(',')})`);
+        query = query.or(parts.join(','));
+      }
+      const { data, error, count } = await query;
+      if (error) throw new DatabaseError(`Failed to fetch security events: ${error.message}`, error);
+      return { rows: (data || []) as SecurityEvent[], total: count ?? (data || []).length };
+    }
+
+    const fromMs = options.from ? new Date(options.from).getTime() : -Infinity;
+    const toMs = options.to ? new Date(options.to).getTime() : Infinity;
+    const needle = term.toLowerCase();
+    const matches = getStore()
+      .securityEvents.filter((e) => {
+        const at = new Date(e.created_at).getTime();
+        if (at < fromMs || at > toMs) return false;
+        if (options.severities?.length && !options.severities.includes(e.severity)) return false;
+        if (!needle) return true;
+        return (
+          e.event_type.toLowerCase().includes(needle) ||
+          eventTypes.includes(e.event_type) ||
+          DETAIL_EMAIL_KEYS.some((k) => String(e.details?.[k] ?? '').toLowerCase().includes(needle))
+        );
+      })
+      .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+    return { rows: matches.slice(offset, offset + limit), total: matches.length };
+  }
+
   async list(options?: { tenantId?: string; severity?: SecuritySeverity; isResolved?: boolean; limit?: number }): Promise<SecurityEvent[]> {
     const limit = options?.limit || 100;
     const supabase = getSupabaseServiceClient();

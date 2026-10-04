@@ -209,7 +209,7 @@ export async function POST(request: Request) {
     });
 
     // Automatically generate magic link invitation for client primary email
-    const { magicLinkUrl } = await createInvitation({
+    const { magicLinkUrl, emailDelivered } = await createInvitation({
       tenantId: newTenant.id,
       email: normalizedEmail,
       role: 'client',
@@ -228,6 +228,8 @@ export async function POST(request: Request) {
       success: true,
       tenant: newTenant,
       magicLinkUrl,
+      // Whether the invite email actually went out; the success screen words itself on this.
+      emailDelivered: Boolean(emailDelivered),
       sheet,
     });
   } catch (err: any) {

@@ -11,6 +11,7 @@ interface ClientRef {
 
 interface Dashboard {
   clients: { total: number; active: number; onboarding: number; suspended: number; cancelledOrArchived: number; newLast30Days: number };
+  ghl: { connected: number; total: number };
   ghlNotConnected: ClientRef[];
   withoutCsm: ClientRef[];
   inSetup: number;
@@ -113,7 +114,18 @@ export default function AdminDashboardPage() {
           <div style={{ display: 'grid', gap: 'var(--space-4)', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', marginBottom: 'var(--space-6)' }}>
             <Metric label="Active clients" value={data.clients.active} hint={`${data.clients.onboarding} onboarding · ${data.clients.total} total`} href="/admin/clients" />
             <Metric label="Still in setup" value={data.inSetup} hint={`${data.stuck.length} stuck 14+ days on one step`} />
-            <Metric label="GHL not connected" value={data.ghlNotConnected.length} hint="No Location ID set yet" />
+            <Metric
+              label="GHL connect"
+              value={`${data.ghl.connected} / ${data.ghl.total}`}
+              hint={
+                data.ghl.total === 0
+                  ? 'No clients yet'
+                  : data.ghl.connected === data.ghl.total
+                    ? 'connected · every client has a Location ID'
+                    : `connected · ${data.ghl.total - data.ghl.connected} without a Location ID`
+              }
+              href="/admin/ghl"
+            />
             <Metric
               label="Security events (7 days)"
               value={data.security.last7Days}
@@ -144,7 +156,15 @@ export default function AdminDashboardPage() {
               <ClientList items={data.stuck} empty="Nobody is stuck." render={(c) => `${c.currentStep} · ${c.daysOnStep} days`} />
             </Card>
             <Card>
-              <CardHeader title="GoHighLevel not connected" subtitle="Add the sub-account Location ID" />
+              <CardHeader
+                title="GoHighLevel not connected"
+                subtitle="Add the sub-account Location ID"
+                action={
+                  <Link href="/admin/ghl" style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-primary-text)', whiteSpace: 'nowrap' }}>
+                    View all
+                  </Link>
+                }
+              />
               <ClientList items={data.ghlNotConnected} empty="All clients are connected." />
             </Card>
             <Card>

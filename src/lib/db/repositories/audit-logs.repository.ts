@@ -4,7 +4,70 @@ import { getStore } from '../mock-db';
 import { AuditLog } from '../schema';
 import { DatabaseError } from '../../errors';
 
+export interface AuditLogQuery {
+  /** Inclusive ISO timestamps on created_at. */
+  from?: string;
+  to?: string;
+  /** Free text: matched against actor email, action and resource type. */
+  q?: string;
+  /** Extra action keys to match (e.g. resolved from friendly labels). */
+  actions?: string[];
+  limit?: number;
+  offset?: number;
+}
+
+/** Strips characters that have a meaning in a PostgREST filter expression. */
+export function sanitizeFilterTerm(term: string): string {
+  return term.replace(/[,()%*\\"'`:]/g, ' ').replace(/\s+/g, ' ').trim();
+}
+
 export class AuditLogRepository {
+  /** Date-range / search query, newest first, with the total match count for pagination. */
+  async query(options: AuditLogQuery = {}): Promise<{ rows: AuditLog[]; total: number }> {
+    const limit = options.limit ?? 50;
+    const offset = options.offset ?? 0;
+    const term = options.q ? sanitizeFilterTerm(options.q) : '';
+    const actions = (options.actions || []).filter((a) => /^[\w.]+$/.test(a));
+
+    const supabase = getSupabaseServiceClient();
+    if (supabase) {
+      let query = supabase
+        .from('audit_logs')
+        .select('*', { count: 'exact' })
+        .order('created_at', { ascending: false })
+        .range(offset, offset + limit - 1);
+      if (options.from) query = query.gte('created_at', options.from);
+      if (options.to) query = query.lte('created_at', options.to);
+      if (term) {
+        const like = `%${term}%`;
+        const parts = [`actor_email.ilike.${like}`, `action.ilike.${like}`, `resource_type.ilike.${like}`];
+        if (actions.length) parts.push(`action.in.(${actions.join(',')})`);
+        query = query.or(parts.join(','));
+      }
+      const { data, error, count } = await query;
+      if (error) throw new DatabaseError(`Failed to fetch audit logs: ${error.message}`, error);
+      return { rows: (data || []) as AuditLog[], total: count ?? (data || []).length };
+    }
+
+    const fromMs = options.from ? new Date(options.from).getTime() : -Infinity;
+    const toMs = options.to ? new Date(options.to).getTime() : Infinity;
+    const needle = term.toLowerCase();
+    const matches = getStore()
+      .auditLogs.filter((l) => {
+        const at = new Date(l.created_at).getTime();
+        if (at < fromMs || at > toMs) return false;
+        if (!needle) return true;
+        return (
+          l.actor_email.toLowerCase().includes(needle) ||
+          l.action.toLowerCase().includes(needle) ||
+          (l.resource_type || '').toLowerCase().includes(needle) ||
+          actions.includes(l.action)
+        );
+      })
+      .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+    return { rows: matches.slice(offset, offset + limit), total: matches.length };
+  }
+
   async list(tenantId?: string, limit = 100, offset = 0): Promise<AuditLog[]> {
     const supabase = getSupabaseServiceClient();
     if (supabase) {

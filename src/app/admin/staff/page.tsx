@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useEffect, useState } from 'react';
-import { Card, CardHeader, Button, Input, Select, StatusBadge, Skeleton } from '@/components/ui';
+import { Card, CardHeader, Button, Input, Select, StatusBadge, Skeleton, Modal } from '@/components/ui';
 
 interface StaffMember {
   id: string;
@@ -10,6 +10,8 @@ interface StaffMember {
   role: 'admin' | 'csm';
   status: string;
   assignedClients: number | null;
+  /** True on the signed-in admin's own row. */
+  self?: boolean;
 }
 
 export default function StaffPage() {
@@ -20,6 +22,13 @@ export default function StaffPage() {
   const [role, setRole] = useState<'csm' | 'admin'>('csm');
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState<{ type: 'ok' | 'error'; text: string } | null>(null);
+
+  const [editing, setEditing] = useState<StaffMember | null>(null);
+  const [editName, setEditName] = useState('');
+  const [editEmail, setEditEmail] = useState('');
+  const [editRole, setEditRole] = useState<'csm' | 'admin'>('csm');
+  const [editBusy, setEditBusy] = useState(false);
+  const [editError, setEditError] = useState('');
 
   const load = async () => {
     try {
@@ -79,6 +88,56 @@ export default function StaffPage() {
     const data = await res.json();
     if (data.success) load();
     else setMessage({ type: 'error', text: data.error || 'Could not update staff member.' });
+  };
+
+  const openEdit = (member: StaffMember) => {
+    setEditing(member);
+    setEditName(member.name || '');
+    setEditEmail(member.email);
+    setEditRole(member.role);
+    setEditError('');
+  };
+
+  const saveEdit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editing) return;
+    setEditBusy(true);
+    setEditError('');
+    try {
+      const res = await fetch('/api/admin/staff', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          id: editing.id,
+          action: 'update',
+          name: editName,
+          email: editEmail,
+          // Your own role is locked; the server rejects it too.
+          ...(editing.self ? {} : { role: editRole }),
+        }),
+      });
+      const data = await res.json();
+      if (data.success) {
+        const emailChanged = (data.changed || []).includes('email');
+        setMessage({
+          type: 'ok',
+          text:
+            (data.changed || []).length === 0
+              ? 'No changes to save.'
+              : emailChanged
+                ? `Saved. The sign-in email is now ${data.staff.email}; the password is unchanged.`
+                : 'Saved.',
+        });
+        setEditing(null);
+        load();
+      } else {
+        setEditError(data.error || 'Could not save the changes.');
+      }
+    } catch {
+      setEditError('Network error. Nothing was saved.');
+    } finally {
+      setEditBusy(false);
+    }
   };
 
   return (
@@ -151,15 +210,78 @@ export default function StaffPage() {
                 <div style={{ display: 'flex', gap: 'var(--space-2)', alignItems: 'center' }}>
                   <StatusBadge status={m.role === 'admin' ? 'Admin' : 'CSM'} variant="progress" />
                   {m.status === 'suspended' && <StatusBadge status="Disabled" variant="suspended" />}
-                  <Button variant="outline" size="sm" onClick={() => toggle(m)}>
-                    {m.status === 'suspended' ? 'Enable' : 'Disable'}
+                  {m.self && <StatusBadge status="You" variant="pending" dot={false} />}
+                  <Button variant="outline" size="sm" onClick={() => openEdit(m)} aria-label={`Edit ${m.name || m.email}`}>
+                    Edit
                   </Button>
+                  {!m.self && (
+                    <Button variant="outline" size="sm" onClick={() => toggle(m)}>
+                      {m.status === 'suspended' ? 'Enable' : 'Disable'}
+                    </Button>
+                  )}
                 </div>
               </div>
             ))}
           </div>
         )}
       </Card>
+
+      <Modal
+        isOpen={Boolean(editing)}
+        onClose={() => !editBusy && setEditing(null)}
+        title="Edit staff member"
+        footer={
+          <div style={{ display: 'flex', gap: 'var(--space-2)', width: '100%', justifyContent: 'flex-end' }}>
+            <Button type="button" variant="outline" onClick={() => setEditing(null)} disabled={editBusy}>
+              Cancel
+            </Button>
+            <Button type="submit" form="edit-staff-form" variant="primary" disabled={editBusy}>
+              {editBusy ? 'Saving...' : 'Save changes'}
+            </Button>
+          </div>
+        }
+      >
+        {editing && (
+          <form id="edit-staff-form" onSubmit={saveEdit} style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-3)' }}>
+            {editError && (
+              <div
+                role="alert"
+                style={{
+                  padding: 'var(--space-3)',
+                  borderRadius: 'var(--radius-md)',
+                  fontSize: 'var(--font-size-sm)',
+                  backgroundColor: 'var(--color-status-danger-bg)',
+                  color: 'var(--color-status-danger-text)',
+                }}
+              >
+                {editError}
+              </div>
+            )}
+            <Input id="edit-staff-name" label="Full name" value={editName} onChange={(e) => setEditName(e.target.value)} required />
+            <Input
+              id="edit-staff-email"
+              label="Work email"
+              type="email"
+              placeholder="name@motionz.ai"
+              value={editEmail}
+              onChange={(e) => setEditEmail(e.target.value)}
+              required
+              helperText="Must be an @motionz.ai address. Changing it changes the email they sign in with; their password stays the same."
+            />
+            <Select
+              id="edit-staff-role"
+              label="Role"
+              value={editRole}
+              disabled={editing.self}
+              onChange={(e) => setEditRole(e.target.value === 'admin' ? 'admin' : 'csm')}
+              helperText={editing.self ? 'You cannot change your own role. Ask another admin.' : undefined}
+            >
+              <option value="csm">CSM</option>
+              <option value="admin">Admin (CSM manager)</option>
+            </Select>
+          </form>
+        )}
+      </Modal>
     </div>
   );
 }
