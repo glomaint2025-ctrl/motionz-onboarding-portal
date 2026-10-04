@@ -15,7 +15,7 @@ async function lastLeadAt(tenantId: string): Promise<string | null> {
 }
 
 /**
- * Admin > GHL connect: every live client (not archived, not cancelled) with its
+ * Admin > GHL Connect: every live client (not archived, not cancelled) with its
  * GoHighLevel Location ID and the time its last lead arrived.
  */
 export async function GET(request: Request) {
@@ -47,6 +47,6 @@ export async function GET(request: Request) {
     });
   } catch (err: any) {
     if (err.statusCode === 401 || err.statusCode === 403) return handleAuthError(err);
-    return NextResponse.json({ error: 'Failed to load GoHighLevel connections.' }, { status: 500 });
+    return NextResponse.json({ error: 'Could not load GoHighLevel connections. Please try again.' }, { status: 500 });
   }
 }

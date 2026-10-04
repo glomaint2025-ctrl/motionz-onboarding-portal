@@ -55,7 +55,6 @@ export async function GET(request: Request) {
       },
       // Same client set as /admin/ghl (live clients: not archived, not cancelled).
       ghl: { connected: setup.filter((s) => s.ghlConnected).length, total: setup.length },
-      ghlNotConnected: setup.filter((s) => !s.ghlConnected).map(({ id, name }) => ({ id, name })),
       withoutCsm: setup.filter((s) => !s.hasCsm).map(({ id, name }) => ({ id, name })),
       inSetup: setup.filter((s) => !s.done).length,
       stuck: setup
@@ -66,12 +65,9 @@ export async function GET(request: Request) {
         highSeverity: recentEvents.filter((e: any) => e.severity === 'high' || e.severity === 'critical').length,
       },
       unmatchedSubmissions: unmatched.length,
-      // No billing source is connected (payments run through Stripe links outside the portal).
-      revenue: null,
-      churnRate: null,
     });
   } catch (err: any) {
     if (err.statusCode === 401 || err.statusCode === 403) return handleAuthError(err);
-    return NextResponse.json({ error: 'Failed to load dashboard.' }, { status: 500 });
+    return NextResponse.json({ error: 'Could not load the dashboard. Please try again.' }, { status: 500 });
   }
 }

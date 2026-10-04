@@ -3,10 +3,39 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { Card, CardHeader, Input, Select, Button, StatusBadge, Modal, Skeleton } from '@/components/ui';
+import { Card, CardHeader, Input, Select, Button, StatusBadge, Modal, Skeleton, buttonClasses } from '@/components/ui';
+import { Icon } from '@/components/brand';
 import { PORTAL_MODULES } from '@/lib/portal-modules';
 import { OnboardingAnswers, OnboardingSubmissionView } from '@/components/onboarding/OnboardingAnswers';
 import { ClientRecords } from '@/components/admin/ClientRecords';
+import { Notice, clientStatusLabel, copyText } from '@/components/admin/Notice';
+import { MemberModulePicker, memberSelectableModules } from '@/components/admin/MemberModulePicker';
+import { formatDateTime } from '@/lib/utils/format';
+import { roleLabel } from '@/lib/utils/log-labels';
+
+const modalFooterStyle: React.CSSProperties = { display: 'flex', gap: 'var(--space-2)', justifyContent: 'flex-end', width: '100%' };
+const linkBoxStyle: React.CSSProperties = {
+  padding: 'var(--space-3)',
+  backgroundColor: 'var(--color-bg-surface)',
+  border: '1px solid var(--color-border-subtle)',
+  borderRadius: 'var(--radius-md)',
+  fontFamily: 'monospace',
+  fontSize: 'var(--font-size-xs)',
+  wordBreak: 'break-all',
+  userSelect: 'all',
+};
+
+/** Invite links are shown on the address the admin is using, so they can be copied straight from the page. */
+function toLocalLink(link: string): string {
+  if (!link || typeof window === 'undefined') return link || '';
+  try {
+    if (link.startsWith('/')) return `${window.location.origin}${link}`;
+    const parsed = new URL(link);
+    return parsed.origin !== window.location.origin ? `${window.location.origin}${parsed.pathname}${parsed.search}` : link;
+  } catch {
+    return link;
+  }
+}
 
 
 export default function ClientDetailPage() {
@@ -15,17 +44,15 @@ export default function ClientDetailPage() {
   const clientId = params?.id as string;
 
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState('');
   const [tenant, setTenant] = useState<any | null>(null);
-  const [csm, setCsm] = useState<any | null>(null);
   const [features, setFeatures] = useState<Record<string, boolean>>({});
-  const [steps, setSteps] = useState<any[]>([]);
   const [invitations, setInvitations] = useState<any[]>([]);
   const [members, setMembers] = useState<any[]>([]);
 
   const [companyName, setCompanyName] = useState('');
   const [phone, setPhone] = useState('');
   const [status, setStatus] = useState('active');
-  const [ghlLocationId, setGhlLocationId] = useState('');
   const [trackingSheetUrl, setTrackingSheetUrl] = useState<string | null>(null);
   const [sheetBusy, setSheetBusy] = useState(false);
   const [sheetError, setSheetError] = useState('');
@@ -34,14 +61,19 @@ export default function ClientDetailPage() {
   const [availableCsms, setAvailableCsms] = useState<{ id: string; name?: string; email: string }[]>([]);
 
   const [saveSuccess, setSaveSuccess] = useState(false);
+  const [saveError, setSaveError] = useState('');
+  const [isSaving, setIsSaving] = useState(false);
   const [isArchiveModalOpen, setIsArchiveModalOpen] = useState(false);
+  const [isArchiving, setIsArchiving] = useState(false);
+  const [archiveError, setArchiveError] = useState('');
+  const [copyState, setCopyState] = useState<'idle' | 'copied' | 'failed'>('idle');
   const [isUnarchiveModalOpen, setIsUnarchiveModalOpen] = useState(false);
   const [isUnarchiving, setIsUnarchiving] = useState(false);
   const [unarchiveError, setUnarchiveError] = useState('');
 
   // Tenant ban / unban modal states
   const [isBanTenantModalOpen, setIsBanTenantModalOpen] = useState(false);
-  const [banTenantReason, setBanTenantReason] = useState('Terms violation or billing delinquency.');
+  const [banTenantReason, setBanTenantReason] = useState('');
   const [isBanningTenant, setIsBanningTenant] = useState(false);
   const [banTenantError, setBanTenantError] = useState('');
 
@@ -51,7 +83,7 @@ export default function ClientDetailPage() {
 
   // Member suspend / unsuspend modal states
   const [suspendMemberTarget, setSuspendMemberTarget] = useState<any | null>(null);
-  const [suspendMemberReason, setSuspendMemberReason] = useState('Staff administrator restricted access.');
+  const [suspendMemberReason, setSuspendMemberReason] = useState('');
   const [isSuspendingMember, setIsSuspendingMember] = useState(false);
   const [suspendMemberError, setSuspendMemberError] = useState('');
 
@@ -69,7 +101,7 @@ export default function ClientDetailPage() {
   const [isRevoking, setIsRevoking] = useState(false);
   const [revokeError, setRevokeError] = useState('');
 
-  // Generate magic link modal state
+  // Invite modal state
   const [isGenerateModalOpen, setIsGenerateModalOpen] = useState(false);
   const [generateEmail, setGenerateEmail] = useState('');
   const [generateRole, setGenerateRole] = useState<'client' | 'client_member'>('client');
@@ -77,6 +109,7 @@ export default function ClientDetailPage() {
   const [isGenerating, setIsGenerating] = useState(false);
   const [generateError, setGenerateError] = useState('');
   const [generatedLink, setGeneratedLink] = useState('');
+  const [inviteEmailDelivered, setInviteEmailDelivered] = useState(false);
 
   // Member permissions state
   const [permissionTarget, setPermissionTarget] = useState<any | null>(null);
@@ -86,29 +119,55 @@ export default function ClientDetailPage() {
   const [permissionSuccess, setPermissionSuccess] = useState('');
 
   const handleOpenInviteModal = () => {
-    setGenerateEmail('');
-    setGenerateRole('client_member');
+    // The first invitation goes to the account owner; after that, invitations default to team members.
+    const hasOwner = members.some((m) => m.role === 'client');
+    setGenerateEmail(hasOwner ? '' : tenant?.primary_email || '');
+    setGenerateRole(hasOwner ? 'client_member' : 'client');
     setGenerateError('');
     setGeneratedLink('');
-    const initial = PORTAL_MODULES
-      .filter((m) => features[m.key] !== false)
-      .map((m) => m.key);
-    setSelectedInviteModules(initial);
+    setInviteEmailDelivered(false);
+    setCopyState('idle');
+    setSelectedInviteModules(memberSelectableModules(features).map((m) => m.key));
     setIsGenerateModalOpen(true);
+  };
+
+  const closeInviteModal = () => {
+    if (isGenerating) return;
+    setIsGenerateModalOpen(false);
+    setGenerateError('');
+    setGeneratedLink('');
+    setCopyState('idle');
+  };
+
+  const closeResendModal = () => {
+    if (isResending) return;
+    setResendTarget(null);
+    setResendError('');
+    setResentLink('');
+    setCopyState('idle');
+  };
+
+  const closePermissionsModal = () => {
+    if (isSavingPermissions) return;
+    setPermissionTarget(null);
+    setPermissionError('');
+    setPermissionSuccess('');
+  };
+
+  const handleCopy = async (text: string) => {
+    const ok = await copyText(text);
+    setCopyState(ok ? 'copied' : 'failed');
+    if (ok) setTimeout(() => setCopyState('idle'), 2500);
   };
 
   const handleOpenPermissions = (member: any) => {
     setPermissionTarget(member);
     setPermissionError('');
     setPermissionSuccess('');
-    if (Array.isArray(member.allowed_modules)) {
-      setEditAllowedModules(member.allowed_modules);
-    } else {
-      const activeKeys = PORTAL_MODULES
-        .filter((m) => features[m.key] !== false)
-        .map((m) => m.key);
-      setEditAllowedModules(activeKeys);
-    }
+    const selectable = memberSelectableModules(features).map((m) => m.key);
+    setEditAllowedModules(
+      Array.isArray(member.allowed_modules) ? member.allowed_modules.filter((k: string) => selectable.includes(k)) : selectable
+    );
   };
 
   const handleSavePermissions = async () => {
@@ -137,16 +196,16 @@ export default function ClientDetailPage() {
               : m
           )
         );
-        setPermissionSuccess('Member permissions updated successfully.');
+        setPermissionSuccess('Permissions saved.');
         setTimeout(() => {
           setPermissionTarget(null);
           setPermissionSuccess('');
         }, 700);
       } else {
-        setPermissionError(data.error || 'Failed to update member permissions.');
+        setPermissionError(data.error || 'Could not save the permissions. Please try again.');
       }
     } catch {
-      setPermissionError('Network connection error.');
+      setPermissionError('Could not reach the server. Nothing was changed.');
     } finally {
       setIsSavingPermissions(false);
     }
@@ -165,7 +224,7 @@ export default function ClientDetailPage() {
       if (data.success && data.sheet?.url) setTrackingSheetUrl(data.sheet.url);
       else setSheetError(data.error || 'Could not create the tracking sheet.');
     } catch {
-      setSheetError('Network error while creating the tracking sheet.');
+      setSheetError('Could not reach the server, so the sheet was not created.');
     } finally {
       setSheetBusy(false);
     }
@@ -174,29 +233,28 @@ export default function ClientDetailPage() {
   const fetchClientDetails = async () => {
     try {
       setLoading(true);
+      setLoadError('');
       const res = await fetch(`/api/admin/clients/${clientId}`);
-      const data = await res.json();
-      if (data.success) {
+      const data = await res.json().catch(() => ({}));
+      if (res.ok && data.success) {
         setTenant(data.tenant);
-        setCsm(data.csm);
         setFeatures(data.features || {});
-        setSteps(data.steps || []);
         setInvitations(data.invitations || []);
         setMembers(data.members || []);
         setTrackingSheetUrl(data.trackingSheetUrl || null);
         setSubmissions(data.onboardingSubmissions || []);
         setCompanyName(data.tenant.name || '');
         setPhone(data.tenant.phone || '');
-        setStatus(data.tenant.status || 'active');
-        setGhlLocationId(data.tenant.ghl_location_id || '');
-        if (data.tenant.primary_email && !generateEmail) {
-          setGenerateEmail(data.tenant.primary_email);
-        }
+        setStatus(data.tenant.status === 'active' ? 'active' : 'onboarding');
         setCsmUserId(data.csm?.id || '');
         setAvailableCsms(data.availableCsms || []);
+      } else if (res.status === 404) {
+        setTenant(null);
+      } else {
+        setLoadError(data.error || 'Could not load this client.');
       }
-    } catch (err) {
-      console.error('Failed to load client details:', err);
+    } catch {
+      setLoadError('Could not reach the server. Check your connection and try again.');
     } finally {
       setLoading(false);
     }
@@ -207,11 +265,17 @@ export default function ClientDetailPage() {
   }, [clientId]);
 
   const toggleFeature = (key: string) => {
-    setFeatures((prev) => ({ ...prev, [key]: !prev[key] }));
+    // A section with no saved switch counts as on, so the first click turns it off.
+    setFeatures((prev) => ({ ...prev, [key]: prev[key] === false }));
   };
 
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (isSaving) return;
+    setIsSaving(true);
+    setSaveError('');
+    setSaveSuccess(false);
+    const editableStatus = tenant && !tenant.deleted_at && (tenant.status === 'active' || tenant.status === 'onboarding');
     try {
       const res = await fetch(`/api/admin/clients/${clientId}`, {
         method: 'PUT',
@@ -219,33 +283,44 @@ export default function ClientDetailPage() {
         body: JSON.stringify({
           name: companyName,
           phone,
-          status,
-          ghl_location_id: ghlLocationId,
+          // Suspended and archived clients keep their status; those have their own buttons.
+          ...(editableStatus ? { status } : {}),
           csm_user_id: csmUserId,
-          feature_toggles: features,
+          feature_toggles: Object.fromEntries(PORTAL_MODULES.map((m) => [m.key, features[m.key] !== false])),
         }),
       });
-      const data = await res.json();
-      if (data.success) {
+      const data = await res.json().catch(() => ({}));
+      if (res.ok && data.success) {
+        if (data.tenant) setTenant(data.tenant);
         setSaveSuccess(true);
-        setTimeout(() => setSaveSuccess(false), 3000);
+        setTimeout(() => setSaveSuccess(false), 4000);
+      } else {
+        setSaveError(data.error || 'Your changes were not saved. Please try again.');
       }
-    } catch (err) {
-      console.error('Save failed:', err);
+    } catch {
+      setSaveError('Could not reach the server. Your changes were not saved.');
+    } finally {
+      setIsSaving(false);
     }
   };
 
   const handleArchive = async () => {
+    setIsArchiving(true);
+    setArchiveError('');
     try {
       const res = await fetch(`/api/admin/clients/${clientId}`, {
         method: 'DELETE',
       });
-      const data = await res.json();
-      if (data.success) {
+      const data = await res.json().catch(() => ({}));
+      if (res.ok && data.success) {
         router.push('/admin/clients');
+      } else {
+        setArchiveError(data.error || 'Could not archive this client. Please try again.');
+        setIsArchiving(false);
       }
-    } catch (err) {
-      console.error('Archive failed:', err);
+    } catch {
+      setArchiveError('Could not reach the server. The client was not archived.');
+      setIsArchiving(false);
     }
   };
 
@@ -263,16 +338,16 @@ export default function ClientDetailPage() {
         setIsUnarchiveModalOpen(false);
         fetchClientDetails();
       } else {
-        setUnarchiveError(data.error || 'Failed to unarchive portal.');
+        setUnarchiveError(data.error || 'Could not unarchive this client. Please try again.');
       }
     } catch {
-      setUnarchiveError('Network error while unarchiving portal.');
+      setUnarchiveError('Could not reach the server. The client is still archived.');
     } finally {
       setIsUnarchiving(false);
     }
   };
 
-  // Suspend tenant (and cascade to members)
+  // Suspend the client (locks out the whole team)
   const handleConfirmBanTenant = async () => {
     setIsBanningTenant(true);
     setBanTenantError('');
@@ -290,16 +365,16 @@ export default function ClientDetailPage() {
         setIsBanTenantModalOpen(false);
         fetchClientDetails();
       } else {
-        setBanTenantError(data.error || 'Failed to ban client portal.');
+        setBanTenantError(data.error || 'Could not suspend this client. Please try again.');
       }
     } catch {
-      setBanTenantError('Network error while banning client portal.');
+      setBanTenantError('Could not reach the server. The client was not suspended.');
     } finally {
       setIsBanningTenant(false);
     }
   };
 
-  // Unsuspend tenant (and unlock cascade-suspended members)
+  // Reactivate the client (unlocks team members locked out by the suspension)
   const handleConfirmUnbanTenant = async () => {
     setIsUnbanningTenant(true);
     setUnbanTenantError('');
@@ -314,10 +389,10 @@ export default function ClientDetailPage() {
         setIsUnbanTenantModalOpen(false);
         fetchClientDetails();
       } else {
-        setUnbanTenantError(data.error || 'Failed to reactivate client portal.');
+        setUnbanTenantError(data.error || 'Could not reactivate this client. Please try again.');
       }
     } catch {
-      setUnbanTenantError('Network error while reactivating client portal.');
+      setUnbanTenantError('Could not reach the server. The client is still suspended.');
     } finally {
       setIsUnbanningTenant(false);
     }
@@ -343,10 +418,10 @@ export default function ClientDetailPage() {
         setSuspendMemberTarget(null);
         fetchClientDetails();
       } else {
-        setSuspendMemberError(data.error || 'Failed to suspend member.');
+        setSuspendMemberError(data.error || 'Could not disable this person. Please try again.');
       }
     } catch {
-      setSuspendMemberError('Network error while suspending member.');
+      setSuspendMemberError('Could not reach the server. Nothing was changed.');
     } finally {
       setIsSuspendingMember(false);
     }
@@ -371,10 +446,10 @@ export default function ClientDetailPage() {
         setUnsuspendMemberTarget(null);
         fetchClientDetails();
       } else {
-        setUnsuspendMemberError(data.error || 'Failed to reactivate member.');
+        setUnsuspendMemberError(data.error || 'Could not enable this person. Please try again.');
       }
     } catch {
-      setUnsuspendMemberError('Network error while reactivating member.');
+      setUnsuspendMemberError('Could not reach the server. Nothing was changed.');
     } finally {
       setIsUnsuspendingMember(false);
     }
@@ -395,19 +470,7 @@ export default function ClientDetailPage() {
 
       const data = await res.json();
       if (res.ok) {
-        let link = data.magicLinkUrl || '';
-        if (typeof window !== 'undefined' && link) {
-          try {
-            if (link.startsWith('/')) {
-              link = `${window.location.origin}${link}`;
-            } else {
-              const parsed = new URL(link);
-              if (parsed.origin !== window.location.origin) {
-                link = `${window.location.origin}${parsed.pathname}${parsed.search}`;
-              }
-            }
-          } catch {}
-        }
+        const link = toLocalLink(data.magicLinkUrl || '');
         setResentLink(link);
         if (data.invitation) {
           setInvitations((prev) => [
@@ -416,10 +479,10 @@ export default function ClientDetailPage() {
           ]);
         }
       } else {
-        setResendError(data.error || 'Failed to resend invitation.');
+        setResendError(data.error || 'Could not send the invitation again. Please try again.');
       }
     } catch {
-      setResendError('Network error while resending invitation.');
+      setResendError('Could not reach the server. The invitation was not sent again.');
     } finally {
       setIsResending(false);
     }
@@ -439,7 +502,6 @@ export default function ClientDetailPage() {
 
       const data = await res.json();
       if (res.ok) {
-        // Keep in list marked as revoked so admin can resend anytime if needed
         setInvitations((prev) =>
           prev.map((i) =>
             i.id === revokeTarget.id
@@ -449,19 +511,19 @@ export default function ClientDetailPage() {
         );
         setRevokeTarget(null);
       } else {
-        setRevokeError(data.error || 'Failed to revoke invitation.');
+        setRevokeError(data.error || 'Could not cancel the invitation. Please try again.');
       }
     } catch {
-      setRevokeError('Network error while revoking invitation.');
+      setRevokeError('Could not reach the server. The invitation is still active.');
     } finally {
       setIsRevoking(false);
     }
   };
 
   const handleGenerateMagicLink = async () => {
-    const targetEmail = generateEmail.trim() || tenant?.primary_email?.trim() || '';
+    const targetEmail = generateEmail.trim();
     if (!targetEmail) {
-      setGenerateError('Recipient email address is required.');
+      setGenerateError('Enter the email address to invite.');
       return;
     }
     setIsGenerating(true);
@@ -482,20 +544,10 @@ export default function ClientDetailPage() {
 
       const data = await res.json();
       if (res.ok && data.success) {
-        let link = data.magicLinkUrl || '';
-        if (typeof window !== 'undefined' && link) {
-          try {
-            if (link.startsWith('/')) {
-              link = `${window.location.origin}${link}`;
-            } else {
-              const parsed = new URL(link);
-              if (parsed.origin !== window.location.origin) {
-                link = `${window.location.origin}${parsed.pathname}${parsed.search}`;
-              }
-            }
-          } catch {}
-        }
+        const link = toLocalLink(data.magicLinkUrl || '');
         setGeneratedLink(link);
+        setGenerateEmail(targetEmail);
+        setInviteEmailDelivered(Boolean(data.emailDelivered));
         if (data.invitation) {
           setInvitations((prev) => [
             data.invitation,
@@ -503,18 +555,13 @@ export default function ClientDetailPage() {
           ]);
         }
       } else {
-        setGenerateError(data.error || 'Failed to generate magic link.');
+        setGenerateError(data.error || 'Could not create the invitation. Please try again.');
       }
     } catch {
-      setGenerateError('Network error while generating magic link.');
+      setGenerateError('Could not reach the server. No invitation was sent.');
     } finally {
       setIsGenerating(false);
     }
-  };
-
-  const copyToClipboard = (text: string) => {
-    navigator.clipboard.writeText(text);
-    alert('Magic link copied to clipboard!');
   };
 
   if (loading) {
@@ -589,10 +636,15 @@ export default function ClientDetailPage() {
   if (!tenant) {
     return (
       <Card style={{ textAlign: 'center', padding: 'var(--space-8)' }}>
-        <StatusBadge status="Not Found" variant="danger" />
-        <h2 style={{ margin: 'var(--space-3) 0' }}>Client Portal Not Found</h2>
-        <Link href="/admin/clients">
-          <Button variant="secondary">Return to Client Roster</Button>
+        {loadError ? (
+          <Notice onRetry={fetchClientDetails} style={{ marginBottom: 'var(--space-4)', textAlign: 'left' }}>
+            {loadError}
+          </Notice>
+        ) : (
+          <h2 style={{ margin: '0 0 var(--space-3)' }}>Client not found</h2>
+        )}
+        <Link href="/admin/clients" className={buttonClasses({ variant: 'secondary' })}>
+          Back to Clients
         </Link>
       </Card>
     );
@@ -600,83 +652,83 @@ export default function ClientDetailPage() {
 
   const isArchived = Boolean(tenant.deleted_at || tenant.status === 'cancelled');
   const isTenantSuspended = tenant.status === 'suspended';
+  const canEditStatus = !isArchived && !isTenantSuspended;
+  const pendingInvitations = invitations.filter((inv: any) => !inv.accepted_at && !inv.revoked_at);
+  const noteBoxStyle: React.CSSProperties = {
+    display: 'flex',
+    gap: 'var(--space-2)',
+    alignItems: 'flex-start',
+    padding: 'var(--space-3)',
+    backgroundColor: 'var(--color-bg-surface)',
+    border: '1px solid var(--color-border-subtle)',
+    borderRadius: 'var(--radius-md)',
+    fontSize: 'var(--font-size-xs)',
+    color: 'var(--color-text-muted)',
+    lineHeight: 1.5,
+  };
 
   return (
     <div style={{ maxWidth: '800px', margin: '0 auto' }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 'var(--space-6)', flexWrap: 'wrap', gap: 'var(--space-3)' }}>
         <div>
           <Link href="/admin/clients" style={{ fontSize: 'var(--font-size-xs)', color: 'var(--color-primary)' }}>
-            Back to Client Roster
+            Back to Clients
           </Link>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-3)', marginTop: 'var(--space-2)', marginBottom: 'var(--space-1)' }}>
-            <h1 style={{ margin: 0 }}>
-              {tenant.name} Settings
-            </h1>
-            {isArchived ? (
-              <StatusBadge status="Archived" variant="suspended" />
-            ) : (
-              <StatusBadge status={tenant.status} />
-            )}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-3)', marginTop: 'var(--space-2)', marginBottom: 'var(--space-1)', flexWrap: 'wrap' }}>
+            <h1 style={{ margin: 0 }}>{tenant.name}</h1>
+            <StatusBadge
+              status={clientStatusLabel(tenant.status, isArchived)}
+              variant={isArchived ? 'pending' : isTenantSuspended ? 'suspended' : tenant.status === 'active' ? 'done' : tenant.status === 'onboarding' ? 'progress' : 'pending'}
+            />
           </div>
           <p style={{ margin: 0, color: 'var(--color-text-secondary)', fontSize: 'var(--font-size-sm)' }}>
-            Tenant ID: {tenant.id} &middot; Primary: {tenant.primary_email}
+            Main contact: {tenant.primary_contact_name ? `${tenant.primary_contact_name} · ` : ''}{tenant.primary_email}
+          </p>
+          <p style={{ margin: 'var(--space-1) 0 0', color: 'var(--color-text-muted)', fontSize: 'var(--font-size-xs)' }}>
+            Client ID: {tenant.id}
           </p>
         </div>
         <div style={{ display: 'flex', gap: 'var(--space-2)', flexWrap: 'wrap' }}>
           {!isArchived && (
-            <Link href={`/portal/${tenant.id}`}>
-              <Button variant="secondary">
-                Open Portal View
-              </Button>
+            <Link href={`/portal/${tenant.id}`} className={buttonClasses({ variant: 'secondary' })}>
+              Open portal
             </Link>
           )}
-          {!isArchived && (isTenantSuspended ? (
+          {!isArchived && !isTenantSuspended && (
             <Button
-              variant="outline"
-              onClick={() => {
-                setUnbanTenantError('');
-                setIsUnbanTenantModalOpen(true);
-              }}
-            >
-              Reactivate Portal
-            </Button>
-          ) : (
-            <Button
+              type="button"
               variant="danger"
               onClick={() => {
-                setBanTenantReason('Account suspended by Motionz administrator.');
+                setBanTenantReason('');
                 setBanTenantError('');
                 setIsBanTenantModalOpen(true);
               }}
             >
-              Ban Portal Access
+              Suspend client
             </Button>
-          ))}
-          {isArchived ? (
+          )}
+          {!isArchived && (
             <Button
-              variant="primary"
+              type="button"
+              variant="danger"
               onClick={() => {
-                setUnarchiveError('');
-                setIsUnarchiveModalOpen(true);
+                setArchiveError('');
+                setIsArchiveModalOpen(true);
               }}
             >
-              Unarchive Portal
-            </Button>
-          ) : (
-            <Button variant="danger" onClick={() => setIsArchiveModalOpen(true)}>
               Archive
             </Button>
           )}
         </div>
       </div>
 
-      {/* Prominent Banner if Portal is Archived */}
+      {/* Banner while the client is archived */}
       {isArchived && (
         <div
           style={{
             padding: 'var(--space-4)',
-            backgroundColor: 'rgba(100, 116, 139, 0.1)',
-            border: '1px solid rgba(100, 116, 139, 0.3)',
+            backgroundColor: 'var(--color-status-pending-bg)',
+            border: '1px solid var(--color-status-pending-border)',
             borderRadius: 'var(--radius-md)',
             marginBottom: 'var(--space-5)',
             display: 'flex',
@@ -688,13 +740,14 @@ export default function ClientDetailPage() {
         >
           <div>
             <div style={{ fontWeight: 'var(--font-weight-semibold)', color: 'var(--color-text-primary)', display: 'flex', alignItems: 'center', gap: 'var(--space-2)' }}>
-              <span>📦</span> Client Portal is Archived
+              <Icon name="package" size={18} /> This client is archived
             </div>
             <div style={{ fontSize: 'var(--font-size-sm)', marginTop: 'var(--space-1)', color: 'var(--color-text-secondary)' }}>
-              User access is currently deactivated. Historical data and configuration are fully preserved. You can restore this client at any time.
+              Their team cannot sign in. Nothing has been deleted, and you can unarchive them at any time.
             </div>
           </div>
           <Button
+            type="button"
             variant="primary"
             size="sm"
             onClick={() => {
@@ -702,18 +755,18 @@ export default function ClientDetailPage() {
               setIsUnarchiveModalOpen(true);
             }}
           >
-            Unarchive Portal
+            Unarchive
           </Button>
         </div>
       )}
 
-      {/* Prominent Banner if Portal is Banned/Suspended */}
-      {isTenantSuspended && (
+      {/* Banner while the client is suspended */}
+      {isTenantSuspended && !isArchived && (
         <div
           style={{
             padding: 'var(--space-4)',
-            backgroundColor: 'rgba(244, 63, 94, 0.08)',
-            border: '1px solid rgba(244, 63, 94, 0.3)',
+            backgroundColor: 'var(--color-status-suspended-bg)',
+            border: '1px solid var(--color-status-suspended-border)',
             borderRadius: 'var(--radius-md)',
             marginBottom: 'var(--space-5)',
             display: 'flex',
@@ -724,19 +777,21 @@ export default function ClientDetailPage() {
           }}
         >
           <div>
-            <div style={{ fontWeight: 'var(--font-weight-semibold)', color: '#fb7185', display: 'flex', alignItems: 'center', gap: 'var(--space-2)' }}>
-              <span>⛔</span> Client Portal & Associated Accounts Suspended
+            <div style={{ fontWeight: 'var(--font-weight-semibold)', color: 'var(--color-status-suspended-text)', display: 'flex', alignItems: 'center', gap: 'var(--space-2)' }}>
+              <Icon name="lock" size={18} /> This client is suspended. Nobody on their team can sign in.
             </div>
             <div style={{ fontSize: 'var(--font-size-sm)', marginTop: 'var(--space-1)', color: 'var(--color-text-secondary)' }}>
-              <strong>Restriction Reason:</strong> {tenant.suspended_reason || 'No specific reason provided.'}
+              <strong>Reason:</strong> {tenant.suspended_reason || 'No reason was given.'}
             </div>
             {tenant.suspended_by && (
               <div style={{ fontSize: 'var(--font-size-xs)', marginTop: 'var(--space-1)', color: 'var(--color-text-muted)' }}>
-                Enacted by: {tenant.suspended_by} {tenant.suspended_at ? `on ${new Date(tenant.suspended_at).toLocaleString()}` : ''}
+                Suspended by {tenant.suspended_by}
+                {tenant.suspended_at ? ` on ${formatDateTime(tenant.suspended_at)}` : ''}
               </div>
             )}
           </div>
           <Button
+            type="button"
             variant="outline"
             size="sm"
             onClick={() => {
@@ -744,57 +799,44 @@ export default function ClientDetailPage() {
               setIsUnbanTenantModalOpen(true);
             }}
           >
-            Reactivate Portal
+            Reactivate
           </Button>
         </div>
       )}
 
-      {saveSuccess && (
-        <div
-          style={{
-            padding: 'var(--space-3)',
-            backgroundColor: 'var(--color-status-done-bg)',
-            border: '1px solid var(--color-status-done-border)',
-            borderRadius: 'var(--radius-md)',
-            color: 'var(--color-status-done-text)',
-            fontSize: 'var(--font-size-sm)',
-            marginBottom: 'var(--space-5)',
-          }}
-        >
-          Settings and feature toggles saved successfully.
-        </div>
-      )}
-
       <form onSubmit={handleSave}>
-        {/* Core Company Settings */}
+        {/* Company details */}
         <Card style={{ marginBottom: 'var(--space-5)' }}>
-          <CardHeader
-            title="Tenant Identity & Integration"
-            subtitle="Core operational parameters and GoHighLevel sub-account binding"
-            action={<StatusBadge status={status} />}
-          />
+          <CardHeader title="Company details" subtitle="The basics for this client and where its data lives." />
           <Input
-            label="Company Name"
+            label="Company name"
             value={companyName}
             onChange={(e) => setCompanyName(e.target.value)}
+            maxLength={255}
             required
           />
           <Input
-            label="Business Phone"
+            label="Business phone"
+            type="tel"
+            autoComplete="off"
             value={phone}
             onChange={(e) => setPhone(e.target.value)}
-          />
-          <Input
-            label="GoHighLevel Location ID"
-            placeholder="e.g. loc_ghl_1234"
-            value={ghlLocationId}
-            onChange={(e) => setGhlLocationId(e.target.value)}
-            helperText="Direct binding to the client's GoHighLevel sub-account."
+            maxLength={30}
+            placeholder="e.g. +1 555 234 5678"
           />
           <div style={{ marginBottom: 'var(--space-4)' }}>
-            <span style={{ display: 'block', fontSize: 'var(--font-size-sm)', fontWeight: 'var(--font-weight-medium)', marginBottom: 'var(--space-1)' }}>
-              Tracking Sheet
-            </span>
+            <span className="ui-label" style={{ display: 'block' }}>GoHighLevel Location ID</span>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-3)', flexWrap: 'wrap', fontSize: 'var(--font-size-sm)' }}>
+              {tenant.ghl_location_id ? (
+                <code style={{ wordBreak: 'break-all' }}>{tenant.ghl_location_id}</code>
+              ) : (
+                <span style={{ color: 'var(--color-text-muted)' }}>Not connected yet</span>
+              )}
+              <Link href="/admin/ghl">Change in GHL Connect</Link>
+            </div>
+          </div>
+          <div style={{ marginBottom: 'var(--space-4)' }}>
+            <span className="ui-label" style={{ display: 'block' }}>Tracking sheet</span>
             {trackingSheetUrl ? (
               <a href={trackingSheetUrl} target="_blank" rel="noopener noreferrer" style={{ fontSize: 'var(--font-size-sm)' }}>
                 Open client tracking sheet
@@ -813,29 +855,33 @@ export default function ClientDetailPage() {
               </span>
             )}
           </div>
-          <Select
-            label="Portal Lifecycle Status"
-            value={status}
-            onChange={(e) => setStatus(e.target.value)}
-          >
-            <option value="active">Active</option>
-            <option value="onboarding">Onboarding</option>
-            <option value="cancelled">Cancelled</option>
-            <option value="suspended">Suspended / Banned</option>
-          </Select>
+          {canEditStatus ? (
+            <Select
+              label="Status"
+              value={status}
+              onChange={(e) => setStatus(e.target.value)}
+              helperText="To suspend or archive this client, use the buttons at the top of the page."
+            >
+              <option value="onboarding">Onboarding</option>
+              <option value="active">Active</option>
+            </Select>
+          ) : (
+            <div>
+              <span className="ui-label" style={{ display: 'block' }}>Status</span>
+              <span style={{ fontSize: 'var(--font-size-sm)' }}>
+                {clientStatusLabel(tenant.status, isArchived)}.{' '}
+                <span style={{ color: 'var(--color-text-muted)' }}>
+                  {isArchived ? 'Unarchive the client to change this.' : 'Reactivate the client to change this.'}
+                </span>
+              </span>
+            </div>
+          )}
         </Card>
 
         {/* Assigned CSM */}
         <Card style={{ marginBottom: 'var(--space-5)' }}>
-          <CardHeader
-            title="Customer Success Manager"
-            subtitle="Internal staff assigned to oversee onboarding"
-          />
-          <Select
-            label="Assigned CSM"
-            value={csmUserId}
-            onChange={(e) => setCsmUserId(e.target.value)}
-          >
+          <CardHeader title="Customer Success Manager" subtitle="The Motionz team member who looks after this client." />
+          <Select label="Assigned CSM" value={csmUserId} onChange={(e) => setCsmUserId(e.target.value)}>
             <option value="">No CSM assigned</option>
             {availableCsms.map((c) => (
               <option key={c.id} value={c.id}>
@@ -845,18 +891,13 @@ export default function ClientDetailPage() {
           </Select>
         </Card>
 
-        {/* Per-Tenant Feature Toggles */}
-        <Card style={{ marginBottom: 'var(--space-6)' }}>
-          <CardHeader
-            title="Admin Feature Toggles"
-            subtitle="Enable or disable specific modules for this client portal"
-          />
+        {/* Portal sections switched on for this client */}
+        <Card style={{ marginBottom: 'var(--space-5)' }}>
+          <CardHeader title="Portal sections" subtitle="Choose which parts of the portal this client can see." />
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 'var(--space-3)' }}>
-            {Object.entries(features)
-              .filter(([key]) => PORTAL_MODULES.some((m) => m.key === key))
-              .map(([key, enabled]) => (
+            {PORTAL_MODULES.map((module) => (
               <label
-                key={key}
+                key={module.key}
                 style={{
                   display: 'flex',
                   alignItems: 'center',
@@ -870,621 +911,388 @@ export default function ClientDetailPage() {
               >
                 <input
                   type="checkbox"
-                  checked={enabled}
-                  onChange={() => toggleFeature(key)}
+                  checked={features[module.key] !== false}
+                  onChange={() => toggleFeature(module.key)}
                   style={{ accentColor: 'var(--color-primary)' }}
                 />
-                <span style={{ fontSize: 'var(--font-size-sm)', textTransform: 'capitalize' }}>
-                  {PORTAL_MODULES.find((m) => m.key === key)?.label || key.replace(/_/g, ' ')}
-                </span>
+                <span style={{ fontSize: 'var(--font-size-sm)' }}>{module.label}</span>
               </label>
             ))}
           </div>
         </Card>
 
-        <OnboardingAnswers submissions={submissions} />
-
-        <ClientRecords clientId={clientId} />
-
-        {/* Client Team Members & Admin Roster Oversight */}
-        <Card style={{ marginBottom: 'var(--space-6)' }}>
-          <div
-            style={{
-              display: 'flex',
-              justifyContent: 'space-between',
-              alignItems: 'flex-start',
-              flexWrap: 'wrap',
-              gap: 'var(--space-3)',
-              marginBottom: 'var(--space-4)',
-            }}
-          >
-            <CardHeader
-              title="Client Team Members & Staff Oversight"
-              subtitle="View registered tenant users, monitor restriction origins, and manage individual access"
-            />
-            <Button
-              variant="outline"
-              size="sm"
-              type="button"
-              onClick={handleOpenInviteModal}
-              style={{ display: 'inline-flex', alignItems: 'center', gap: 'var(--space-1)', marginTop: 'var(--space-1)' }}
-            >
-              + Invite Team Member
-            </Button>
-          </div>
-          {members.length === 0 ? (
-            <p style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-muted)', margin: 0 }}>
-              No team members registered under this client tenant yet.
-            </p>
-          ) : (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-3)' }}>
-              {members.map((member) => {
-                const isMainClient = member.role === 'client';
-                const isSuspended = member.status === 'suspended' || (isMainClient && tenant?.status === 'suspended');
-                const isCascade = Boolean(member.cascade_suspended) || (isMainClient && tenant?.status === 'suspended');
-                const bannedByRole = member.suspended_by_role;
-
-                return (
-                  <div
-                    key={member.id}
-                    className={`admin-member-row ${isSuspended ? 'is-suspended' : ''}`.trim()}
-                  >
-                    <div className="admin-member-info">
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-2)', flexWrap: 'wrap' }}>
-                        <span style={{ fontWeight: 600, fontSize: 'var(--font-size-sm)', color: 'var(--color-text-primary)' }}>
-                          {member.full_name || member.email}
-                        </span>
-                        <span
-                          style={{
-                            fontSize: 'var(--font-size-xs)',
-                            color: isMainClient ? 'var(--color-primary-text)' : 'var(--color-text-muted)',
-                            backgroundColor: isMainClient ? 'var(--color-primary-soft)' : 'rgba(255, 255, 255, 0.04)',
-                            border: isMainClient ? '1px solid var(--color-primary-border)' : '1px solid rgba(255, 255, 255, 0.06)',
-                            padding: '1px 8px',
-                            borderRadius: '4px',
-                            fontWeight: isMainClient ? 600 : 500,
-                          }}
-                        >
-                          {isMainClient ? 'Primary Owner' : 'Team Member'}
-                        </span>
-                      </div>
-                      <div style={{ fontSize: 'var(--font-size-xs)', color: 'var(--color-text-muted)', marginTop: '4px' }}>
-                        {member.email} {member.phone ? `| ${member.phone}` : ''}
-                      </div>
-
-                      {isSuspended && (
-                        <div style={{ marginTop: 'var(--space-2)', fontSize: 'var(--font-size-xs)', color: '#fb7185' }}>
-                          <strong>Restriction:</strong> {member.suspended_reason || (isMainClient ? 'Client portal has been suspended.' : 'Access disabled')}
-                          <div style={{ color: 'var(--color-text-muted)', marginTop: '2px' }}>
-                            {isCascade ? (
-                              <span>Cascaded automatically from company portal ban (Staff Admin)</span>
-                            ) : bannedByRole === 'client' ? (
-                              <span>Disabled by Client Admin ({member.suspended_by || 'Client'})</span>
-                            ) : (
-                              <span>Disabled directly by Staff Admin ({member.suspended_by || 'Admin'})</span>
-                            )}
-                          </div>
-                        </div>
-                      )}
-                    </div>
-
-                    <div className="admin-member-status-col">
-                      <StatusBadge status={isSuspended ? 'Suspended' : 'Active'} />
-                    </div>
-
-                    <div className="admin-member-action-col">
-                      {isMainClient ? (
-                        <span
-                          style={{
-                            fontSize: 'var(--font-size-xs)',
-                            color: 'var(--color-text-muted)',
-                            fontStyle: 'italic',
-                            padding: '6px 12px',
-                            backgroundColor: 'rgba(255, 255, 255, 0.04)',
-                            borderRadius: 'var(--radius-md)',
-                            border: '1px solid rgba(255, 255, 255, 0.06)',
-                            whiteSpace: 'nowrap',
-                          }}
-                        >
-                          Primary Account Holder
-                        </span>
-                      ) : (
-                        <div style={{ display: 'flex', gap: 'var(--space-2)', alignItems: 'center' }}>
-                          <Button
-                            variant="secondary"
-                            size="sm"
-                            type="button"
-                            onClick={() => handleOpenPermissions(member)}
-                          >
-                            Permissions
-                          </Button>
-                          {isSuspended ? (
-                            <Button
-                              variant="outline"
-                              size="sm"
-                              type="button"
-                              onClick={() => {
-                                setUnsuspendMemberTarget(member);
-                                setUnsuspendMemberError('');
-                              }}
-                            >
-                              Reactivate Member
-                            </Button>
-                          ) : (
-                            <Button
-                              variant="danger"
-                              size="sm"
-                              type="button"
-                              onClick={() => {
-                                setSuspendMemberTarget(member);
-                                setSuspendMemberReason('Account disabled by Motionz administrator.');
-                                setSuspendMemberError('');
-                              }}
-                            >
-                              Disable Member
-                            </Button>
-                          )}
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          )}
-        </Card>
-
-        {/* Pending & Active Invitations Management - Only shown if pending links exist or client hasn't registered yet */}
-        {(members.length === 0 || invitations.some((inv: any) => !inv.accepted_at && !inv.revoked_at)) && (
-          <Card style={{ marginBottom: 'var(--space-6)' }}>
-            <div
-              style={{
-                display: 'flex',
-                justifyContent: 'space-between',
-                alignItems: 'flex-start',
-                flexWrap: 'wrap',
-                gap: 'var(--space-3)',
-                marginBottom: 'var(--space-4)',
-              }}
-            >
-              <CardHeader
-                title="Pending Portal Invitations & Magic Links"
-                subtitle="Active single-use access links awaiting acceptance. Once the user sets their password, the link is completed."
-              />
-              <Button
-                variant="outline"
-                size="sm"
-                type="button"
-                onClick={() => {
-                  setGenerateEmail(tenant?.primary_email || '');
-                  setGenerateRole('client');
-                  setGenerateError('');
-                  setGeneratedLink('');
-                  setIsGenerateModalOpen(true);
-                }}
-                style={{ display: 'inline-flex', alignItems: 'center', gap: 'var(--space-1)', marginTop: 'var(--space-1)' }}
-              >
-                + Generate Magic Link
-              </Button>
-            </div>
-            {invitations.filter((inv: any) => !inv.accepted_at && !inv.revoked_at).length === 0 ? (
-              <div
-                style={{
-                  textAlign: 'center',
-                  padding: 'var(--space-6)',
-                  backgroundColor: 'var(--color-bg-surface)',
-                  borderRadius: 'var(--radius-md)',
-                  border: '1px dashed var(--color-border-subtle)',
-                }}
-              >
-                <p style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-muted)', marginBottom: 'var(--space-3)' }}>
-                  No active or pending magic links found for this client.
-                </p>
-                <Button
-                  variant="primary"
-                  size="sm"
-                  type="button"
-                  onClick={() => {
-                    setGenerateEmail(tenant?.primary_email || '');
-                    setGenerateRole('client');
-                    setGenerateError('');
-                    setGeneratedLink('');
-                    setIsGenerateModalOpen(true);
-                  }}
-                >
-                  + Generate Magic Link for Client
-                </Button>
-              </div>
-            ) : (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-3)' }}>
-                {invitations
-                  .filter((inv: any) => !inv.accepted_at && !inv.revoked_at)
-                  .map((inv: any) => {
-                    const isAccepted = Boolean(inv.accepted_at);
-                    const isRevoked = Boolean(inv.revoked_at);
-                    const isExpired = !isAccepted && !isRevoked && new Date(inv.expires_at) < new Date();
-
-                    return (
-                      <div
-                        key={inv.id}
-                        style={{
-                          padding: 'var(--space-3)',
-                          backgroundColor: 'var(--color-bg-surface)',
-                          borderRadius: 'var(--radius-md)',
-                          border: '1px solid var(--color-border-subtle)',
-                          display: 'flex',
-                          justifyContent: 'space-between',
-                          alignItems: 'center',
-                          flexWrap: 'wrap',
-                          gap: 'var(--space-2)',
-                        }}
-                      >
-                        <div>
-                          <div style={{ fontWeight: 'var(--font-weight-medium)', fontSize: 'var(--font-size-sm)' }}>
-                            {inv.email}
-                          </div>
-                          <div style={{ fontSize: 'var(--font-size-xs)', color: 'var(--color-text-muted)' }}>
-                            Role: {inv.role} | {inv.phone ? `Phone: ${inv.phone} | ` : ''}Expires: {new Date(inv.expires_at).toLocaleString()}
-                          </div>
-                        </div>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-2)' }}>
-                          {isAccepted ? (
-                            <StatusBadge status="Accepted" variant="done" />
-                          ) : isRevoked ? (
-                            <StatusBadge status="Revoked" variant="danger" />
-                          ) : isExpired ? (
-                            <StatusBadge status="Expired" variant="warning" />
-                          ) : (
-                            <StatusBadge status="Pending Acceptance" variant="progress" />
-                          )}
-
-                          {!isAccepted && (
-                            <>
-                              <Button
-                                variant="outline"
-                                size="sm"
-                                type="button"
-                                onClick={() => {
-                                  setResendTarget(inv);
-                                  setResendError('');
-                                  setResentLink('');
-                                }}
-                              >
-                                Resend Link
-                              </Button>
-                              {!isRevoked && (
-                                <Button
-                                  variant="danger"
-                                  size="sm"
-                                  type="button"
-                                  onClick={() => {
-                                    setRevokeTarget(inv);
-                                    setRevokeError('');
-                                  }}
-                                >
-                                  Revoke
-                                </Button>
-                              )}
-                            </>
-                          )}
-                        </div>
-                      </div>
-                    );
-                  })}
-              </div>
-            )}
-          </Card>
+        {saveSuccess && (
+          <Notice tone="success" style={{ marginBottom: 'var(--space-4)' }}>
+            Your changes were saved.
+          </Notice>
         )}
+        {saveError && <Notice style={{ marginBottom: 'var(--space-4)' }}>{saveError}</Notice>}
 
-        <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 'var(--space-3)' }}>
-          <Link href="/admin/clients">
-            <Button type="button" variant="secondary">Cancel</Button>
+        <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 'var(--space-3)', marginBottom: 'var(--space-6)' }}>
+          <Link
+            href="/admin/clients"
+            className={buttonClasses({ variant: 'secondary' })}
+            aria-disabled={isSaving || undefined}
+            style={isSaving ? { pointerEvents: 'none', opacity: 0.6 } : undefined}
+          >
+            Cancel
           </Link>
-          <Button type="submit" variant="primary">
-            Save Changes
+          <Button type="submit" variant="primary" disabled={isSaving}>
+            {isSaving ? 'Saving...' : 'Save changes'}
           </Button>
         </div>
       </form>
 
-      {/* Ban Client Portal Modal */}
+      {/* Everything below saves on its own, so it sits outside the settings form. */}
+      <OnboardingAnswers submissions={submissions} />
+
+      <ClientRecords clientId={clientId} />
+
+      {/* Client team */}
+      <Card style={{ marginBottom: 'var(--space-6)' }}>
+        <div
+          style={{
+            display: 'flex',
+            justifyContent: 'space-between',
+            alignItems: 'flex-start',
+            flexWrap: 'wrap',
+            gap: 'var(--space-3)',
+            marginBottom: 'var(--space-4)',
+          }}
+        >
+          <CardHeader title="Client team" subtitle="Everyone at this client who can sign in, and what each person can open." />
+          {!isArchived && (
+            <Button variant="outline" size="sm" type="button" onClick={handleOpenInviteModal} style={{ marginTop: 'var(--space-1)' }}>
+              Invite
+            </Button>
+          )}
+        </div>
+        {members.length === 0 ? (
+          <p style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-muted)', margin: 0 }}>
+            Nobody at this client has signed in yet. Use Invite to send the account owner their sign-in link.
+          </p>
+        ) : (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-3)' }}>
+            {members.map((member) => {
+              const isMainClient = member.role === 'client';
+              const isSuspended = member.status === 'suspended' || (isMainClient && tenant?.status === 'suspended');
+              const isCascade = Boolean(member.cascade_suspended) || (isMainClient && tenant?.status === 'suspended');
+              const bannedByRole = member.suspended_by_role;
+
+              return (
+                <div key={member.id} className={`admin-member-row ${isSuspended ? 'is-suspended' : ''}`.trim()}>
+                  <div className="admin-member-info">
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-2)', flexWrap: 'wrap' }}>
+                      <span style={{ fontWeight: 600, fontSize: 'var(--font-size-sm)', color: 'var(--color-text-primary)' }}>
+                        {member.full_name || member.email}
+                      </span>
+                      <span
+                        style={{
+                          fontSize: 'var(--font-size-xs)',
+                          color: isMainClient ? 'var(--color-primary-text)' : 'var(--color-text-muted)',
+                          backgroundColor: isMainClient ? 'var(--color-primary-soft)' : 'var(--color-bg-surface)',
+                          border: `1px solid ${isMainClient ? 'var(--color-primary-border)' : 'var(--color-border-subtle)'}`,
+                          padding: '1px 8px',
+                          borderRadius: 'var(--radius-sm)',
+                          fontWeight: isMainClient ? 600 : 500,
+                        }}
+                      >
+                        {roleLabel(member.role)}
+                      </span>
+                    </div>
+                    <div style={{ fontSize: 'var(--font-size-xs)', color: 'var(--color-text-muted)', marginTop: '4px' }}>
+                      {member.email} {member.phone ? `· ${member.phone}` : ''}
+                    </div>
+
+                    {isSuspended && (
+                      <div style={{ marginTop: 'var(--space-2)', fontSize: 'var(--font-size-xs)', color: 'var(--color-status-suspended-text)' }}>
+                        <strong>Reason:</strong> {member.suspended_reason || (isMainClient ? 'The client is suspended.' : 'No reason was given.')}
+                        <div style={{ color: 'var(--color-text-muted)', marginTop: '2px' }}>
+                          {isCascade
+                            ? 'Locked out because the whole client is suspended.'
+                            : bannedByRole === 'client'
+                              ? `Disabled by the client’s account owner${member.suspended_by ? ` (${member.suspended_by})` : ''}.`
+                              : `Disabled by Motionz${member.suspended_by ? ` (${member.suspended_by})` : ''}.`}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+
+                  <div className="admin-member-status-col">
+                    <StatusBadge status={isSuspended ? (isMainClient ? 'Suspended' : 'Disabled') : 'Active'} variant={isSuspended ? 'suspended' : 'done'} />
+                  </div>
+
+                  <div className="admin-member-action-col">
+                    {isMainClient ? (
+                      <span style={{ fontSize: 'var(--font-size-xs)', color: 'var(--color-text-muted)' }}>Full access</span>
+                    ) : (
+                      <div style={{ display: 'flex', gap: 'var(--space-2)', alignItems: 'center', flexWrap: 'wrap' }}>
+                        <Button variant="secondary" size="sm" type="button" onClick={() => handleOpenPermissions(member)}>
+                          Permissions
+                        </Button>
+                        {isSuspended ? (
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            type="button"
+                            disabled={isCascade}
+                            title={isCascade ? 'Reactivate the client to let this person back in.' : undefined}
+                            onClick={() => {
+                              setUnsuspendMemberTarget(member);
+                              setUnsuspendMemberError('');
+                            }}
+                          >
+                            Enable
+                          </Button>
+                        ) : (
+                          <Button
+                            variant="danger"
+                            size="sm"
+                            type="button"
+                            onClick={() => {
+                              setSuspendMemberTarget(member);
+                              setSuspendMemberReason('');
+                              setSuspendMemberError('');
+                            }}
+                          >
+                            Disable
+                          </Button>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </Card>
+
+      {/* Invitations that have been sent but not used yet */}
+      {pendingInvitations.length > 0 && (
+        <Card style={{ marginBottom: 'var(--space-6)' }}>
+          <CardHeader title="Invitations waiting" subtitle="Sent, but the person has not finished signing up yet. Each link works once." />
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-3)' }}>
+            {pendingInvitations.map((inv: any) => {
+              const isExpired = new Date(inv.expires_at) < new Date();
+
+              return (
+                <div
+                  key={inv.id}
+                  style={{
+                    padding: 'var(--space-3)',
+                    backgroundColor: 'var(--color-bg-surface)',
+                    borderRadius: 'var(--radius-md)',
+                    border: '1px solid var(--color-border-subtle)',
+                    display: 'flex',
+                    justifyContent: 'space-between',
+                    alignItems: 'center',
+                    flexWrap: 'wrap',
+                    gap: 'var(--space-2)',
+                  }}
+                >
+                  <div>
+                    <div style={{ fontWeight: 'var(--font-weight-medium)', fontSize: 'var(--font-size-sm)' }}>{inv.email}</div>
+                    <div style={{ fontSize: 'var(--font-size-xs)', color: 'var(--color-text-muted)' }}>
+                      {roleLabel(inv.role)} · {inv.phone ? `${inv.phone} · ` : ''}
+                      {isExpired ? 'Expired' : 'Expires'} {formatDateTime(inv.expires_at)}
+                    </div>
+                  </div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-2)', flexWrap: 'wrap' }}>
+                    {isExpired ? (
+                      <StatusBadge status="Expired" variant="warning" />
+                    ) : (
+                      <StatusBadge status="Waiting" variant="progress" />
+                    )}
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      type="button"
+                      onClick={() => {
+                        setResendTarget(inv);
+                        setResendError('');
+                        setResentLink('');
+                        setCopyState('idle');
+                      }}
+                    >
+                      Send again
+                    </Button>
+                    <Button
+                      variant="danger"
+                      size="sm"
+                      type="button"
+                      onClick={() => {
+                        setRevokeTarget(inv);
+                        setRevokeError('');
+                      }}
+                    >
+                      Cancel invite
+                    </Button>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </Card>
+      )}
+
+      {/* Suspend client */}
       <Modal
         isOpen={isBanTenantModalOpen}
         onClose={() => {
           if (!isBanningTenant) setIsBanTenantModalOpen(false);
         }}
-        title="Ban Client Portal Access"
+        title="Suspend client"
+        dismissOnOverlay={false}
         footer={
-          <div style={{ display: 'flex', gap: 'var(--space-2)', justifyContent: 'flex-end', width: '100%' }}>
-            <Button
-              variant="outline"
-              onClick={() => setIsBanTenantModalOpen(false)}
-              disabled={isBanningTenant}
-            >
+          <div style={modalFooterStyle}>
+            <Button type="button" variant="outline" onClick={() => setIsBanTenantModalOpen(false)} disabled={isBanningTenant}>
               Cancel
             </Button>
-            <Button
-              variant="danger"
-              onClick={handleConfirmBanTenant}
-              disabled={isBanningTenant || !banTenantReason.trim()}
-            >
-              {isBanningTenant ? 'Banning Portal...' : 'Confirm Ban & Lock Access'}
+            <Button type="button" variant="danger" onClick={handleConfirmBanTenant} disabled={isBanningTenant || !banTenantReason.trim()}>
+              {isBanningTenant ? 'Suspending...' : 'Suspend client'}
             </Button>
           </div>
         }
       >
         <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-3)' }}>
-          {banTenantError && (
-            <div
-              style={{
-                padding: 'var(--space-2) var(--space-3)',
-                backgroundColor: 'rgba(239, 68, 68, 0.1)',
-                color: 'var(--color-danger, #ef4444)',
-                borderRadius: 'var(--radius-sm)',
-                fontSize: 'var(--font-size-sm)',
-                border: '1px solid rgba(239, 68, 68, 0.3)',
-              }}
-            >
-              {banTenantError}
-            </div>
-          )}
+          {banTenantError && <Notice>{banTenantError}</Notice>}
           <p style={{ margin: 0, color: 'var(--color-text-secondary)', fontSize: 'var(--font-size-sm)' }}>
-            Are you sure you want to ban and disable access for <strong style={{ color: 'var(--color-text-primary)' }}>{tenant.name}</strong>?
+            Suspend <strong style={{ color: 'var(--color-text-primary)' }}>{tenant.name}</strong>?
           </p>
-
           <Input
-            label="Ban / Suspension Reason"
+            label="Reason"
             value={banTenantReason}
             onChange={(e) => setBanTenantReason(e.target.value)}
-            placeholder="e.g. Terms violation, subscription paused, or account under review"
-            helperText="This reason will be presented to the client on their restriction screen."
+            placeholder="e.g. Subscription paused"
+            helperText="The client sees this reason when they try to sign in."
+            maxLength={300}
             required
           />
-
-          <div
-            style={{
-              padding: 'var(--space-3)',
-              backgroundColor: 'var(--color-bg-surface)',
-              border: '1px solid var(--color-border-subtle)',
-              borderRadius: 'var(--radius-md)',
-              fontSize: 'var(--font-size-xs)',
-              color: 'var(--color-text-muted)',
-              lineHeight: 1.5,
-            }}
-          >
-            ⚠️ <strong>Cascading Effect:</strong> Banning this client company will immediately invalidate all active sessions on their next request and automatically disable access for all registered client team members.
+          <div style={noteBoxStyle}>
+            <Icon name="alert" size={16} style={{ flexShrink: 0, marginTop: '1px' }} />
+            <span>Everyone on this client’s team is signed out and cannot sign back in until you reactivate the client.</span>
           </div>
         </div>
       </Modal>
 
-      {/* Unban Client Portal Modal */}
+      {/* Reactivate client */}
       <Modal
         isOpen={isUnbanTenantModalOpen}
         onClose={() => {
           if (!isUnbanningTenant) setIsUnbanTenantModalOpen(false);
         }}
-        title="Reactivate Client Portal"
+        title="Reactivate client"
         footer={
-          <div style={{ display: 'flex', gap: 'var(--space-2)', justifyContent: 'flex-end', width: '100%' }}>
-            <Button
-              variant="outline"
-              onClick={() => setIsUnbanTenantModalOpen(false)}
-              disabled={isUnbanningTenant}
-            >
+          <div style={modalFooterStyle}>
+            <Button type="button" variant="outline" onClick={() => setIsUnbanTenantModalOpen(false)} disabled={isUnbanningTenant}>
               Cancel
             </Button>
-            <Button
-              variant="primary"
-              onClick={handleConfirmUnbanTenant}
-              disabled={isUnbanningTenant}
-            >
-              {isUnbanningTenant ? 'Reactivating...' : 'Reactivate Portal & Unlock Members'}
+            <Button type="button" variant="primary" onClick={handleConfirmUnbanTenant} disabled={isUnbanningTenant}>
+              {isUnbanningTenant ? 'Reactivating...' : 'Reactivate'}
             </Button>
           </div>
         }
       >
         <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-3)' }}>
-          {unbanTenantError && (
-            <div
-              style={{
-                padding: 'var(--space-2) var(--space-3)',
-                backgroundColor: 'rgba(239, 68, 68, 0.1)',
-                color: 'var(--color-danger, #ef4444)',
-                borderRadius: 'var(--radius-sm)',
-                fontSize: 'var(--font-size-sm)',
-                border: '1px solid rgba(239, 68, 68, 0.3)',
-              }}
-            >
-              {unbanTenantError}
-            </div>
-          )}
+          {unbanTenantError && <Notice>{unbanTenantError}</Notice>}
           <p style={{ margin: 0, color: 'var(--color-text-secondary)', fontSize: 'var(--font-size-sm)' }}>
-            Reactivate <strong style={{ color: 'var(--color-text-primary)' }}>{tenant.name}</strong> and unlock portal access?
+            Reactivate <strong style={{ color: 'var(--color-text-primary)' }}>{tenant.name}</strong> and let their team sign in again?
           </p>
-          <div
-            style={{
-              padding: 'var(--space-3)',
-              backgroundColor: 'var(--color-bg-surface)',
-              border: '1px solid var(--color-border-subtle)',
-              borderRadius: 'var(--radius-md)',
-              fontSize: 'var(--font-size-xs)',
-              color: 'var(--color-text-muted)',
-              lineHeight: 1.5,
-            }}
-          >
-            ℹ️ All team members whose access was suspended due to the company-level portal ban will be automatically restored. Individual suspensions made manually by client admins will remain preserved.
+          <div style={noteBoxStyle}>
+            <Icon name="help" size={16} style={{ flexShrink: 0, marginTop: '1px' }} />
+            <span>Team members who were locked out by this suspension get their access back. Anyone who was disabled individually stays disabled.</span>
           </div>
         </div>
       </Modal>
 
-      {/* Suspend Individual Member Modal */}
+      {/* Disable one team member */}
       <Modal
         isOpen={Boolean(suspendMemberTarget)}
         onClose={() => {
           if (!isSuspendingMember) setSuspendMemberTarget(null);
         }}
-        title="Disable Member Access"
+        title="Disable team member"
+        dismissOnOverlay={false}
         footer={
-          <div style={{ display: 'flex', gap: 'var(--space-2)', justifyContent: 'flex-end', width: '100%' }}>
-            <Button
-              variant="outline"
-              onClick={() => setSuspendMemberTarget(null)}
-              disabled={isSuspendingMember}
-            >
+          <div style={modalFooterStyle}>
+            <Button type="button" variant="outline" onClick={() => setSuspendMemberTarget(null)} disabled={isSuspendingMember}>
               Cancel
             </Button>
-            <Button
-              variant="danger"
-              onClick={handleConfirmSuspendMember}
-              disabled={isSuspendingMember || !suspendMemberReason.trim()}
-            >
-              {isSuspendingMember ? 'Disabling...' : 'Confirm Disable Member'}
+            <Button type="button" variant="danger" onClick={handleConfirmSuspendMember} disabled={isSuspendingMember || !suspendMemberReason.trim()}>
+              {isSuspendingMember ? 'Disabling...' : 'Disable'}
             </Button>
           </div>
         }
       >
         <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-3)' }}>
-          {suspendMemberError && (
-            <div
-              style={{
-                padding: 'var(--space-2) var(--space-3)',
-                backgroundColor: 'rgba(239, 68, 68, 0.1)',
-                color: 'var(--color-danger, #ef4444)',
-                borderRadius: 'var(--radius-sm)',
-                fontSize: 'var(--font-size-sm)',
-                border: '1px solid rgba(239, 68, 68, 0.3)',
-              }}
-            >
-              {suspendMemberError}
-            </div>
-          )}
+          {suspendMemberError && <Notice>{suspendMemberError}</Notice>}
           <p style={{ margin: 0, color: 'var(--color-text-secondary)', fontSize: 'var(--font-size-sm)' }}>
-            Are you sure you want to disable access for <strong style={{ color: 'var(--color-text-primary)' }}>{suspendMemberTarget?.full_name || suspendMemberTarget?.email}</strong>?
+            Disable <strong style={{ color: 'var(--color-text-primary)' }}>{suspendMemberTarget?.full_name || suspendMemberTarget?.email}</strong>?
           </p>
-
           <Input
-            label="Reason for Suspension"
+            label="Reason"
             value={suspendMemberReason}
             onChange={(e) => setSuspendMemberReason(e.target.value)}
-            placeholder="e.g. Access revoked by Motionz administrator"
+            placeholder="e.g. No longer works at the company"
+            maxLength={300}
             required
           />
-
-          <div
-            style={{
-              padding: 'var(--space-3)',
-              backgroundColor: 'var(--color-bg-surface)',
-              border: '1px solid var(--color-border-subtle)',
-              borderRadius: 'var(--radius-md)',
-              fontSize: 'var(--font-size-xs)',
-              color: 'var(--color-text-muted)',
-              lineHeight: 1.5,
-            }}
-          >
-            This user will be immediately logged out on their next request and blocked from signing back in until reactivated. This action is audited as banned by <strong>Staff Admin</strong>.
+          <div style={noteBoxStyle}>
+            <span>This person is signed out and cannot sign back in until you enable them again.</span>
           </div>
         </div>
       </Modal>
 
-      {/* Unsuspend Individual Member Modal */}
+      {/* Enable one team member */}
       <Modal
         isOpen={Boolean(unsuspendMemberTarget)}
         onClose={() => {
           if (!isUnsuspendingMember) setUnsuspendMemberTarget(null);
         }}
-        title="Reactivate Member Access"
+        title="Enable team member"
         footer={
-          <div style={{ display: 'flex', gap: 'var(--space-2)', justifyContent: 'flex-end', width: '100%' }}>
-            <Button
-              variant="outline"
-              onClick={() => setUnsuspendMemberTarget(null)}
-              disabled={isUnsuspendingMember}
-            >
+          <div style={modalFooterStyle}>
+            <Button type="button" variant="outline" onClick={() => setUnsuspendMemberTarget(null)} disabled={isUnsuspendingMember}>
               Cancel
             </Button>
-            <Button
-              variant="primary"
-              onClick={handleConfirmUnsuspendMember}
-              disabled={isUnsuspendingMember}
-            >
-              {isUnsuspendingMember ? 'Reactivating...' : 'Reactivate Member'}
+            <Button type="button" variant="primary" onClick={handleConfirmUnsuspendMember} disabled={isUnsuspendingMember}>
+              {isUnsuspendingMember ? 'Enabling...' : 'Enable'}
             </Button>
           </div>
         }
       >
         <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-3)' }}>
-          {unsuspendMemberError && (
-            <div
-              style={{
-                padding: 'var(--space-2) var(--space-3)',
-                backgroundColor: 'rgba(239, 68, 68, 0.1)',
-                color: 'var(--color-danger, #ef4444)',
-                borderRadius: 'var(--radius-sm)',
-                fontSize: 'var(--font-size-sm)',
-                border: '1px solid rgba(239, 68, 68, 0.3)',
-              }}
-            >
-              {unsuspendMemberError}
-            </div>
-          )}
+          {unsuspendMemberError && <Notice>{unsuspendMemberError}</Notice>}
           <p style={{ margin: 0, color: 'var(--color-text-secondary)', fontSize: 'var(--font-size-sm)' }}>
-            Reactivate access for <strong style={{ color: 'var(--color-text-primary)' }}>{unsuspendMemberTarget?.full_name || unsuspendMemberTarget?.email}</strong>?
-          </p>
-          <p style={{ margin: 0, fontSize: 'var(--font-size-xs)', color: 'var(--color-text-muted)' }}>
-            This member will immediately be allowed to sign in and access the portal again.
+            Let <strong style={{ color: 'var(--color-text-primary)' }}>{unsuspendMemberTarget?.full_name || unsuspendMemberTarget?.email}</strong> sign in again?
           </p>
         </div>
       </Modal>
 
-      {/* Resend Invitation Confirmation & Link Result Modal */}
+      {/* Send an invitation again */}
       <Modal
         isOpen={Boolean(resendTarget)}
-        onClose={() => {
-          if (!isResending) {
-            setResendTarget(null);
-            setResendError('');
-            setResentLink('');
-          }
-        }}
-        title={resentLink ? 'New Magic Link Generated' : 'Resend Portal Invitation'}
+        onClose={closeResendModal}
+        title={resentLink ? 'New sign-in link ready' : 'Send invitation again'}
+        dismissOnOverlay={false}
         footer={
           resentLink ? (
-            <div style={{ display: 'flex', gap: 'var(--space-2)', justifyContent: 'flex-end', width: '100%' }}>
-              <Button
-                variant="outline"
-                onClick={() => {
-                  setResendTarget(null);
-                  setResendError('');
-                  setResentLink('');
-                }}
-              >
+            <div style={modalFooterStyle}>
+              <Button type="button" variant="outline" onClick={closeResendModal}>
                 Close
               </Button>
-              <Button
-                variant="primary"
-                onClick={() => copyToClipboard(resentLink)}
-              >
-                Copy Link
+              <Button type="button" variant="primary" onClick={() => handleCopy(resentLink)}>
+                {copyState === 'copied' ? 'Copied' : 'Copy link'}
               </Button>
             </div>
           ) : (
-            <div style={{ display: 'flex', gap: 'var(--space-2)', justifyContent: 'flex-end', width: '100%' }}>
-              <Button
-                variant="outline"
-                onClick={() => {
-                  setResendTarget(null);
-                  setResendError('');
-                  setResentLink('');
-                }}
-                disabled={isResending}
-              >
+            <div style={modalFooterStyle}>
+              <Button type="button" variant="outline" onClick={closeResendModal} disabled={isResending}>
                 Cancel
               </Button>
-              <Button
-                variant="primary"
-                onClick={handleConfirmResend}
-                disabled={isResending}
-              >
-                {isResending ? 'Regenerating...' : 'Regenerate & Resend Link'}
+              <Button type="button" variant="primary" onClick={handleConfirmResend} disabled={isResending}>
+                {isResending ? 'Sending...' : 'Send again'}
               </Button>
             </div>
           )
@@ -1492,71 +1300,29 @@ export default function ClientDetailPage() {
       >
         {resentLink ? (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-3)' }}>
-            <div
-              style={{
-                padding: 'var(--space-3)',
-                backgroundColor: 'var(--color-status-done-bg)',
-                color: 'var(--color-status-done-text)',
-                borderRadius: 'var(--radius-md)',
-                fontSize: 'var(--font-size-sm)',
-              }}
-            >
-              The prior link was revoked and a fresh 72-hour single-use magic link is ready for <strong>{resendTarget?.email}</strong>:
-            </div>
-            <div
-              style={{
-                padding: 'var(--space-3)',
-                backgroundColor: 'var(--color-bg-surface)',
-                border: '1px solid var(--color-border-subtle)',
-                borderRadius: 'var(--radius-md)',
-                fontFamily: 'monospace',
-                fontSize: 'var(--font-size-xs)',
-                wordBreak: 'break-all',
-              }}
-            >
-              {resentLink}
-            </div>
+            <Notice tone="success">
+              A new sign-in link is ready for <strong>{resendTarget?.email}</strong>. The old link no longer works.
+            </Notice>
+            <div style={linkBoxStyle}>{resentLink}</div>
+            {copyState === 'failed' && <Notice>Could not copy automatically. Select the link above and copy it by hand.</Notice>}
             <p style={{ margin: 0, fontSize: 'var(--font-size-xs)', color: 'var(--color-text-muted)' }}>
-              Deliver this link to the recipient. Upon verification, their authentication session is established.
+              Send this link to the person. It works once and signs them in to finish setting up their account.
             </p>
           </div>
         ) : (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-3)' }}>
-            {resendError && (
-              <div
-                style={{
-                  padding: 'var(--space-2) var(--space-3)',
-                  backgroundColor: 'rgba(239, 68, 68, 0.1)',
-                  color: 'var(--color-danger, #ef4444)',
-                  borderRadius: 'var(--radius-sm)',
-                  fontSize: 'var(--font-size-sm)',
-                  border: '1px solid rgba(239, 68, 68, 0.3)',
-                }}
-              >
-                {resendError}
-              </div>
-            )}
+            {resendError && <Notice>{resendError}</Notice>}
             <p style={{ margin: 0, color: 'var(--color-text-secondary)', fontSize: 'var(--font-size-sm)' }}>
-              Are you sure you want to resend the magic-link invitation to <strong style={{ color: 'var(--color-text-primary)' }}>{resendTarget?.email}</strong>?
+              Send a new invitation to <strong style={{ color: 'var(--color-text-primary)' }}>{resendTarget?.email}</strong>?
             </p>
-            <div
-              style={{
-                padding: 'var(--space-3)',
-                backgroundColor: 'var(--color-bg-surface)',
-                border: '1px solid var(--color-border-subtle)',
-                borderRadius: 'var(--radius-md)',
-                fontSize: 'var(--font-size-xs)',
-                color: 'var(--color-text-muted)',
-                lineHeight: 1.5,
-              }}
-            >
-              ℹ️ Resending will immediately <strong>revoke the old link</strong> so it cannot be used, and generate a brand-new token with a 72-hour expiration window.
+            <div style={noteBoxStyle}>
+              <span>The link they already have stops working straight away, and they get a fresh one.</span>
             </div>
           </div>
         )}
       </Modal>
 
-      {/* Revoke Invitation Modal */}
+      {/* Cancel an invitation */}
       <Modal
         isOpen={Boolean(revokeTarget)}
         onClose={() => {
@@ -1565,10 +1331,11 @@ export default function ClientDetailPage() {
             setRevokeError('');
           }
         }}
-        title="Revoke Invitation"
+        title="Cancel invitation"
         footer={
-          <div style={{ display: 'flex', gap: 'var(--space-2)', justifyContent: 'flex-end', width: '100%' }}>
+          <div style={modalFooterStyle}>
             <Button
+              type="button"
               variant="outline"
               onClick={() => {
                 setRevokeTarget(null);
@@ -1576,77 +1343,52 @@ export default function ClientDetailPage() {
               }}
               disabled={isRevoking}
             >
-              Cancel
+              Keep it
             </Button>
-            <Button
-              variant="danger"
-              onClick={handleConfirmRevoke}
-              disabled={isRevoking}
-            >
-              {isRevoking ? 'Revoking...' : 'Yes, Revoke Invitation'}
+            <Button type="button" variant="danger" onClick={handleConfirmRevoke} disabled={isRevoking}>
+              {isRevoking ? 'Cancelling...' : 'Cancel invitation'}
             </Button>
           </div>
         }
       >
         <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-3)' }}>
-          {revokeError && (
-            <div
-              style={{
-                padding: 'var(--space-2) var(--space-3)',
-                backgroundColor: 'rgba(239, 68, 68, 0.1)',
-                color: 'var(--color-danger, #ef4444)',
-                borderRadius: 'var(--radius-sm)',
-                fontSize: 'var(--font-size-sm)',
-                border: '1px solid rgba(239, 68, 68, 0.3)',
-              }}
-            >
-              {revokeError}
-            </div>
-          )}
+          {revokeError && <Notice>{revokeError}</Notice>}
           <p style={{ margin: 0, color: 'var(--color-text-secondary)', fontSize: 'var(--font-size-sm)' }}>
-            Are you sure you want to revoke the invitation for <strong style={{ color: 'var(--color-text-primary)' }}>{revokeTarget?.email}</strong>?
+            Cancel the invitation for <strong style={{ color: 'var(--color-text-primary)' }}>{revokeTarget?.email}</strong>? Their link will stop working straight away.
           </p>
-          <div
-            style={{
-              padding: 'var(--space-3)',
-              backgroundColor: 'var(--color-bg-surface)',
-              border: '1px solid var(--color-border-subtle)',
-              borderRadius: 'var(--radius-md)',
-              fontSize: 'var(--font-size-xs)',
-              color: 'var(--color-text-muted)',
-              lineHeight: 1.5,
-            }}
-          >
-            ⚠️ Once revoked, the invitation link will immediately become invalid.
-          </div>
         </div>
       </Modal>
 
-      {/* Archive Portal Modal */}
+      {/* Archive client */}
       <Modal
         isOpen={isArchiveModalOpen}
-        onClose={() => setIsArchiveModalOpen(false)}
-        title="Archive Client Portal"
+        onClose={() => {
+          if (!isArchiving) setIsArchiveModalOpen(false);
+        }}
+        title="Archive client"
         footer={
-          <div style={{ display: 'flex', gap: 'var(--space-2)' }}>
-            <Button variant="secondary" onClick={() => setIsArchiveModalOpen(false)}>
+          <div style={modalFooterStyle}>
+            <Button type="button" variant="secondary" onClick={() => setIsArchiveModalOpen(false)} disabled={isArchiving}>
               Cancel
             </Button>
-            <Button variant="danger" onClick={handleArchive}>
-              Confirm Archive
+            <Button type="button" variant="danger" onClick={handleArchive} disabled={isArchiving}>
+              {isArchiving ? 'Archiving...' : 'Archive'}
             </Button>
           </div>
         }
       >
-        <p style={{ marginBottom: 'var(--space-3)' }}>
-          Are you sure you want to archive <strong>{tenant.name}</strong>?
-        </p>
-        <p style={{ fontSize: 'var(--font-size-xs)', color: 'var(--color-text-muted)' }}>
-          This will set the portal status to cancelled and deactivate user access. Historical data is preserved.
-        </p>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-3)' }}>
+          {archiveError && <Notice>{archiveError}</Notice>}
+          <p style={{ margin: 0 }}>
+            Archive <strong>{tenant.name}</strong>?
+          </p>
+          <p style={{ margin: 0, fontSize: 'var(--font-size-xs)', color: 'var(--color-text-muted)' }}>
+            Their team will not be able to sign in. Nothing is deleted, and you can unarchive them later.
+          </p>
+        </div>
       </Modal>
 
-      {/* Unarchive Portal Modal */}
+      {/* Unarchive client */}
       <Modal
         isOpen={isUnarchiveModalOpen}
         onClose={() => {
@@ -1655,10 +1397,11 @@ export default function ClientDetailPage() {
             setUnarchiveError('');
           }
         }}
-        title="Unarchive Client Portal"
+        title="Unarchive client"
         footer={
-          <div style={{ display: 'flex', gap: 'var(--space-2)', justifyContent: 'flex-end', width: '100%' }}>
+          <div style={modalFooterStyle}>
             <Button
+              type="button"
               variant="outline"
               onClick={() => {
                 setIsUnarchiveModalOpen(false);
@@ -1668,85 +1411,46 @@ export default function ClientDetailPage() {
             >
               Cancel
             </Button>
-            <Button variant="primary" onClick={handleUnarchive} disabled={isUnarchiving}>
-              {isUnarchiving ? 'Unarchiving...' : 'Confirm Unarchive'}
+            <Button type="button" variant="primary" onClick={handleUnarchive} disabled={isUnarchiving}>
+              {isUnarchiving ? 'Unarchiving...' : 'Unarchive'}
             </Button>
           </div>
         }
       >
         <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-3)' }}>
-          {unarchiveError && (
-            <div
-              style={{
-                padding: 'var(--space-2) var(--space-3)',
-                backgroundColor: 'rgba(239, 68, 68, 0.1)',
-                color: 'var(--color-danger, #ef4444)',
-                borderRadius: 'var(--radius-sm)',
-                fontSize: 'var(--font-size-sm)',
-                border: '1px solid rgba(239, 68, 68, 0.3)',
-              }}
-            >
-              {unarchiveError}
-            </div>
-          )}
-          <p style={{ marginBottom: 'var(--space-3)' }}>
-            Are you sure you want to unarchive <strong>{tenant.name}</strong>?
+          {unarchiveError && <Notice>{unarchiveError}</Notice>}
+          <p style={{ margin: 0 }}>
+            Unarchive <strong>{tenant.name}</strong>?
           </p>
-          <p style={{ fontSize: 'var(--font-size-xs)', color: 'var(--color-text-muted)', lineHeight: 1.5 }}>
-            This will restore the client portal status to <strong>Active</strong> and reactivate access for team members. All previous data, setup milestones, and configurations are preserved.
+          <p style={{ margin: 0, fontSize: 'var(--font-size-xs)', color: 'var(--color-text-muted)', lineHeight: 1.5 }}>
+            The client goes back to <strong>Active</strong> and their team can sign in again. All of their data and setup progress is still there.
           </p>
         </div>
       </Modal>
 
-      {/* Generate Magic Link Modal */}
+      {/* Invite someone (account owner or team member) */}
       <Modal
         isOpen={isGenerateModalOpen}
-        onClose={() => {
-          if (!isGenerating) {
-            setIsGenerateModalOpen(false);
-            setGenerateError('');
-            setGeneratedLink('');
-          }
-        }}
-        title="Generate Magic Link"
+        onClose={closeInviteModal}
+        title={generatedLink ? 'Invitation ready' : 'Invite to the portal'}
+        dismissOnOverlay={false}
         footer={
           generatedLink ? (
-            <div style={{ display: 'flex', gap: 'var(--space-2)', justifyContent: 'flex-end', width: '100%' }}>
-              <Button
-                variant="outline"
-                onClick={() => {
-                  setIsGenerateModalOpen(false);
-                  setGenerateError('');
-                  setGeneratedLink('');
-                }}
-              >
+            <div style={modalFooterStyle}>
+              <Button type="button" variant="outline" onClick={closeInviteModal}>
                 Close
               </Button>
-              <Button
-                variant="primary"
-                onClick={() => copyToClipboard(generatedLink)}
-              >
-                Copy Link
+              <Button type="button" variant="primary" onClick={() => handleCopy(generatedLink)}>
+                {copyState === 'copied' ? 'Copied' : 'Copy link'}
               </Button>
             </div>
           ) : (
-            <div style={{ display: 'flex', gap: 'var(--space-2)', justifyContent: 'flex-end', width: '100%' }}>
-              <Button
-                variant="outline"
-                onClick={() => {
-                  setIsGenerateModalOpen(false);
-                  setGenerateError('');
-                }}
-                disabled={isGenerating}
-              >
+            <div style={modalFooterStyle}>
+              <Button type="button" variant="outline" onClick={closeInviteModal} disabled={isGenerating}>
                 Cancel
               </Button>
-              <Button
-                variant="primary"
-                onClick={handleGenerateMagicLink}
-                disabled={isGenerating || !generateEmail.trim()}
-              >
-                {isGenerating ? 'Generating...' : 'Generate Magic Link'}
+              <Button type="button" variant="primary" onClick={handleGenerateMagicLink} disabled={isGenerating || !generateEmail.trim()}>
+                {isGenerating ? 'Sending...' : 'Send invitation'}
               </Button>
             </div>
           )
@@ -1754,301 +1458,86 @@ export default function ClientDetailPage() {
       >
         {generatedLink ? (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-3)' }}>
-            <div
-              style={{
-                padding: 'var(--space-3)',
-                backgroundColor: 'var(--color-status-done-bg)',
-                color: 'var(--color-status-done-text)',
-                borderRadius: 'var(--radius-md)',
-                fontSize: 'var(--font-size-sm)',
-              }}
-            >
-              Fresh 72-hour single-use magic link is ready for <strong>{generateEmail}</strong>:
-            </div>
-            <div
-              style={{
-                padding: 'var(--space-3)',
-                backgroundColor: 'var(--color-bg-surface)',
-                border: '1px solid var(--color-border-subtle)',
-                borderRadius: 'var(--radius-md)',
-                fontFamily: 'monospace',
-                fontSize: 'var(--font-size-xs)',
-                wordBreak: 'break-all',
-              }}
-            >
-              {generatedLink}
-            </div>
+            {inviteEmailDelivered ? (
+              <Notice tone="success">
+                We emailed the invitation to <strong>{generateEmail}</strong>. You can also copy the link below.
+              </Notice>
+            ) : (
+              <Notice tone="info">
+                The invitation for <strong>{generateEmail}</strong> is ready, but the email was not sent. Copy the link below and send it to them yourself.
+              </Notice>
+            )}
+            <div style={linkBoxStyle}>{generatedLink}</div>
+            {copyState === 'failed' && <Notice>Could not copy automatically. Select the link above and copy it by hand.</Notice>}
             <p style={{ margin: 0, fontSize: 'var(--font-size-xs)', color: 'var(--color-text-muted)' }}>
-              Deliver this link to the recipient. Upon verification, their authentication session is established.
+              The link works once and signs them in to finish setting up their account.
             </p>
           </div>
         ) : (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-4)' }}>
-            {generateError && (
-              <div
-                style={{
-                  padding: 'var(--space-2) var(--space-3)',
-                  backgroundColor: 'rgba(239, 68, 68, 0.1)',
-                  color: 'var(--color-danger, #ef4444)',
-                  borderRadius: 'var(--radius-sm)',
-                  fontSize: 'var(--font-size-sm)',
-                  border: '1px solid rgba(239, 68, 68, 0.3)',
-                }}
-              >
-                {generateError}
-              </div>
-            )}
+            {generateError && <Notice>{generateError}</Notice>}
             <Input
-              label="Recipient Email"
+              label="Email"
               type="email"
+              autoComplete="off"
               value={generateEmail}
               onChange={(e) => setGenerateEmail(e.target.value)}
-              placeholder="e.g. client@example.com"
+              placeholder="name@company.com"
+              maxLength={254}
               required
             />
-            <div>
-              <Select
-                label="Portal Role"
-                value={generateRole}
-                onChange={(e) => {
-                  const newRole = e.target.value as any;
-                  setGenerateRole(newRole);
-                  if (newRole === 'client_member' && selectedInviteModules.length === 0) {
-                    const initial = PORTAL_MODULES
-                      .filter((m) => features[m.key] !== false)
-                      .map((m) => m.key);
-                    setSelectedInviteModules(initial);
-                  }
-                }}
-              >
-                <option value="client">Client Owner (Full Portal Access)</option>
-                <option value="client_member">Client Team Member</option>
-              </Select>
-            </div>
+            <Select
+              label="Role"
+              value={generateRole}
+              onChange={(e) => {
+                const newRole = e.target.value === 'client' ? 'client' : 'client_member';
+                setGenerateRole(newRole);
+                if (newRole === 'client_member' && selectedInviteModules.length === 0) {
+                  setSelectedInviteModules(memberSelectableModules(features).map((m) => m.key));
+                }
+              }}
+            >
+              <option value="client">Account owner (full access)</option>
+              <option value="client_member">Team member</option>
+            </Select>
 
             {generateRole === 'client_member' && (
               <div>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
-                  <label style={{ fontSize: 'var(--font-size-xs)', fontWeight: 'var(--font-weight-medium)', color: 'var(--color-text-secondary)' }}>
-                    Module & Feature Access
-                  </label>
-                  <div style={{ display: 'flex', gap: '6px' }}>
-                    <button
-                      type="button"
-                      style={{
-                        background: 'none',
-                        border: 'none',
-                        color: 'var(--color-primary-text)',
-                        fontSize: '11px',
-                        cursor: 'pointer',
-                        padding: 0,
-                      }}
-                      onClick={() => {
-                        const allActive = PORTAL_MODULES
-                          .filter((m) => features[m.key] !== false)
-                          .map((m) => m.key);
-                        setSelectedInviteModules(allActive);
-                      }}
-                    >
-                      Select All
-                    </button>
-                    <span style={{ color: 'var(--color-text-muted)', fontSize: '11px' }}>|</span>
-                    <button
-                      type="button"
-                      style={{
-                        background: 'none',
-                        border: 'none',
-                        color: 'var(--color-text-muted)',
-                        fontSize: '11px',
-                        cursor: 'pointer',
-                        padding: 0,
-                      }}
-                      onClick={() => setSelectedInviteModules([])}
-                    >
-                      Deselect All
-                    </button>
-                  </div>
-                </div>
-                <div className="permission-grid" style={{ maxHeight: '200px', overflowY: 'auto', paddingRight: '4px' }}>
-                  {PORTAL_MODULES.filter((module) => features[module.key] !== false).map((module) => {
-                    const isChecked = selectedInviteModules.includes(module.key);
-
-                    return (
-                      <div
-                        key={module.key}
-                        className={`permission-card ${isChecked ? 'is-checked' : ''}`.trim()}
-                        onClick={() => {
-                          setSelectedInviteModules((prev) =>
-                            prev.includes(module.key)
-                              ? prev.filter((k) => k !== module.key)
-                              : [...prev, module.key]
-                          );
-                        }}
-                        style={{ padding: '8px 10px', gap: '8px' }}
-                      >
-                        <div className="permission-checkbox" style={{ width: '16px', height: '16px', marginTop: '1px' }}>
-                          {isChecked && (
-                            <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
-                              <polyline points="20 6 9 17 4 12" />
-                            </svg>
-                          )}
-                        </div>
-                        <div className="permission-label-wrap">
-                          <div className="permission-label-row">
-                            <span className="permission-title" style={{ fontSize: '12px' }}>{module.label}</span>
-                          </div>
-                          <span className="permission-desc" style={{ fontSize: '10px' }}>{module.description}</span>
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
+                <span className="ui-label" style={{ display: 'block' }}>What this person can open</span>
+                <MemberModulePicker features={features} selected={selectedInviteModules} onChange={setSelectedInviteModules} disabled={isGenerating} />
               </div>
             )}
-            <div
-              style={{
-                padding: 'var(--space-3)',
-                backgroundColor: 'var(--color-bg-surface)',
-                border: '1px solid var(--color-border-subtle)',
-                borderRadius: 'var(--radius-md)',
-                fontSize: 'var(--font-size-xs)',
-                color: 'var(--color-text-muted)',
-                lineHeight: 1.5,
-              }}
-            >
-              Generating a magic link allows the recipient to instantly log into their portal without requiring a pre-set password. Any prior pending magic links for this email will be safely replaced.
+            <div style={noteBoxStyle}>
+              <span>They get an email with a one-time link to set up their account. If they already have an invitation waiting, this one replaces it.</span>
             </div>
           </div>
         )}
       </Modal>
 
-      {/* Edit Member Permissions Modal */}
+      {/* Edit one team member's permissions */}
       <Modal
         isOpen={Boolean(permissionTarget)}
-        onClose={() => {
-          if (!isSavingPermissions) {
-            setPermissionTarget(null);
-            setPermissionError('');
-            setPermissionSuccess('');
-          }
-        }}
-        title={`Member Permissions: ${permissionTarget?.full_name || permissionTarget?.email || ''}`}
+        onClose={closePermissionsModal}
+        title={`Permissions: ${permissionTarget?.full_name || permissionTarget?.email || ''}`}
+        dismissOnOverlay={false}
         footer={
-          <div style={{ display: 'flex', gap: 'var(--space-2)', justifyContent: 'flex-end', width: '100%', flexWrap: 'wrap' }}>
-            <Button
-              variant="outline"
-              onClick={() => {
-                setPermissionTarget(null);
-                setPermissionError('');
-                setPermissionSuccess('');
-              }}
-              disabled={isSavingPermissions}
-            >
+          <div style={{ ...modalFooterStyle, flexWrap: 'wrap' }}>
+            <Button type="button" variant="outline" onClick={closePermissionsModal} disabled={isSavingPermissions}>
               Cancel
             </Button>
-            <Button
-              variant="primary"
-              onClick={handleSavePermissions}
-              disabled={isSavingPermissions}
-            >
-              {isSavingPermissions ? 'Saving Permissions...' : 'Save Permissions'}
+            <Button type="button" variant="primary" onClick={handleSavePermissions} disabled={isSavingPermissions}>
+              {isSavingPermissions ? 'Saving...' : 'Save permissions'}
             </Button>
           </div>
         }
       >
         <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-4)' }}>
-          {permissionError && (
-            <div
-              style={{
-                padding: 'var(--space-2) var(--space-3)',
-                backgroundColor: 'rgba(239, 68, 68, 0.1)',
-                color: 'var(--color-danger, #ef4444)',
-                borderRadius: 'var(--radius-sm)',
-                fontSize: 'var(--font-size-sm)',
-                border: '1px solid rgba(239, 68, 68, 0.3)',
-              }}
-            >
-              {permissionError}
-            </div>
-          )}
-
-          {permissionSuccess && (
-            <div
-              style={{
-                padding: 'var(--space-2) var(--space-3)',
-                backgroundColor: 'var(--color-status-done-bg)',
-                color: 'var(--color-status-done-text)',
-                borderRadius: 'var(--radius-sm)',
-                fontSize: 'var(--font-size-sm)',
-                border: '1px solid rgba(16, 185, 129, 0.3)',
-              }}
-            >
-              {permissionSuccess}
-            </div>
-          )}
-
-          <div>
-            <div style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-secondary)', marginBottom: 'var(--space-2)' }}>
-              Configure accessible sections for <strong style={{ color: 'var(--color-text-primary)' }}>{permissionTarget?.email}</strong>. Modules toggled off will be hidden from their portal navigation and blocked.
-            </div>
-            <div style={{ display: 'flex', gap: 'var(--space-2)', marginBottom: 'var(--space-3)' }}>
-              <button
-                type="button"
-                className="ui-btn-action-portal"
-                style={{ fontSize: '12px', padding: '4px 10px' }}
-                onClick={() => {
-                  const allActive = PORTAL_MODULES
-                    .filter((m) => features[m.key] !== false)
-                    .map((m) => m.key);
-                  setEditAllowedModules(allActive);
-                }}
-              >
-                Select All
-              </button>
-              <button
-                type="button"
-                className="ui-btn-action-portal"
-                style={{ fontSize: '12px', padding: '4px 10px' }}
-                onClick={() => setEditAllowedModules([])}
-              >
-                Clear All
-              </button>
-            </div>
+          {permissionError && <Notice>{permissionError}</Notice>}
+          {permissionSuccess && <Notice tone="success">{permissionSuccess}</Notice>}
+          <div style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-secondary)' }}>
+            Choose what <strong style={{ color: 'var(--color-text-primary)' }}>{permissionTarget?.email}</strong> can open. Anything left unticked is hidden from them.
           </div>
-
-          <div className="permission-grid">
-            {PORTAL_MODULES.filter((module) => features[module.key] !== false).map((module) => {
-              const isChecked = editAllowedModules.includes(module.key);
-
-              return (
-                <div
-                  key={module.key}
-                  className={`permission-card ${isChecked ? 'is-checked' : ''}`.trim()}
-                  onClick={() => {
-                    setEditAllowedModules((prev) =>
-                      prev.includes(module.key)
-                        ? prev.filter((k) => k !== module.key)
-                        : [...prev, module.key]
-                    );
-                  }}
-                >
-                  <div className="permission-checkbox">
-                    {isChecked && (
-                      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
-                        <polyline points="20 6 9 17 4 12" />
-                      </svg>
-                    )}
-                  </div>
-                  <div className="permission-label-wrap">
-                    <div className="permission-label-row">
-                      <span className="permission-title">{module.label}</span>
-                    </div>
-                    <span className="permission-desc">{module.description}</span>
-                  </div>
-                </div>
-              );
-            })}
-          </div>
+          <MemberModulePicker features={features} selected={editAllowedModules} onChange={setEditAllowedModules} disabled={isSavingPermissions} />
         </div>
       </Modal>
     </div>

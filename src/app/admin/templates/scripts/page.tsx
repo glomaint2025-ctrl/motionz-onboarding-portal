@@ -195,11 +195,11 @@ export default function AdminScriptTemplatesPage() {
       const res = await fetch('/api/admin/templates', { cache: 'no-store' });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) {
-        throw new Error(data.error || `Failed to load scripts (HTTP ${res.status}).`);
+        throw new Error(data.error || 'Could not load the video scripts.');
       }
       setTemplates(Array.isArray(data.scripts) ? data.scripts : []);
     } catch (err: any) {
-      setLoadError(err.message || 'Failed to load scripts.');
+      setLoadError(err.message || 'Could not load the video scripts.');
     } finally {
       setLoading(false);
     }
@@ -251,13 +251,13 @@ export default function AdminScriptTemplatesPage() {
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) {
-        throw new Error(data.error || `Save failed (HTTP ${res.status}).`);
+        throw new Error(data.error || 'The script was not saved. Please try again.');
       }
       setTemplates((prev) => prev.map((t) => (t.id === id ? { ...t, ...data.script } : t)));
       setNotice({ kind: 'success', text: `Saved "${data.script?.title || editTitle}". Client portals now show this script.` });
       handleCancelEdit();
     } catch (err: any) {
-      setNotice({ kind: 'error', text: err.message || 'Failed to save the script.' });
+      setNotice({ kind: 'error', text: err.message || 'The script was not saved. Please try again.' });
     } finally {
       setSaving(false);
     }
@@ -279,7 +279,7 @@ export default function AdminScriptTemplatesPage() {
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok || !data.script) {
-        throw new Error(data.error || `Could not add the script (HTTP ${res.status}).`);
+        throw new Error(data.error || 'The script was not added. Please try again.');
       }
       setTemplates((prev) => [...prev, data.script].sort((a, b) => a.sort_order - b.sort_order));
       setNotice({
@@ -288,7 +288,7 @@ export default function AdminScriptTemplatesPage() {
       });
       setAdding(false);
     } catch (err: any) {
-      setNotice({ kind: 'error', text: err.message || 'Failed to add the script.' });
+      setNotice({ kind: 'error', text: err.message || 'The script was not added. Please try again.' });
     } finally {
       setSaving(false);
     }
@@ -301,12 +301,12 @@ export default function AdminScriptTemplatesPage() {
       const res = await fetch(`/api/admin/templates/scripts/${encodeURIComponent(template.id)}`, { method: 'DELETE' });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) {
-        throw new Error(data.error || `Delete failed (HTTP ${res.status}).`);
+        throw new Error(data.error || 'The script was not deleted. Please try again.');
       }
       setTemplates((prev) => prev.filter((t) => t.id !== template.id));
       setNotice({ kind: 'success', text: `Deleted "${template.title}". Clients who had picked it will need to pick another.` });
     } catch (err: any) {
-      setNotice({ kind: 'error', text: err.message || 'Failed to delete the script.' });
+      setNotice({ kind: 'error', text: err.message || 'The script was not deleted. Please try again.' });
     } finally {
       setConfirmDeleteId(null);
       setSaving(false);
@@ -318,7 +318,7 @@ export default function AdminScriptTemplatesPage() {
       <div className="ui-breadcrumb">
         <Link href="/admin">Home</Link>
         <span className="ui-breadcrumb-separator">&gt;</span>
-        <Link href="/admin/templates">Master Templates</Link>
+        <Link href="/admin/templates">Portal Templates</Link>
         <span className="ui-breadcrumb-separator">&gt;</span>
         <span className="ui-breadcrumb-current">Video Scripts</span>
       </div>

@@ -2,7 +2,10 @@
 
 import React, { useState, useEffect, useRef } from 'react';
 import Link from 'next/link';
-import { Button, Select, Modal, TableSkeleton, Pagination } from '@/components/ui';
+import { Button, Input, Select, Modal, TableSkeleton, Pagination, buttonClasses } from '@/components/ui';
+import { Icon } from '@/components/brand';
+import { Notice, clientStatusLabel } from '@/components/admin/Notice';
+import { formatDate } from '@/lib/utils/format';
 
 interface ClientRecord {
   id: string;
@@ -39,31 +42,18 @@ function getAvatarGradient(name: string): string {
   return AVATAR_GRADIENTS[index];
 }
 
-function formatDate(dateString: string): { formatted: string; relative: string } {
-  try {
-    const date = new Date(dateString);
-    const now = new Date();
-    const diffMs = now.getTime() - date.getTime();
-    const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
-
-    const formatted = date.toLocaleDateString('en-US', {
-      month: 'short',
-      day: '2-digit',
-      year: 'numeric',
-    });
-
-    let relative = 'Today';
-    if (diffDays === 1) relative = '1 day ago';
-    else if (diffDays > 1 && diffDays < 7) relative = `${diffDays} days ago`;
-    else if (diffDays >= 7 && diffDays < 14) relative = '1 week ago';
-    else if (diffDays >= 14 && diffDays < 30) relative = `${Math.floor(diffDays / 7)} weeks ago`;
-    else if (diffDays >= 30 && diffDays < 60) relative = '1 month ago';
-    else if (diffDays >= 60) relative = `${Math.floor(diffDays / 30)} months ago`;
-
-    return { formatted, relative };
-  } catch {
-    return { formatted: dateString, relative: '' };
-  }
+/** "3 days ago" style hint shown under the created date. */
+function relativeAge(dateString: string): string {
+  const date = new Date(dateString);
+  if (isNaN(date.getTime())) return '';
+  const diffDays = Math.floor((Date.now() - date.getTime()) / (1000 * 60 * 60 * 24));
+  if (diffDays <= 0) return 'Today';
+  if (diffDays === 1) return '1 day ago';
+  if (diffDays < 7) return `${diffDays} days ago`;
+  if (diffDays < 14) return '1 week ago';
+  if (diffDays < 30) return `${Math.floor(diffDays / 7)} weeks ago`;
+  if (diffDays < 60) return '1 month ago';
+  return `${Math.floor(diffDays / 30)} months ago`;
 }
 
 function getInitials(name: string): string {
@@ -85,6 +75,7 @@ function getDisplayDomain(email: string, contact?: string): string {
 export default function ClientsPage() {
   const [clients, setClients] = useState<ClientRecord[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState('');
   const [searchQuery, setSearchQuery] = useState('');
   const [debouncedSearch, setDebouncedSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
@@ -129,6 +120,7 @@ export default function ClientsPage() {
   const [suspendTarget, setSuspendTarget] = useState<{ client: ClientRecord; isUnban: boolean } | null>(null);
   const [isSuspending, setIsSuspending] = useState(false);
   const [suspendError, setSuspendError] = useState('');
+  const [suspendReason, setSuspendReason] = useState('');
 
   // Debounce search input to avoid excessive server queries
   useEffect(() => {
@@ -142,6 +134,7 @@ export default function ClientsPage() {
   const fetchClients = async () => {
     try {
       setLoading(true);
+      setLoadError('');
       const params = new URLSearchParams({
         page: String(page),
         pageSize: String(pageSize),
@@ -152,15 +145,17 @@ export default function ClientsPage() {
       if (csmFilter !== 'all') params.set('csm', csmFilter);
 
       const res = await fetch(`/api/admin/clients?${params.toString()}`);
-      const data = await res.json();
-      if (data.success && data.tenants) {
+      const data = await res.json().catch(() => ({}));
+      if (res.ok && data.success && data.tenants) {
         setClients(data.tenants);
         if (data.pagination) setPaginationMeta(data.pagination);
-        if (data.stats) setGlobalStats(data.stats);
+        if (data.stats) setGlobalStats((prev) => ({ ...prev, ...data.stats }));
         if (data.availableCsms) setAvailableCsms(data.availableCsms);
+      } else {
+        setLoadError(data.error || 'Could not load the client list.');
       }
-    } catch (err) {
-      console.error('Failed to load clients:', err);
+    } catch {
+      setLoadError('Could not reach the server. Check your connection and try again.');
     } finally {
       setLoading(false);
     }
@@ -208,10 +203,10 @@ export default function ClientsPage() {
         setUnarchiveTarget(null);
         fetchClients();
       } else {
-        setUnarchiveError(data.error || 'Failed to unarchive portal.');
+        setUnarchiveError(data.error || 'Could not unarchive this client. Please try again.');
       }
     } catch {
-      setUnarchiveError('Network error while unarchiving portal.');
+      setUnarchiveError('Could not reach the server. The client is still archived.');
     } finally {
       setIsUnarchiving(false);
     }
@@ -232,10 +227,10 @@ export default function ClientsPage() {
         setArchiveTarget(null);
         fetchClients();
       } else {
-        setArchiveError(data.error || 'Failed to archive portal.');
+        setArchiveError(data.error || 'Could not archive this client. Please try again.');
       }
     } catch {
-      setArchiveError('Network error while archiving portal.');
+      setArchiveError('Could not reach the server. The client was not archived.');
     } finally {
       setIsArchiving(false);
     }
@@ -252,7 +247,7 @@ export default function ClientsPage() {
       const res = await fetch(`/api/admin/clients/${suspendTarget.client.id}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action }),
+        body: JSON.stringify(suspendTarget.isUnban ? { action } : { action, reason: suspendReason.trim() }),
       });
 
       const data = await res.json();
@@ -260,10 +255,10 @@ export default function ClientsPage() {
         setSuspendTarget(null);
         fetchClients();
       } else {
-        setSuspendError(data.error || 'Failed to update client status.');
+        setSuspendError(data.error || 'That did not work. Please try again.');
       }
     } catch {
-      setSuspendError('Network error while updating status.');
+      setSuspendError('Could not reach the server. Nothing was changed.');
     } finally {
       setIsSuspending(false);
     }
@@ -298,27 +293,25 @@ export default function ClientsPage() {
       <div className="ui-breadcrumb">
         <Link href="/admin">Home</Link>
         <span className="ui-breadcrumb-separator">&gt;</span>
-        <span className="ui-breadcrumb-current">Client Management</span>
+        <span className="ui-breadcrumb-current">Clients</span>
       </div>
 
       {/* 2. Page Header */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 'var(--space-6)', flexWrap: 'wrap', gap: 'var(--space-4)' }}>
         <div>
           <h1 style={{ fontSize: '1.75rem', fontWeight: 700, color: 'var(--color-text-primary)', marginBottom: 'var(--space-1)', letterSpacing: '-0.02em' }}>
-            Client Management
+            Clients
           </h1>
           <p style={{ color: 'var(--color-text-secondary)', fontSize: 'var(--font-size-sm)', margin: 0 }}>
-            Provision, oversee, and manage client company portals, template clones, and assigned CSMs.
+            Every client company, who looks after it, and how far along its setup is.
           </p>
         </div>
-        <Link href="/admin/clients/new" style={{ textDecoration: 'none' }}>
-          <Button variant="primary" style={{ display: 'inline-flex', alignItems: 'center', gap: '8px', padding: '9px 18px', fontWeight: 600, borderRadius: 'var(--radius-md)' }}>
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-              <line x1="12" y1="5" x2="12" y2="19" />
-              <line x1="5" y1="12" x2="19" y2="12" />
-            </svg>
-            Add New Client
-          </Button>
+        <Link href="/admin/clients/new" className={buttonClasses({ variant: 'primary' })} style={{ display: 'inline-flex', alignItems: 'center', gap: '8px' }}>
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+            <line x1="12" y1="5" x2="12" y2="19" />
+            <line x1="5" y1="12" x2="19" y2="12" />
+          </svg>
+          Add client
         </Link>
       </div>
 
@@ -336,14 +329,10 @@ export default function ClientsPage() {
               </svg>
             </div>
             <div className="ui-stat-info">
-              <span className="ui-stat-label">Total Clients</span>
+              <span className="ui-stat-label">Total clients</span>
               <span className="ui-stat-value">{totalClients}</span>
-              <span className="ui-stat-meta-badge">
-                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                  <line x1="7" y1="17" x2="17" y2="7" />
-                  <polyline points="7 7 17 7 17 17" />
-                </svg>
-                +{newThisMonth} this month
+              <span className="ui-stat-meta-text">
+                {newThisMonth === 0 ? 'None added this month' : `${newThisMonth} added this month`}
               </span>
             </div>
           </div>
@@ -353,10 +342,10 @@ export default function ClientsPage() {
         <div className="ui-stat-card">
           <div className="ui-stat-card-body">
             <div className="ui-stat-icon-wrapper ui-stat-icon-emerald">
-              <span style={{ width: '12px', height: '12px', borderRadius: '50%', backgroundColor: '#10b981', display: 'inline-block', boxShadow: '0 0 8px rgba(16, 185, 129, 0.8)' }}></span>
+              <span style={{ width: '12px', height: '12px', borderRadius: '50%', backgroundColor: 'var(--color-status-done-solid)', display: 'inline-block' }}></span>
             </div>
             <div className="ui-stat-info">
-              <span className="ui-stat-label">Active Clients</span>
+              <span className="ui-stat-label">Active</span>
               <span className="ui-stat-value">{activeClients}</span>
               <span className="ui-stat-meta-text">{activePercent}% of total</span>
             </div>
@@ -377,7 +366,7 @@ export default function ClientsPage() {
           </div>
         </div>
 
-        {/* Pending Setup */}
+        {/* Onboarding (status = onboarding, never overlaps Active) */}
         <div className="ui-stat-card">
           <div className="ui-stat-card-body">
             <div className="ui-stat-icon-wrapper ui-stat-icon-amber">
@@ -387,7 +376,7 @@ export default function ClientsPage() {
               </svg>
             </div>
             <div className="ui-stat-info">
-              <span className="ui-stat-label">Pending Setup</span>
+              <span className="ui-stat-label">Onboarding</span>
               <span className="ui-stat-value">{pendingSetup}</span>
               <span className="ui-stat-meta-text">{pendingPercent}% of total</span>
             </div>
@@ -417,8 +406,8 @@ export default function ClientsPage() {
       <div className="ui-filter-toolbar">
         <div className="ui-filter-col-search">
           <div className="ui-filter-search-box">
-            <label className="ui-label">
-              Search Clients
+            <label className="ui-label" htmlFor="admin-client-search">
+              Search clients
             </label>
             <div style={{ position: 'relative' }}>
               <span className="ui-filter-search-icon">
@@ -428,9 +417,11 @@ export default function ClientsPage() {
                 </svg>
               </span>
               <input
-                type="text"
+                id="admin-client-search"
+                type="search"
+                maxLength={120}
                 className="ui-filter-search-input"
-                placeholder="Search by company name, email, domain or CSM..."
+                placeholder="Search by company, contact, email or CSM..."
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
               />
@@ -440,24 +431,24 @@ export default function ClientsPage() {
 
         <div className="ui-filter-col-select">
           <Select
-            label="Filter by Status"
+            label="Status"
             value={statusFilter}
             onChange={(e) => {
               setStatusFilter(e.target.value);
               setPage(1);
             }}
           >
-            <option value="all">All</option>
+            <option value="all">All statuses</option>
             <option value="active">Active</option>
             <option value="onboarding">Onboarding</option>
-            <option value="banned">Banned</option>
+            <option value="suspended">Suspended</option>
             <option value="archived">Archived</option>
           </Select>
         </div>
 
         <div className="ui-filter-col-select">
           <Select
-            label="Filter by CSM"
+            label="CSM"
             value={csmFilter}
             onChange={(e) => {
               setCsmFilter(e.target.value);
@@ -493,6 +484,8 @@ export default function ClientsPage() {
       {/* 5. Modern Data Table */}
       {loading ? (
         <TableSkeleton rows={6} columns={8} />
+      ) : loadError ? (
+        <Notice onRetry={fetchClients}>{loadError}</Notice>
       ) : (
         <div className="ui-modern-table-card">
           <div style={{ width: '100%', overflowX: 'auto' }}>
@@ -500,7 +493,7 @@ export default function ClientsPage() {
               <thead>
                 <tr>
                   <th style={{ width: '40px', textAlign: 'center' }}>#</th>
-                  <th>Company / Organization</th>
+                  <th>Company</th>
                   <th>Assigned CSM</th>
                   <th>Status</th>
                   <th>Setup Progress</th>
@@ -513,7 +506,9 @@ export default function ClientsPage() {
                 {displayClients.length === 0 ? (
                   <tr>
                     <td colSpan={8} style={{ textAlign: 'center', padding: '48px 16px', color: 'var(--color-text-muted)' }}>
-                      No matching client portals found.
+                      {totalClients === 0
+                        ? 'No clients yet. Use "Add client" to create the first one.'
+                        : 'No clients match your search or filters.'}
                     </td>
                   </tr>
                 ) : (
@@ -521,7 +516,8 @@ export default function ClientsPage() {
                     const isArchived = Boolean(client.is_archived || client.deleted_at || client.status === 'cancelled');
                     const isSuspended = client.status === 'suspended';
                     const hasCsm = client.csm_name && client.csm_name !== 'Unassigned';
-                    const { formatted: createdDate, relative: relativeDate } = formatDate(client.created_at);
+                    const createdDate = formatDate(client.created_at) || 'Unknown';
+                    const relativeDate = relativeAge(client.created_at);
                     const domainSubtext = getDisplayDomain(client.primary_email, client.primary_contact_name);
                     const rowNumber = (page - 1) * pageSize + index + 1;
 
@@ -592,10 +588,15 @@ export default function ClientsPage() {
                               <span className="ui-pill-status-dot" />
                               Onboarding
                             </span>
-                          ) : (
+                          ) : client.status === 'active' ? (
                             <span className="ui-pill-status ui-pill-status-active">
                               <span className="ui-pill-status-dot" />
                               Active
+                            </span>
+                          ) : (
+                            <span className="ui-pill-status ui-pill-status-archived">
+                              <span className="ui-pill-status-dot" />
+                              {clientStatusLabel(client.status)}
                             </span>
                           )}
                         </td>
@@ -631,7 +632,7 @@ export default function ClientsPage() {
                                 <line x1="12" y1="9" x2="12" y2="13" />
                                 <line x1="12" y1="17" x2="12.01" y2="17" />
                               </svg>
-                              Not Connected
+                              Not connected
                             </span>
                           )}
                         </td>
@@ -657,7 +658,7 @@ export default function ClientsPage() {
                                   <polyline points="15 3 21 3 21 9" />
                                   <line x1="10" y1="14" x2="21" y2="3" />
                                 </svg>
-                                Open Portal
+                                Open portal
                               </Link>
                             ) : (
                               <button
@@ -677,7 +678,7 @@ export default function ClientsPage() {
                               <button
                                 type="button"
                                 className="ui-btn-action-menu"
-                                aria-label="More options"
+                                aria-label={`More options for ${client.name}`}
                                 onClick={(e) => {
                                   e.stopPropagation();
                                   if (activeMenuClientId === client.id) {
@@ -756,7 +757,7 @@ export default function ClientsPage() {
                                         <rect x="1" y="3" width="22" height="5" />
                                         <line x1="10" y1="12" x2="14" y2="12" />
                                       </svg>
-                                      Unarchive Portal
+                                      Unarchive
                                     </button>
                                   ) : (
                                     <>
@@ -767,16 +768,17 @@ export default function ClientsPage() {
                                           setActiveMenuClientId(null);
                                           setMenuCoords(null);
                                           setSuspendTarget({ client, isUnban: isSuspended });
+                                          setSuspendReason('');
                                           setSuspendError('');
                                         }}
                                       >
                                         {isSuspended ? (
                                           <>
-                                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#10b981" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--color-status-done-text)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                                               <circle cx="12" cy="12" r="10" />
                                               <polyline points="12 8 12 12 14 14" />
                                             </svg>
-                                            <span style={{ color: '#34d399' }}>Reactivate Portal</span>
+                                            <span style={{ color: 'var(--color-status-done-text)' }}>Reactivate</span>
                                           </>
                                         ) : (
                                           <>
@@ -784,7 +786,7 @@ export default function ClientsPage() {
                                               <circle cx="12" cy="12" r="10" />
                                               <line x1="4.93" y1="4.93" x2="19.07" y2="19.07" />
                                             </svg>
-                                            Suspend Portal
+                                            Suspend
                                           </>
                                         )}
                                       </button>
@@ -804,7 +806,7 @@ export default function ClientsPage() {
                                           <rect x="1" y="3" width="22" height="5" />
                                           <line x1="10" y1="12" x2="14" y2="12" />
                                         </svg>
-                                        Archive Portal
+                                        Archive
                                       </button>
                                     </>
                                   )}
@@ -846,7 +848,7 @@ export default function ClientsPage() {
             setUnarchiveError('');
           }
         }}
-        title="Unarchive Client Portal"
+        title="Unarchive client"
         footer={
           <div style={{ display: 'flex', gap: 'var(--space-2)', justifyContent: 'flex-end', width: '100%' }}>
             <Button
@@ -864,25 +866,14 @@ export default function ClientsPage() {
               onClick={handleConfirmUnarchive}
               disabled={isUnarchiving}
             >
-              {isUnarchiving ? 'Unarchiving...' : 'Confirm Unarchive'}
+              {isUnarchiving ? 'Unarchiving...' : 'Unarchive'}
             </Button>
           </div>
         }
       >
         <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-3)' }}>
           {unarchiveError && (
-            <div
-              style={{
-                padding: 'var(--space-2) var(--space-3)',
-                backgroundColor: 'rgba(239, 68, 68, 0.1)',
-                color: 'var(--color-danger, #ef4444)',
-                borderRadius: 'var(--radius-sm)',
-                fontSize: 'var(--font-size-sm)',
-                border: '1px solid rgba(239, 68, 68, 0.3)',
-              }}
-            >
-              {unarchiveError}
-            </div>
+            <Notice>{unarchiveError}</Notice>
           )}
           <p style={{ margin: 0, color: 'var(--color-text-secondary)', fontSize: 'var(--font-size-sm)' }}>
             Are you sure you want to unarchive <strong>{unarchiveTarget?.name}</strong>?
@@ -898,7 +889,7 @@ export default function ClientsPage() {
               lineHeight: 1.5,
             }}
           >
-            ℹ️ Unarchiving restores the client portal to <strong>Active</strong> status and allows authorized users to access their onboarding dashboard again.
+            Unarchiving sets the client back to <strong>Active</strong> and lets their team sign in to the portal again.
           </div>
         </div>
       </Modal>
@@ -912,7 +903,7 @@ export default function ClientsPage() {
             setArchiveError('');
           }
         }}
-        title="Archive Client Portal"
+        title="Archive client"
         footer={
           <div style={{ display: 'flex', gap: 'var(--space-2)', justifyContent: 'flex-end', width: '100%' }}>
             <Button
@@ -930,25 +921,14 @@ export default function ClientsPage() {
               onClick={handleConfirmArchive}
               disabled={isArchiving}
             >
-              {isArchiving ? 'Archiving...' : 'Confirm Archive'}
+              {isArchiving ? 'Archiving...' : 'Archive'}
             </Button>
           </div>
         }
       >
         <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-3)' }}>
           {archiveError && (
-            <div
-              style={{
-                padding: 'var(--space-2) var(--space-3)',
-                backgroundColor: 'rgba(239, 68, 68, 0.1)',
-                color: 'var(--color-danger, #ef4444)',
-                borderRadius: 'var(--radius-sm)',
-                fontSize: 'var(--font-size-sm)',
-                border: '1px solid rgba(239, 68, 68, 0.3)',
-              }}
-            >
-              {archiveError}
-            </div>
+            <Notice>{archiveError}</Notice>
           )}
           <p style={{ margin: 0, color: 'var(--color-text-secondary)', fontSize: 'var(--font-size-sm)' }}>
             Are you sure you want to archive <strong>{archiveTarget?.name}</strong>?
@@ -964,7 +944,10 @@ export default function ClientsPage() {
               lineHeight: 1.5,
             }}
           >
-            ⚠️ Archiving hides the client portal from active listings and blocks member logins until unarchived.
+            <span style={{ display: 'inline-flex', gap: 'var(--space-2)', alignItems: 'flex-start' }}>
+              <Icon name="alert" size={16} style={{ flexShrink: 0, marginTop: '1px' }} />
+              <span>Archiving stops the client’s team from signing in until you unarchive. Nothing is deleted.</span>
+            </span>
           </div>
         </div>
       </Modal>
@@ -978,7 +961,8 @@ export default function ClientsPage() {
             setSuspendError('');
           }
         }}
-        title={suspendTarget?.isUnban ? 'Reactivate Client Portal' : 'Suspend Client Portal'}
+        title={suspendTarget?.isUnban ? 'Reactivate client' : 'Suspend client'}
+        dismissOnOverlay={false}
         footer={
           <div style={{ display: 'flex', gap: 'var(--space-2)', justifyContent: 'flex-end', width: '100%' }}>
             <Button
@@ -994,37 +978,37 @@ export default function ClientsPage() {
             <Button
               variant={suspendTarget?.isUnban ? 'primary' : 'danger'}
               onClick={handleConfirmSuspend}
-              disabled={isSuspending}
+              disabled={isSuspending || (!suspendTarget?.isUnban && !suspendReason.trim())}
             >
               {isSuspending
-                ? 'Processing...'
+                ? 'Working...'
                 : suspendTarget?.isUnban
-                ? 'Confirm Reactivation'
-                : 'Confirm Suspension'}
+                ? 'Reactivate'
+                : 'Suspend'}
             </Button>
           </div>
         }
       >
         <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-3)' }}>
           {suspendError && (
-            <div
-              style={{
-                padding: 'var(--space-2) var(--space-3)',
-                backgroundColor: 'rgba(239, 68, 68, 0.1)',
-                color: 'var(--color-danger, #ef4444)',
-                borderRadius: 'var(--radius-sm)',
-                fontSize: 'var(--font-size-sm)',
-                border: '1px solid rgba(239, 68, 68, 0.3)',
-              }}
-            >
-              {suspendError}
-            </div>
+            <Notice>{suspendError}</Notice>
           )}
           <p style={{ margin: 0, color: 'var(--color-text-secondary)', fontSize: 'var(--font-size-sm)' }}>
             {suspendTarget?.isUnban
-              ? `Are you sure you want to reactivate ${suspendTarget.client.name}? All suspended members will regain access.`
-              : `Are you sure you want to suspend ${suspendTarget?.client.name}? All member logins will be disabled.`}
+              ? `Reactivate ${suspendTarget.client.name}? Everyone who was locked out by the suspension can sign in again.`
+              : `Suspend ${suspendTarget?.client.name}? Nobody on their team will be able to sign in until you reactivate them.`}
           </p>
+          {suspendTarget && !suspendTarget.isUnban && (
+            <Input
+              label="Reason"
+              value={suspendReason}
+              onChange={(e) => setSuspendReason(e.target.value)}
+              placeholder="e.g. Subscription paused"
+              helperText="The client sees this reason when they try to sign in."
+              maxLength={300}
+              required
+            />
+          )}
         </div>
       </Modal>
     </div>

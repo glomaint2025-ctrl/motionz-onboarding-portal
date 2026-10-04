@@ -6,7 +6,7 @@ import { parsePaginationParams, buildPaginationMeta } from '@/lib/utils/paginati
 
 /**
  * Client roster for the CSM workspace. CSMs see only their assigned clients; admins see all.
- * Supports ?page, ?pageSize, ?search and ?status (all | active | onboarding | suspended | in_progress).
+ * Supports ?page, ?pageSize, ?search and ?status (all | active | onboarding | suspended | in_progress | completed).
  */
 export async function GET(request: Request) {
   try {
@@ -56,9 +56,14 @@ export async function GET(request: Request) {
         c.name.toLowerCase().includes(q) ||
         c.primary_email.toLowerCase().includes(q) ||
         Boolean(c.primary_contact_name && c.primary_contact_name.toLowerCase().includes(q));
+      // "in_progress" and "completed" describe setup progress, not the client's account status.
       const matchesStatus =
         status === 'all' ||
-        (status === 'in_progress' ? c.progress_percent < 100 : c.status === status);
+        (status === 'in_progress'
+          ? c.progress_percent < 100
+          : status === 'completed'
+            ? c.total_steps > 0 && c.progress_percent === 100
+            : c.status === status);
       return matchesSearch && matchesStatus;
     });
 
@@ -66,6 +71,10 @@ export async function GET(request: Request) {
       totalClients: clients.length,
       activeClients: clients.filter((c) => c.status === 'active').length,
       pendingSetup: clients.filter((c) => c.progress_percent < 100).length,
+      completedClients: clients.filter((c) => c.total_steps > 0 && c.progress_percent === 100).length,
+      avgProgress: clients.length
+        ? Math.round(clients.reduce((sum, c) => sum + c.progress_percent, 0) / clients.length)
+        : 0,
       archivedClients: 0,
       newThisMonth: 0,
     };
@@ -84,6 +93,6 @@ export async function GET(request: Request) {
     if (err.statusCode === 401 || err.statusCode === 403) {
       return handleAuthError(err);
     }
-    return NextResponse.json({ error: 'Failed to retrieve CSM clients' }, { status: 500 });
+    return NextResponse.json({ error: 'Could not load your clients. Please try again.' }, { status: 500 });
   }
 }

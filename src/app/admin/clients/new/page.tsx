@@ -3,7 +3,9 @@
 import React, { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { Input, Select, Button, Modal } from '@/components/ui';
+import { Input, Select, Button, Modal, buttonClasses } from '@/components/ui';
+import { PORTAL_MODULES } from '@/lib/portal-modules';
+import { Notice, copyText } from '@/components/admin/Notice';
 
 export default function AddClientPage() {
   const router = useRouter();
@@ -15,45 +17,49 @@ export default function AddClientPage() {
   const [csmUserId, setCsmUserId] = useState('');
   const [csms, setCsms] = useState<{ id: string; name?: string; email: string }[]>([]);
 
-  useEffect(() => {
+  const [csmLoadError, setCsmLoadError] = useState('');
+
+  const loadCsms = () => {
+    setCsmLoadError('');
     fetch('/api/admin/csms')
-      .then((res) => res.json())
-      .then((data) => {
-        if (data.success) {
+      .then(async (res) => ({ ok: res.ok, data: await res.json().catch(() => ({})) }))
+      .then(({ ok, data }) => {
+        if (ok && data.success && Array.isArray(data.csms)) {
           setCsms(data.csms);
           if (data.csms.length === 1) setCsmUserId(data.csms[0].id);
+        } else {
+          setCsmLoadError(data.error || 'Could not load the list of CSMs.');
         }
       })
-      .catch(() => {});
+      .catch(() => setCsmLoadError('Could not load the list of CSMs.'));
+  };
+
+  useEffect(() => {
+    loadCsms();
   }, []);
-  const [features, setFeatures] = useState<Record<string, boolean>>({
-    onboarding: true,
-    leads: true,
-    tracking: true,
-    contracts: true,
-    tools: true,
-    roof_measurement: true,
-    video_scripts: true,
-    book_call: true,
-    team: true,
-  });
+
+  // Every portal section starts switched on; the list itself comes from PORTAL_MODULES.
+  const [features, setFeatures] = useState<Record<string, boolean>>(() =>
+    Object.fromEntries(PORTAL_MODULES.map((m) => [m.key, true]))
+  );
 
   const [loading, setLoading] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [createdTenant, setCreatedTenant] = useState<any | null>(null);
   const [magicLink, setMagicLink] = useState<string | null>(null);
   const [isSuccessModalOpen, setIsSuccessModalOpen] = useState(false);
-  const [isCopied, setIsCopied] = useState(false);
+  const [copyState, setCopyState] = useState<'idle' | 'copied' | 'failed'>('idle');
   const [emailDelivered, setEmailDelivered] = useState(false);
   const [invitedEmail, setInvitedEmail] = useState('');
   const [sheet, setSheet] = useState<{ ok?: boolean; url?: string; error?: string } | null>(null);
 
   const toggleFeature = (key: string) => {
-    setFeatures((prev) => ({ ...prev, [key]: !prev[key] }));
+    setFeatures((prev) => ({ ...prev, [key]: prev[key] === false }));
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (loading) return;
     setLoading(true);
     setErrorMessage(null);
 
@@ -71,10 +77,10 @@ export default function AddClientPage() {
         }),
       });
 
-      const data = await res.json();
+      const data = await res.json().catch(() => ({}));
 
-      if (!res.ok) {
-        setErrorMessage(data.error || 'Failed to provision client portal.');
+      if (!res.ok || !data.success) {
+        setErrorMessage(data.error || 'The client could not be added. Please try again.');
       } else {
         setCreatedTenant(data.tenant);
         setEmailDelivered(data.emailDelivered === true);
@@ -96,8 +102,8 @@ export default function AddClientPage() {
         setMagicLink(link);
         setIsSuccessModalOpen(true);
       }
-    } catch (err: any) {
-      setErrorMessage(err.message || 'Network error occurred.');
+    } catch {
+      setErrorMessage('Could not reach the server. The client may not have been added. Check the Clients list before trying again.');
     } finally {
       setLoading(false);
     }
@@ -109,44 +115,22 @@ export default function AddClientPage() {
       <div className="ui-breadcrumb">
         <Link href="/admin">Home</Link>
         <span className="ui-breadcrumb-separator">&gt;</span>
-        <Link href="/admin/clients">Client Management</Link>
+        <Link href="/admin/clients">Clients</Link>
         <span className="ui-breadcrumb-separator">&gt;</span>
-        <span className="ui-breadcrumb-current">Provision New Client</span>
+        <span className="ui-breadcrumb-current">Add client</span>
       </div>
 
       {/* 2. Header */}
       <div style={{ marginBottom: 'var(--space-6)' }}>
         <h1 style={{ fontSize: '1.75rem', fontWeight: 700, color: 'var(--color-text-primary)', marginBottom: 'var(--space-1)', letterSpacing: '-0.02em' }}>
-          Provision New Client
+          Add client
         </h1>
         <p style={{ color: 'var(--color-text-secondary)', fontSize: 'var(--font-size-sm)', margin: 0 }}>
-          Create a new client company tenant, clone the Master Portal Template, assign a CSM, and generate an invitation.
+          Set up a new client’s portal with the standard setup steps, choose their CSM, and email them an invitation.
         </p>
       </div>
 
-      {errorMessage && (
-        <div
-          style={{
-            padding: '14px 16px',
-            backgroundColor: 'rgba(239, 68, 68, 0.12)',
-            border: '1px solid rgba(239, 68, 68, 0.3)',
-            borderRadius: 'var(--radius-md)',
-            color: '#f87171',
-            fontSize: 'var(--font-size-sm)',
-            marginBottom: 'var(--space-5)',
-            display: 'flex',
-            alignItems: 'center',
-            gap: '8px',
-          }}
-        >
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-            <circle cx="12" cy="12" r="10" />
-            <line x1="12" y1="8" x2="12" y2="12" />
-            <line x1="12" y1="16" x2="12.01" y2="16" />
-          </svg>
-          {errorMessage}
-        </div>
-      )}
+      {errorMessage && <Notice style={{ marginBottom: 'var(--space-5)' }}>{errorMessage}</Notice>}
 
       <form onSubmit={handleSubmit}>
         {/* Section 1: Company & Contact Information */}
@@ -160,40 +144,49 @@ export default function AddClientPage() {
             </div>
             <div>
               <h2 style={{ fontSize: '1.05rem', fontWeight: 600, color: 'var(--color-text-primary)', margin: 0 }}>
-                Company Information
+                Company details
               </h2>
               <p style={{ fontSize: 'var(--font-size-xs)', color: 'var(--color-text-muted)', margin: '2px 0 0 0' }}>
-                Primary client business entity and main administrative contact
+                The company and the main person we deal with there
               </p>
             </div>
           </div>
 
           <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-4)', width: '100%' }}>
             <Input
-              label="Company Name"
+              label="Company name"
               placeholder="e.g. Apex Roofing Pro"
               value={companyName}
               onChange={(e) => setCompanyName(e.target.value)}
+              maxLength={255}
               required
             />
             <Input
-              label="Primary Contact Full Name"
+              label="Contact name"
               placeholder="e.g. Michael Henderson"
+              autoComplete="off"
               value={contactName}
               onChange={(e) => setContactName(e.target.value)}
+              maxLength={255}
+              required
             />
             <Input
-              label="Primary Contact Email"
+              label="Contact email"
               type="email"
+              autoComplete="off"
+              maxLength={254}
               placeholder="e.g. michael@apexroofing.com"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               required
-              helperText="The invite link is emailed to this address when you create the client."
+              helperText="The invitation is emailed to this address when you add the client."
             />
             <Input
-              label="Business Phone Number"
-              placeholder="e.g. (555) 345-6789"
+              label="Business phone (optional)"
+              type="tel"
+              autoComplete="off"
+              maxLength={30}
+              placeholder="e.g. +1 555 234 5678"
               value={phone}
               onChange={(e) => setPhone(e.target.value)}
             />
@@ -212,20 +205,25 @@ export default function AddClientPage() {
             </div>
             <div>
               <h2 style={{ fontSize: '1.05rem', fontWeight: 600, color: 'var(--color-text-primary)', margin: 0 }}>
-                Customer Success Assignment
+                Customer Success Manager
               </h2>
               <p style={{ fontSize: 'var(--font-size-xs)', color: 'var(--color-text-muted)', margin: '2px 0 0 0' }}>
-                Assign an internal Motionz CSM to guide onboarding setup
+                The Motionz team member who will look after this client
               </p>
             </div>
           </div>
 
           <div style={{ width: '100%' }}>
+            {csmLoadError && (
+              <Notice onRetry={loadCsms} style={{ marginBottom: 'var(--space-3)' }}>
+                {csmLoadError} You can still add the client and assign a CSM later.
+              </Notice>
+            )}
             <Select
               label="Assigned CSM"
               value={csmUserId}
               onChange={(e) => setCsmUserId(e.target.value)}
-              helperText="CSM will receive setup update capabilities for this portal."
+              helperText="The CSM can update this client’s setup steps."
             >
               <option value="">Assign later</option>
               {csms.map((c) => (
@@ -248,16 +246,18 @@ export default function AddClientPage() {
             </div>
             <div>
               <h2 style={{ fontSize: '1.05rem', fontWeight: 600, color: 'var(--color-text-primary)', margin: 0 }}>
-                Portal Module Configuration
+                Portal sections
               </h2>
               <p style={{ fontSize: 'var(--font-size-xs)', color: 'var(--color-text-muted)', margin: '2px 0 0 0' }}>
-                Select modules to activate for this client portal
+                Choose which parts of the portal this client can see
               </p>
             </div>
           </div>
 
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(210px, 1fr))', gap: 'var(--space-3)', width: '100%' }}>
-            {Object.entries(features).map(([key, enabled]) => (
+            {PORTAL_MODULES.map(({ key, label }) => {
+              const enabled = features[key] !== false;
+              return (
               <label
                 key={key}
                 style={{
@@ -278,11 +278,12 @@ export default function AddClientPage() {
                   onChange={() => toggleFeature(key)}
                   style={{ accentColor: 'var(--color-primary)', width: '16px', height: '16px' }}
                 />
-                <span style={{ fontSize: 'var(--font-size-sm)', fontWeight: 500, color: enabled ? 'var(--color-text-primary)' : 'var(--color-text-muted)', textTransform: 'capitalize' }}>
-                  {key.replace(/_/g, ' ')}
+                <span style={{ fontSize: 'var(--font-size-sm)', fontWeight: 500, color: enabled ? 'var(--color-text-primary)' : 'var(--color-text-muted)' }}>
+                  {label}
                 </span>
               </label>
-            ))}
+              );
+            })}
           </div>
         </div>
 
@@ -297,44 +298,44 @@ export default function AddClientPage() {
           }}
         >
           {loading
-            ? 'Creating the portal, tracking sheet and invite. This takes about 15 seconds. Please keep this page open.'
-            : 'Creating a client takes about 15 seconds while the portal, tracking sheet and invite are set up.'}
+            ? 'Setting up the portal, tracking sheet and invitation. Please keep this page open.'
+            : 'Adding a client can take a little while, because the portal, tracking sheet and invitation are all set up together.'}
         </p>
         <div style={{ display: 'flex', gap: 'var(--space-3)', justifyContent: 'flex-end', marginBottom: 'var(--space-8)' }}>
-          <Link href="/admin/clients" style={{ textDecoration: 'none' }}>
-            <button type="button" className="ui-filter-clear-btn">
-              Cancel
-            </button>
-          </Link>
-          <Button
-            type="submit"
-            variant="primary"
-            disabled={loading}
-            style={{ padding: '10px 20px', fontWeight: 600, borderRadius: 'var(--radius-md)' }}
+          <Link
+            href="/admin/clients"
+            className={buttonClasses({ variant: 'secondary' })}
+            aria-disabled={loading || undefined}
+            style={loading ? { pointerEvents: 'none', opacity: 0.6 } : undefined}
           >
-            {loading ? 'Provisioning...' : 'Provision Client Portal'}
+            Cancel
+          </Link>
+          <Button type="submit" variant="primary" disabled={loading}>
+            {loading ? 'Adding client...' : 'Add client'}
           </Button>
         </div>
       </form>
 
-      {/* Success Modal with Magic Link */}
+      {/* Success: the one-time invitation link is shown here, so a stray click must not close it. */}
       <Modal
         isOpen={isSuccessModalOpen}
         onClose={() => router.push('/admin/clients')}
-        title="Client Portal Provisioned"
+        title="Client added"
+        dismissOnOverlay={false}
         footer={
           <div style={{ display: 'flex', gap: 'var(--space-2)', width: '100%', justifyContent: 'flex-end' }}>
             <Button
+              type="button"
               variant="outline"
-              onClick={() => {
-                if (magicLink) {
-                  navigator.clipboard.writeText(magicLink);
-                  setIsCopied(true);
-                  setTimeout(() => setIsCopied(false), 2000);
-                }
+              disabled={!magicLink}
+              onClick={async () => {
+                if (!magicLink) return;
+                const ok = await copyText(magicLink);
+                setCopyState(ok ? 'copied' : 'failed');
+                if (ok) setTimeout(() => setCopyState('idle'), 2500);
               }}
             >
-              {isCopied ? '✓ Link Copied!' : 'Copy Invitation Link'}
+              {copyState === 'copied' ? 'Copied' : 'Copy invitation link'}
             </Button>
             <Button
               variant="primary"
@@ -365,8 +366,8 @@ export default function AddClientPage() {
             }}
           >
             {emailDelivered
-              ? `Invite emailed to ${invitedEmail}`
-              : 'The invite email could not be sent. Copy this link and send it to the client yourself.'}
+              ? `Invitation emailed to ${invitedEmail}`
+              : 'The invitation email could not be sent. Copy the link below and send it to the client yourself.'}
           </div>
 
           {/* Tracking sheet */}
@@ -412,12 +413,15 @@ export default function AddClientPage() {
             }}
           >
             <span style={{ display: 'block', color: 'var(--color-text-muted)', marginBottom: '4px' }}>
-              Invitation link (single use, expires in 72 hours):
+              Invitation link (works once, expires in 72 hours):
             </span>
-            <span style={{ wordBreak: 'break-all', color: 'var(--color-primary-text)', fontFamily: 'var(--font-family-mono)' }}>
-              {magicLink}
+            <span style={{ wordBreak: 'break-all', color: 'var(--color-primary-text)', fontFamily: 'var(--font-family-mono)', userSelect: 'all' }}>
+              {magicLink || 'No link was returned. Open the client’s page and use Invite to create one.'}
             </span>
           </div>
+          {copyState === 'failed' && (
+            <Notice style={{ marginBottom: 'var(--space-3)' }}>Could not copy automatically. Select the link above and copy it by hand.</Notice>
+          )}
 
           <p style={{ fontSize: 'var(--font-size-xs)', color: 'var(--color-text-muted)', margin: 0 }}>
             {emailDelivered

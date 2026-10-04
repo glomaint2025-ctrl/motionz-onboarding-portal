@@ -2,7 +2,8 @@
 
 import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
-import { Button, Select, TableSkeleton, Pagination } from '@/components/ui';
+import { Select, TableSkeleton, Pagination, buttonClasses } from '@/components/ui';
+import { Notice, clientStatusLabel } from '@/components/admin/Notice';
 
 interface AssignedClient {
   id: string;
@@ -48,6 +49,7 @@ function getDisplayDomain(email: string, contact?: string): string {
 export default function CSMClientsPage() {
   const [clients, setClients] = useState<AssignedClient[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState('');
   const [searchQuery, setSearchQuery] = useState('');
   const [debouncedSearch, setDebouncedSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
@@ -68,8 +70,8 @@ export default function CSMClientsPage() {
     totalClients: 0,
     activeClients: 0,
     pendingSetup: 0,
-    archivedClients: 0,
-    newThisMonth: 0,
+    completedClients: 0,
+    avgProgress: 0,
   });
 
   // Debounce search input
@@ -84,6 +86,7 @@ export default function CSMClientsPage() {
   const fetchClients = async () => {
     try {
       setLoading(true);
+      setLoadError('');
       const params = new URLSearchParams({
         page: String(page),
         pageSize: String(pageSize),
@@ -92,14 +95,16 @@ export default function CSMClientsPage() {
       if (debouncedSearch.trim()) params.set('search', debouncedSearch.trim());
 
       const res = await fetch(`/api/csm/clients?${params.toString()}`);
-      const data = await res.json();
-      if (data.success && data.tenants) {
+      const data = await res.json().catch(() => ({}));
+      if (res.ok && data.success && data.tenants) {
         setClients(data.tenants);
         if (data.pagination) setPaginationMeta(data.pagination);
-        if (data.stats) setGlobalStats(data.stats);
+        if (data.stats) setGlobalStats((prev) => ({ ...prev, ...data.stats }));
+      } else {
+        setLoadError(data.error || 'Could not load your clients.');
       }
-    } catch (err) {
-      console.error('Failed to load clients:', err);
+    } catch {
+      setLoadError('Could not reach the server. Check your connection and try again.');
     } finally {
       setLoading(false);
     }
@@ -109,12 +114,11 @@ export default function CSMClientsPage() {
     fetchClients();
   }, [page, pageSize, debouncedSearch, statusFilter]);
 
-  const totalClients = globalStats.totalClients || clients.length;
-  const completedClients = clients.filter((c) => c.progress_percent === 100).length;
-  const inProgressClients = globalStats.pendingSetup || clients.filter((c) => c.progress_percent < 100).length;
-  const avgProgress = clients.length > 0
-    ? Math.round(clients.reduce((acc, c) => acc + (c.progress_percent || 0), 0) / clients.length)
-    : 0;
+  // All four numbers come from the server and cover every assigned client, not just this page.
+  const totalClients = globalStats.totalClients;
+  const completedClients = globalStats.completedClients;
+  const inProgressClients = globalStats.pendingSetup;
+  const avgProgress = globalStats.avgProgress;
 
   const displayClients = clients;
 
@@ -124,17 +128,17 @@ export default function CSMClientsPage() {
       <div className="ui-breadcrumb">
         <Link href="/csm">Home</Link>
         <span className="ui-breadcrumb-separator">&gt;</span>
-        <span className="ui-breadcrumb-current">Assigned Clients</span>
+        <span className="ui-breadcrumb-current">My Clients</span>
       </div>
 
       {/* 2. Page Header */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 'var(--space-6)', flexWrap: 'wrap', gap: 'var(--space-4)' }}>
         <div>
           <h1 style={{ fontSize: '1.75rem', fontWeight: 700, color: 'var(--color-text-primary)', marginBottom: 'var(--space-1)', letterSpacing: '-0.02em' }}>
-            Assigned Client Portals
+            My Clients
           </h1>
           <p style={{ color: 'var(--color-text-secondary)', fontSize: 'var(--font-size-sm)', margin: 0 }}>
-            Review active client onboarding setups, inspect milestone statuses, and update operational progress.
+            The clients assigned to you. Open one to update its setup steps.
           </p>
         </div>
       </div>
@@ -153,9 +157,9 @@ export default function CSMClientsPage() {
               </svg>
             </div>
             <div className="ui-stat-info">
-              <span className="ui-stat-label">Assigned Clients</span>
+              <span className="ui-stat-label">Assigned clients</span>
               <span className="ui-stat-value">{totalClients}</span>
-              <span className="ui-stat-meta-text">Active portfolios</span>
+              <span className="ui-stat-meta-text">Assigned to you</span>
             </div>
           </div>
         </div>
@@ -164,12 +168,12 @@ export default function CSMClientsPage() {
         <div className="ui-stat-card">
           <div className="ui-stat-card-body">
             <div className="ui-stat-icon-wrapper ui-stat-icon-emerald">
-              <span style={{ width: '12px', height: '12px', borderRadius: '50%', backgroundColor: '#10b981', display: 'inline-block', boxShadow: '0 0 8px rgba(16, 185, 129, 0.8)' }}></span>
+              <span style={{ width: '12px', height: '12px', borderRadius: '50%', backgroundColor: 'var(--color-status-done-solid)', display: 'inline-block' }}></span>
             </div>
             <div className="ui-stat-info">
-              <span className="ui-stat-label">Avg Setup Progress</span>
+              <span className="ui-stat-label">Average setup progress</span>
               <span className="ui-stat-value">{avgProgress}%</span>
-              <span className="ui-stat-meta-text">Portfolio average</span>
+              <span className="ui-stat-meta-text">Across all your clients</span>
             </div>
           </div>
           <div className="ui-stat-gauge">
@@ -198,9 +202,9 @@ export default function CSMClientsPage() {
               </svg>
             </div>
             <div className="ui-stat-info">
-              <span className="ui-stat-label">Active Onboarding</span>
+              <span className="ui-stat-label">In setup</span>
               <span className="ui-stat-value">{inProgressClients}</span>
-              <span className="ui-stat-meta-text">Awaiting completion</span>
+              <span className="ui-stat-meta-text">Setup not finished yet</span>
             </div>
           </div>
         </div>
@@ -215,9 +219,9 @@ export default function CSMClientsPage() {
               </svg>
             </div>
             <div className="ui-stat-info">
-              <span className="ui-stat-label">Fully Launched</span>
+              <span className="ui-stat-label">Setup complete</span>
               <span className="ui-stat-value">{completedClients}</span>
-              <span className="ui-stat-meta-text" style={{ color: '#34d399' }}>100% complete</span>
+              <span className="ui-stat-meta-text" style={{ color: 'var(--color-status-done-text)' }}>All steps done</span>
             </div>
           </div>
         </div>
@@ -227,7 +231,7 @@ export default function CSMClientsPage() {
       <div className="ui-filter-toolbar">
         <div className="ui-filter-col-search">
           <div className="ui-filter-search-box">
-            <label className="ui-label">Search Assigned Clients</label>
+            <label className="ui-label" htmlFor="csm-client-search">Search my clients</label>
             <div style={{ position: 'relative' }}>
               <span className="ui-filter-search-icon">
                 <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -236,7 +240,9 @@ export default function CSMClientsPage() {
                 </svg>
               </span>
               <input
-                type="text"
+                id="csm-client-search"
+                type="search"
+                maxLength={120}
                 className="ui-filter-search-input"
                 placeholder="Search by company name, email or contact..."
                 value={searchQuery}
@@ -248,17 +254,19 @@ export default function CSMClientsPage() {
 
         <div className="ui-filter-col-select">
           <Select
-            label="Filter by Status"
+            label="Show"
             value={statusFilter}
             onChange={(e) => {
               setStatusFilter(e.target.value);
               setPage(1);
             }}
           >
-            <option value="all">All</option>
-            <option value="active">Active</option>
-            <option value="onboarding">Onboarding</option>
-            <option value="completed">Completed</option>
+            <option value="all">All clients</option>
+            <option value="in_progress">In setup</option>
+            <option value="completed">Setup complete</option>
+            <option value="active">Status: Active</option>
+            <option value="onboarding">Status: Onboarding</option>
+            <option value="suspended">Status: Suspended</option>
           </Select>
         </div>
 
@@ -283,6 +291,8 @@ export default function CSMClientsPage() {
       {/* 5. Modern Data Table */}
       {loading ? (
         <TableSkeleton rows={5} columns={5} />
+      ) : loadError ? (
+        <Notice onRetry={fetchClients}>{loadError}</Notice>
       ) : (
         <div className="ui-modern-table-card">
           <div style={{ width: '100%', overflowX: 'auto' }}>
@@ -300,7 +310,9 @@ export default function CSMClientsPage() {
                 {displayClients.length === 0 ? (
                   <tr>
                     <td colSpan={5} style={{ textAlign: 'center', padding: '48px 16px', color: 'var(--color-text-muted)' }}>
-                      No matching assigned client portals found.
+                      {totalClients === 0
+                        ? 'No clients are assigned to you yet. Ask a Motionz admin to assign clients to you.'
+                        : 'No clients match your search or filter.'}
                     </td>
                   </tr>
                 ) : (
@@ -344,9 +356,9 @@ export default function CSMClientsPage() {
                               Suspended
                             </span>
                           ) : (
-                            <span className="ui-pill-status ui-pill-status-onboarding">
+                            <span className={`ui-pill-status ${client.status === 'onboarding' ? 'ui-pill-status-onboarding' : 'ui-pill-status-archived'}`}>
                               <span className="ui-pill-status-dot" />
-                              {client.status}
+                              {clientStatusLabel(client.status)}
                             </span>
                           )}
                         </td>
@@ -361,7 +373,9 @@ export default function CSMClientsPage() {
                               />
                             </div>
                             <span className="ui-progress-pill-label">
-                              {client.completed_steps || 0}/{client.total_steps || 5} ({client.progress_percent}%)
+                              {client.total_steps > 0
+                                ? `${client.completed_steps || 0}/${client.total_steps} (${client.progress_percent}%)`
+                                : 'No setup steps yet'}
                             </span>
                           </div>
                         </td>
@@ -369,10 +383,8 @@ export default function CSMClientsPage() {
                         {/* Actions */}
                         <td>
                           <div className="ui-actions-cell" style={{ justifyContent: 'flex-end' }}>
-                            <Link href={`/csm/clients/${client.id}/setup`} style={{ textDecoration: 'none' }}>
-                              <Button variant="primary" size="sm" style={{ padding: '6px 14px' }}>
-                                Manage Setup
-                              </Button>
+                            <Link href={`/csm/clients/${client.id}/setup`} className={buttonClasses({ variant: 'primary', size: 'sm' })}>
+                              Update setup
                             </Link>
                             <Link
                               href={`/portal/${client.id}`}
@@ -385,7 +397,7 @@ export default function CSMClientsPage() {
                                 <polyline points="15 3 21 3 21 9" />
                                 <line x1="10" y1="14" x2="21" y2="3" />
                               </svg>
-                              Client View
+                              Open portal
                             </Link>
                           </div>
                         </td>

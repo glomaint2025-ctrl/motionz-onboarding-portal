@@ -2,7 +2,9 @@
 
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { Button, Card, Input, Pagination, Select, Skeleton, StatusBadge, StatusVariant } from '@/components/ui';
-import { auditActionLabel, detailChips, securityEventLabel } from '@/lib/utils/log-labels';
+import { auditActionLabel, detailChips, roleLabel, securityEventLabel } from '@/lib/utils/log-labels';
+import { formatDate, formatLongDate } from '@/lib/utils/format';
+import { Notice } from '@/components/admin/Notice';
 
 type Kind = 'security' | 'audit';
 type Preset = 'today' | 'yesterday' | 'week' | '7d' | '30d' | 'custom';
@@ -68,10 +70,9 @@ function resolveRange(preset: Preset, customFrom: string, customTo: string): { f
   }
 }
 
-/** "Saturday, 3 Oct 2026" — never a numeric month, so it cannot be misread. */
+/** "Saturday, 3 Oct 2026" — never a numeric month, so it cannot be misread. Uses the shared portal date style. */
 function formatDay(date: Date, withWeekday = true): string {
-  const rest = `${date.getDate()} ${date.toLocaleDateString('en-US', { month: 'short' })} ${date.getFullYear()}`;
-  return withWeekday ? `${date.toLocaleDateString('en-US', { weekday: 'long' })}, ${rest}` : rest;
+  return withWeekday ? formatLongDate(date) : formatDate(date);
 }
 
 const formatTime = (date: Date) => date.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
@@ -126,7 +127,7 @@ function LogEntry({ kind, row }: { kind: Kind; row: LogRow }) {
         {kind === 'audit' && (
           <div style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-secondary)', marginTop: '2px', wordBreak: 'break-word' }}>
             By {row.actor_email || 'unknown'}
-            {row.actor_role ? ` (${row.actor_role})` : ''}
+            {row.actor_role ? ` (${roleLabel(row.actor_role)})` : ''}
           </div>
         )}
 
@@ -245,7 +246,7 @@ export function LogExplorer({ kind, title, description }: { kind: Kind; title: s
       setTotalPages(data.pagination?.totalPages ?? 1);
       setHighSeverity(kind === 'security' ? data.summary?.highSeverity ?? 0 : null);
     } catch {
-      setError('Network error while loading the log.');
+      setError('Could not reach the server. Check your connection and try again.');
       setRows([]);
     } finally {
       setLoading(false);
@@ -383,9 +384,7 @@ export function LogExplorer({ kind, title, description }: { kind: Kind; title: s
       </p>
 
       {error && (
-        <Card style={{ marginBottom: 'var(--space-4)' }}>
-          <p style={{ margin: 0, color: 'var(--color-status-danger-text)' }}>{error}</p>
-        </Card>
+        <Notice style={{ marginBottom: 'var(--space-4)' }}>{error}</Notice>
       )}
 
       {loading ? (

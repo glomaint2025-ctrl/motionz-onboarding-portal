@@ -2,6 +2,8 @@
 
 import React, { useEffect, useState } from 'react';
 import { Card, CardHeader, Button, StatusBadge, Skeleton, Select } from '@/components/ui';
+import { Notice } from '@/components/admin/Notice';
+import { formatDateTime } from '@/lib/utils/format';
 
 interface Submission {
   id: string;
@@ -32,6 +34,10 @@ export default function AdminSettingsPage() {
   const [clients, setClients] = useState<ClientOption[]>([]);
   const [linkChoice, setLinkChoice] = useState<Record<string, string>>({});
   const [saving, setSaving] = useState(false);
+  const [loadError, setLoadError] = useState('');
+  const [clientsError, setClientsError] = useState('');
+  const [linkingId, setLinkingId] = useState<string | null>(null);
+  const [linkError, setLinkError] = useState('');
   const [message, setMessage] = useState<{ type: 'ok' | 'error'; text: string } | null>(null);
 
   const [loginCodeMode, setLoginCodeMode] = useState<LoginCodeMode>('off');
@@ -41,14 +47,16 @@ export default function AdminSettingsPage() {
 
   const load = async () => {
     setLoading(true);
+    setLoadError('');
+    setClientsError('');
     try {
       const [settingsRes, clientsRes, securityRes] = await Promise.all([
         fetch('/api/admin/settings/notifications'),
         fetch('/api/admin/clients'),
         fetch('/api/admin/settings/security'),
       ]);
-      const settings = await settingsRes.json();
-      const clientData = await clientsRes.json();
+      const settings = await settingsRes.json().catch(() => ({}));
+      const clientData = await clientsRes.json().catch(() => ({}));
       const security = await securityRes.json().catch(() => null);
       if (security?.success) {
         setLoginCodeMode(security.security.staff_login_code);
@@ -61,12 +69,21 @@ export default function AdminSettingsPage() {
         setNotifyCsm(settings.notifications.notify_assigned_csm !== false);
         setStatus(settings.status || {});
         setUnmatched(settings.unmatchedSubmissions || []);
+      } else {
+        setLoadError(settings.error || 'Could not load the settings.');
       }
       if (clientData.success) {
-        setClients((clientData.tenants || []).map((t: any) => ({ id: t.id, name: t.name })));
+        // Archived clients cannot receive a submission, so they are left out of "Choose client".
+        setClients(
+          (clientData.tenants || [])
+            .filter((t: any) => !t.is_archived && !t.deleted_at && t.status !== 'cancelled')
+            .map((t: any) => ({ id: t.id, name: t.name }))
+        );
+      } else {
+        setClientsError(clientData.error || 'Could not load the client list.');
       }
     } catch {
-      setMessage({ type: 'error', text: 'Could not load settings.' });
+      setLoadError('Could not reach the server. Check your connection and try again.');
     } finally {
       setLoading(false);
     }
@@ -85,15 +102,15 @@ export default function AdminSettingsPage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ onboarding_form_recipients: recipients, notify_assigned_csm: notifyCsm }),
       });
-      const data = await res.json();
-      if (data.success) {
-        setRecipients(data.notifications.onboarding_form_recipients.join(', '));
+      const data = await res.json().catch(() => ({}));
+      if (res.ok && data.success) {
+        setRecipients((data.notifications?.onboarding_form_recipients || []).join(', '));
         setMessage({ type: 'ok', text: 'Notification settings saved.' });
       } else {
-        setMessage({ type: 'error', text: data.error || 'Could not save settings.' });
+        setMessage({ type: 'error', text: data.error || 'The settings were not saved. Please try again.' });
       }
     } catch {
-      setMessage({ type: 'error', text: 'Network error while saving.' });
+      setMessage({ type: 'error', text: 'Could not reach the server. Nothing was saved.' });
     } finally {
       setSaving(false);
     }
@@ -125,14 +142,23 @@ export default function AdminSettingsPage() {
 
   const linkSubmission = async (submissionId: string) => {
     const tenantId = linkChoice[submissionId];
-    const res = await fetch('/api/admin/settings/notifications', {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ action: 'link_submission', submissionId, tenantId }),
-    });
-    const data = await res.json();
-    if (data.success) setUnmatched((list) => list.filter((s) => s.id !== submissionId));
-    else setMessage({ type: 'error', text: data.error || 'Could not link the submission.' });
+    if (!tenantId || linkingId) return;
+    setLinkingId(submissionId);
+    setLinkError('');
+    try {
+      const res = await fetch('/api/admin/settings/notifications', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'link_submission', submissionId, tenantId }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (res.ok && data.success) setUnmatched((list) => list.filter((s) => s.id !== submissionId));
+      else setLinkError(data.error || 'Could not link that form to the client. Please try again.');
+    } catch {
+      setLinkError('Could not reach the server. The form was not linked.');
+    } finally {
+      setLinkingId(null);
+    }
   };
 
   // Resolved after mount so server and client render the same markup.
@@ -140,8 +166,8 @@ export default function AdminSettingsPage() {
   useEffect(() => setWebhookUrl(`${window.location.origin}/api/webhooks/ghl`), []);
 
   const statusRows = [
-    { label: 'Email delivery', ok: status.email, detail: status.emailSender ? `Sending as ${status.emailSender}` : 'No email provider key set' },
-    { label: 'Client tracking sheets', ok: status.trackingSheets, detail: 'Google Apps Script sheet creator' },
+    { label: 'Email delivery', ok: status.email, detail: status.emailSender ? `Sending as ${status.emailSender}` : 'Email sending is not set up yet' },
+    { label: 'Client tracking sheets', ok: status.trackingSheets, detail: 'Creates a Google Sheet for each new client' },
     { label: 'GoHighLevel webhooks', ok: status.ghlWebhook, detail: webhookUrl },
   ];
 
@@ -153,18 +179,14 @@ export default function AdminSettingsPage() {
       </div>
 
       {message && (
-        <div
-          style={{
-            padding: 'var(--space-3)',
-            borderRadius: 'var(--radius-md)',
-            marginBottom: 'var(--space-4)',
-            fontSize: 'var(--font-size-sm)',
-            backgroundColor: message.type === 'ok' ? 'var(--color-status-done-bg)' : 'var(--color-status-danger-bg)',
-            color: message.type === 'ok' ? 'var(--color-status-done-text)' : 'var(--color-status-danger-text)',
-          }}
-        >
+        <Notice tone={message.type === 'ok' ? 'success' : 'error'} style={{ marginBottom: 'var(--space-4)' }}>
           {message.text}
-        </div>
+        </Notice>
+      )}
+      {loadError && (
+        <Notice onRetry={load} style={{ marginBottom: 'var(--space-4)' }}>
+          {loadError}
+        </Notice>
       )}
 
       <Card style={{ marginBottom: 'var(--space-6)' }}>
@@ -174,12 +196,16 @@ export default function AdminSettingsPage() {
         />
         {loading ? (
           <Skeleton height="90px" />
+        ) : loadError ? (
+          <p style={{ color: 'var(--color-text-secondary)', margin: 0 }}>These settings could not be loaded.</p>
         ) : (
           <>
-            <label style={{ display: 'block', fontSize: 'var(--font-size-sm)', fontWeight: 'var(--font-weight-medium)', marginBottom: 'var(--space-1)' }}>
-              Email addresses (comma separated)
+            <label htmlFor="onboarding-recipients" style={{ display: 'block', fontSize: 'var(--font-size-sm)', fontWeight: 'var(--font-weight-medium)', marginBottom: 'var(--space-1)' }}>
+              Email addresses (separate with commas)
             </label>
             <textarea
+              id="onboarding-recipients"
+              maxLength={2000}
               value={recipients}
               onChange={(e) => setRecipients(e.target.value)}
               rows={2}
@@ -287,11 +313,19 @@ export default function AdminSettingsPage() {
 
       <Card style={{ marginBottom: 'var(--space-6)' }}>
         <CardHeader
-          title="Unmatched onboarding submissions"
-          subtitle="Forms submitted with an email that does not belong to any portal client yet. Link each one to the right client."
+          title="Onboarding forms without a client"
+          subtitle="Forms sent in with an email address that does not match any client yet. Link each one to the right client."
         />
+        {linkError && <Notice style={{ marginBottom: 'var(--space-3)' }}>{linkError}</Notice>}
+        {!loading && !loadError && clientsError && unmatched.length > 0 && (
+          <Notice onRetry={load} style={{ marginBottom: 'var(--space-3)' }}>
+            {clientsError}
+          </Notice>
+        )}
         {loading ? (
           <Skeleton height="60px" />
+        ) : loadError ? (
+          <p style={{ color: 'var(--color-text-secondary)', margin: 0 }}>This list could not be loaded.</p>
         ) : unmatched.length === 0 ? (
           <p style={{ color: 'var(--color-text-secondary)', margin: 0 }}>Nothing to review.</p>
         ) : (
@@ -315,7 +349,7 @@ export default function AdminSettingsPage() {
                     {s.answers['DBA Business Name'] || s.answers['full_name'] || s.submitter_email || 'Unknown'}
                   </div>
                   <div style={{ fontSize: 'var(--font-size-xs)', color: 'var(--color-text-muted)' }}>
-                    {s.submitter_email || 'No email'} · {new Date(s.submitted_at).toLocaleString()}
+                    {s.submitter_email || 'No email'} · {formatDateTime(s.submitted_at) || 'Date unknown'}
                   </div>
                 </div>
                 <div style={{ display: 'flex', gap: 'var(--space-2)', alignItems: 'center' }}>
@@ -330,8 +364,8 @@ export default function AdminSettingsPage() {
                       </option>
                     ))}
                   </Select>
-                  <Button variant="secondary" size="sm" onClick={() => linkSubmission(s.id)} disabled={!linkChoice[s.id]}>
-                    Link
+                  <Button type="button" variant="secondary" size="sm" onClick={() => linkSubmission(s.id)} disabled={!linkChoice[s.id] || linkingId !== null}>
+                    {linkingId === s.id ? 'Linking...' : 'Link'}
                   </Button>
                 </div>
               </div>
@@ -341,7 +375,7 @@ export default function AdminSettingsPage() {
       </Card>
 
       <Card>
-        <CardHeader title="Connected services" subtitle="Configured through Vercel environment variables." />
+        <CardHeader title="Connected services" subtitle="These are set up by the Motionz technical team. Ask them if one shows as not set up." />
         <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-3)' }}>
           {statusRows.map((row) => (
             <div key={row.label} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 'var(--space-3)', flexWrap: 'wrap' }}>
@@ -349,7 +383,7 @@ export default function AdminSettingsPage() {
                 <div style={{ fontWeight: 'var(--font-weight-medium)' }}>{row.label}</div>
                 <div style={{ fontSize: 'var(--font-size-xs)', color: 'var(--color-text-muted)', wordBreak: 'break-all' }}>{row.detail}</div>
               </div>
-              {!loading && <StatusBadge status={row.ok ? 'Connected' : 'Not configured'} variant={row.ok ? 'done' : 'warning'} />}
+              {!loading && <StatusBadge status={row.ok ? 'Connected' : 'Not set up'} variant={row.ok ? 'done' : 'warning'} />}
             </div>
           ))}
         </div>

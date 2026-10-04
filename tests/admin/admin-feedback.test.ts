@@ -212,7 +212,8 @@ async function run() {
 
   const dash = await (await getDashboard(req('/api/admin/dashboard', 'GET', undefined, adminCookie))).json();
   assert.deepStrictEqual(dash.ghl, ghl.counts, 'dashboard card and GHL page agree');
-  assert.strictEqual(dash.ghlNotConnected.length, ghl.counts.total - ghl.counts.connected);
+  assert.strictEqual(dash.ghlNotConnected, undefined, 'the not-connected list lives on the GHL Connect page only');
+  assert.strictEqual(dash.revenue, undefined, 'no placeholder revenue tile data');
   console.log(' PASS: /api/admin/ghl lists connected / not connected clients and matches the dashboard counts.');
 
   // ---------------------------------------------------------------- new client invite status

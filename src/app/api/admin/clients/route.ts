@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { validatePhone } from '@/lib/validation';
+import { validateEmail, validatePhone, validateText } from '@/lib/validation';
 import { isStaffEmail } from '@/lib/auth/staff';
 import {
   tenantRepository,
@@ -58,7 +58,9 @@ export async function GET(request: Request) {
     const globalStats = {
       totalClients: enrichedTenants.length,
       activeClients: enrichedTenants.filter((c) => !c.is_archived && c.status === 'active').length,
-      pendingSetup: enrichedTenants.filter((c) => !c.is_archived && (c.status === 'onboarding' || c.progress_percent < 100)).length,
+      // "Onboarding" and "Active" never overlap: each client has exactly one status.
+      pendingSetup: enrichedTenants.filter((c) => !c.is_archived && c.status === 'onboarding').length,
+      suspendedClients: enrichedTenants.filter((c) => !c.is_archived && c.status === 'suspended').length,
       archivedClients: enrichedTenants.filter((c) => c.is_archived).length,
       newThisMonth: enrichedTenants.filter((c) => {
         const d = new Date(c.created_at);
@@ -156,21 +158,36 @@ export async function POST(request: Request) {
       feature_overrides,
     } = body;
 
-    if (!name || !primary_email) {
-      return NextResponse.json(
-        { error: 'Company name and primary client email are required.' },
-        { status: 400 }
-      );
-    }
-
+    let validName: string;
+    let validContact: string | undefined;
+    let normalizedEmail: string;
     let validPhone: string | undefined;
     try {
+      validName = validateText(name, 'Company name', { required: true, max: 255 })!;
+      // The Add client form requires a contact name; other callers may leave it out, but it must be text.
+      if (primary_contact_name != null && typeof primary_contact_name !== 'string') {
+        return NextResponse.json({ error: 'Contact name must be text.' }, { status: 400 });
+      }
+      validContact = validateText(primary_contact_name, 'Contact name', { max: 255 });
+      if (typeof primary_email !== 'string' || !primary_email.trim()) {
+        return NextResponse.json({ error: 'The client’s email address is required.' }, { status: 400 });
+      }
+      if (primary_email.trim().length > 254) {
+        return NextResponse.json({ error: 'That email address is too long.' }, { status: 400 });
+      }
+      try {
+        normalizedEmail = validateEmail(primary_email);
+      } catch {
+        return NextResponse.json({ error: 'Enter a valid email address, for example name@company.com.' }, { status: 400 });
+      }
       validPhone = validatePhone(phone);
     } catch (e: any) {
       return NextResponse.json({ error: e.message }, { status: 400 });
     }
+    if (slug !== undefined && slug !== null && typeof slug !== 'string') {
+      return NextResponse.json({ error: 'The client short name must be text.' }, { status: 400 });
+    }
 
-    const normalizedEmail = primary_email.trim().toLowerCase();
     if (isStaffEmail(normalizedEmail)) {
       return NextResponse.json(
         { error: '@motionz.ai addresses are for Motionz staff only. Use the client’s own email.' },
@@ -193,13 +210,13 @@ export async function POST(request: Request) {
       );
     }
 
-    const generatedSlug = await tenantRepository.generateUniqueSlug(slug || name);
+    const generatedSlug = await tenantRepository.generateUniqueSlug(slug || validName);
 
     const { tenant: newTenant } = await tenantService.provisionClient({
-      name,
+      name: validName,
       slug: generatedSlug,
       primary_email: normalizedEmail,
-      primary_contact_name,
+      primary_contact_name: validContact,
       phone: validPhone,
       csm_user_id,
       template_id,
@@ -237,17 +254,20 @@ export async function POST(request: Request) {
       return handleAuthError(err);
     }
 
-    let message = err.message || 'Failed to create client.';
-    if (message.includes('23505') || message.toLowerCase().includes('email')) {
-      message = 'An account with this email already exists.';
-    } else if (message.includes('tenants_slug_key') || message.includes('slug')) {
-      message = 'A client with this name or identifier already exists.';
-    } else if (err.name === 'AppError' || err.statusCode === 400) {
-      message = err.message;
+    // Only a real "already exists" database error is reported as a duplicate;
+    // any other failure keeps its own message.
+    const raw = String(err.message || '');
+    const isUniqueViolation = err.code === '23505' || raw.includes('23505') || /duplicate key|unique constraint/i.test(raw);
+    if (isUniqueViolation) {
+      const isSlug = /slug/i.test(raw);
+      return NextResponse.json(
+        { error: isSlug ? 'A client with this name already exists.' : 'An account with this email already exists.' },
+        { status: 400 }
+      );
     }
 
     return NextResponse.json(
-      { error: message },
+      { error: raw || 'Could not add the client. Please try again.' },
       { status: err.statusCode || (err.name === 'AppError' ? 400 : 500) }
     );
   }
