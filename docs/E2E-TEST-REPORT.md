@@ -36,12 +36,24 @@ Every main flow works. The test found 16 issues; all are fixed and the fixed spo
 | 24 | Forgot / reset password | Unknown email gives the same answer; bad link refused; valid link works once | Pass |
 | 25 | Phone size (375px) | Bottom tab bar, no sideways scrolling, tables become cards | Pass |
 
-## Not tested in the browser
+## Second pass (same day): staff email flows, read from the tester's Gmail
 
-- **Staff emailed sign-in code.** It would email `csm@motionz.ai`, which I cannot read. Covered by automated tests; the setting is Off.
-- **Real GoHighLevel traffic.** Leads, the CSM call and the onboarding form were simulated locally. GHL cannot reach `localhost`, so the live path needs staging.
-- **Adding a new staff member.** Only the refusal path was run, to avoid emailing a made-up `@motionz.ai` address.
-- **Submitting the real GHL forms** (would write into the client's GHL).
+A local-testing-only setting (`EMAIL_TEST_REDIRECT_TO`, ignored in production) sent every email to one Gmail inbox so the `@motionz.ai` flows could be checked.
+
+| Flow | Result |
+|---|---|
+| All emails from the first pass arrived (2 invitations, password reset, onboarding-form notifications) | Pass |
+| Staff emailed sign-in code: code step shown, wrong code refused ("4 tries left"), emailed code signs in | Pass |
+| Add staff member: welcome email arrives, link sets the password, new CSM signs in and sees 0 clients | Pass |
+| New CSM cannot open another CSM's client (setup, data, leads all 403) | Pass |
+| Disable staff member: confirmation dialog, then sign-in refused | Pass after fix (was a browser pop-up; now the app's dialog) |
+
+Also fixed: invitation email wording ("You have been invited you to…").
+
+## Still not tested
+
+- **Real GoHighLevel traffic.** GHL cannot reach `localhost`; this needs the staging deploy and a test sub-account (the agency has 7 real client sub-accounts and no test one).
+- **Submitting the real GHL forms** (would write into a real sub-account until a test one exists).
 
 ## Issues found and fixed
 
