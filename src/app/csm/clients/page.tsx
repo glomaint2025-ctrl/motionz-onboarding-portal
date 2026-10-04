@@ -370,7 +370,7 @@ export default function CSMClientsPage() {
                         <td>
                           <div className="ui-actions-cell" style={{ justifyContent: 'flex-end' }}>
                             <Link href={`/csm/clients/${client.id}/setup`} style={{ textDecoration: 'none' }}>
-                              <Button variant="primary" size="sm" style={{ backgroundColor: '#2563eb', padding: '6px 14px' }}>
+                              <Button variant="primary" size="sm" style={{ padding: '6px 14px' }}>
                                 Manage Setup
                               </Button>
                             </Link>

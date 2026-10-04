@@ -937,9 +937,9 @@ export default function ClientDetailPage() {
                         <span
                           style={{
                             fontSize: 'var(--font-size-xs)',
-                            color: isMainClient ? '#38bdf8' : 'var(--color-text-muted)',
-                            backgroundColor: isMainClient ? 'rgba(56, 189, 248, 0.1)' : 'rgba(255, 255, 255, 0.04)',
-                            border: isMainClient ? '1px solid rgba(56, 189, 248, 0.2)' : '1px solid rgba(255, 255, 255, 0.06)',
+                            color: isMainClient ? 'var(--color-primary-text)' : 'var(--color-text-muted)',
+                            backgroundColor: isMainClient ? 'var(--color-primary-soft)' : 'rgba(255, 255, 255, 0.04)',
+                            border: isMainClient ? '1px solid var(--color-primary-border)' : '1px solid rgba(255, 255, 255, 0.06)',
                             padding: '1px 8px',
                             borderRadius: '4px',
                             fontWeight: isMainClient ? 600 : 500,
@@ -1838,7 +1838,7 @@ export default function ClientDetailPage() {
                       style={{
                         background: 'none',
                         border: 'none',
-                        color: '#38bdf8',
+                        color: 'var(--color-primary-text)',
                         fontSize: '11px',
                         cursor: 'pointer',
                         padding: 0,

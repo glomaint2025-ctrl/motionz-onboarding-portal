@@ -213,7 +213,7 @@ export default function TemplatesPage() {
           </p>
         </div>
         <Link href="/admin/clients/new" style={{ textDecoration: 'none' }}>
-          <Button variant="primary" style={{ display: 'inline-flex', alignItems: 'center', gap: '8px', backgroundColor: '#2563eb', padding: '9px 18px', fontWeight: 600, borderRadius: 'var(--radius-md)' }}>
+          <Button variant="primary" style={{ display: 'inline-flex', alignItems: 'center', gap: '8px', padding: '9px 18px', fontWeight: 600, borderRadius: 'var(--radius-md)' }}>
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
               <line x1="12" y1="5" x2="12" y2="19" />
               <line x1="5" y1="12" x2="19" y2="12" />
@@ -261,7 +261,7 @@ export default function TemplatesPage() {
                       {template.title}
                     </h2>
                     <span style={{ fontSize: 'var(--font-size-xs)', color: 'var(--color-text-muted)' }}>
-                      Slug: <code style={{ color: '#38bdf8' }}>{template.slug}</code>
+                      Slug: <code style={{ color: 'var(--color-primary-text)' }}>{template.slug}</code>
                       {template.updated_at ? ` · Last updated ${new Date(template.updated_at).toLocaleDateString()}` : ''}
                     </span>
                   </div>
@@ -308,7 +308,7 @@ export default function TemplatesPage() {
                         flexDirection: 'column',
                         alignItems: 'flex-start',
                         padding: '20px 24px',
-                        borderLeft: '4px solid #3b82f6',
+                        borderLeft: '4px solid var(--color-primary)',
                       }}
                     >
                       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', width: '100%', marginBottom: 'var(--space-3)', flexWrap: 'wrap', gap: 'var(--space-2)' }}>
@@ -320,8 +320,8 @@ export default function TemplatesPage() {
                               letterSpacing: '0.05em',
                               padding: '3px 8px',
                               borderRadius: 'var(--radius-sm)',
-                              backgroundColor: 'rgba(59, 130, 246, 0.15)',
-                              color: '#38bdf8',
+                              backgroundColor: 'var(--color-primary-soft)',
+                              color: 'var(--color-primary-text)',
                             }}
                           >
                             STEP {idx + 1}
@@ -441,7 +441,7 @@ export default function TemplatesPage() {
                     </div>
                     <div style={{ marginTop: 'var(--space-4)', paddingTop: 'var(--space-2)', borderTop: '1px solid rgba(255, 255, 255, 0.06)', width: '100%' }}>
                       <span style={{ fontSize: '0.7rem', color: 'var(--color-text-muted)' }}>
-                        Variables: <code style={{ color: '#38bdf8' }}>&#123;&#123;client_name&#125;&#125;</code>, <code style={{ color: '#38bdf8' }}>&#123;&#123;company_name&#125;&#125;</code>
+                        Variables: <code style={{ color: 'var(--color-primary-text)' }}>&#123;&#123;client_name&#125;&#125;</code>, <code style={{ color: 'var(--color-primary-text)' }}>&#123;&#123;company_name&#125;&#125;</code>
                       </span>
                     </div>
                   </div>

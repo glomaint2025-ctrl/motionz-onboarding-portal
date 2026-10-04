@@ -32,6 +32,7 @@ export function getNavGroups(
           { label: 'Dashboard', href: '/admin', icon: 'dashboard' },
           { label: 'Clients', href: '/admin/clients', icon: 'clients' },
           { label: 'Staff', href: '/admin/staff', icon: 'team' },
+          { label: 'GHL connect', href: '/admin/ghl', icon: 'settings' },
         ],
       },
       {

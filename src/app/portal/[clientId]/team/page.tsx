@@ -676,7 +676,7 @@ export default function TeamManagementPage() {
                     style={{
                       background: 'none',
                       border: 'none',
-                      color: '#38bdf8',
+                      color: 'var(--color-primary-text)',
                       fontSize: '11px',
                       cursor: 'pointer',
                       padding: 0,
