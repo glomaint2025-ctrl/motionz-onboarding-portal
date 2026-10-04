@@ -20,7 +20,7 @@ if (typeof process.loadEnvFile === 'function') {
   } catch {}
 }
 // Tests must never send real email or reach a real database.
-for (const key of ['RESEND_API_KEY', 'BREVO_API_KEY', 'GOOGLE_SHEETS_SCRIPT_URL', 'GHL_WEBHOOK_SECRET']) delete process.env[key];
+for (const key of ['RESEND_API_KEY', 'BREVO_API_KEY', 'GOOGLE_SHEETS_SCRIPT_URL', 'GHL_WEBHOOK_SECRET', 'EMAIL_TEST_REDIRECT_TO']) delete process.env[key];
 
 const BASE_URL = process.env.NEXTAUTH_URL || process.env.APP_URL || process.env.NEXT_PUBLIC_APP_URL;
 if (!BASE_URL) {
