@@ -2,15 +2,49 @@
 
 import React, { useState, useEffect } from 'react';
 import { useParams } from 'next/navigation';
-import { Card, CardHeader, Button, StatusBadge, Skeleton } from '@/components/ui';
+import { Card, CardHeader, StatusBadge, Skeleton } from '@/components/ui';
+import { buttonClasses } from '@/components/ui/Button';
 
-const TRACKED_METRICS = ['Leads', 'Replies', 'Appointments booked', 'Jobs won', 'Revenue', 'Your targets and projections'];
+interface SheetLinks {
+  /** Normal Google Sheets URL, opened in a new tab. */
+  openUrl: string;
+  /** Minimal-chrome URL for the embedded frame; null when the sheet id is unknown. */
+  embedUrl: string | null;
+}
 
-function sheetLink(config: Record<string, string> | undefined): string | null {
+const SHEET_ID_PATTERN = /^[A-Za-z0-9_-]{10,}$/;
+
+/** Builds the open/embed links from the non-secret Google Sheets integration fields. */
+function sheetLinks(config: Record<string, string> | undefined): SheetLinks | null {
   if (!config) return null;
-  if (config.sheet_url) return config.sheet_url;
-  if (config.spreadsheet_id) return `https://docs.google.com/spreadsheets/d/${encodeURIComponent(config.spreadsheet_id)}/edit`;
-  return null;
+
+  let sheetUrl: URL | null = null;
+  if (typeof config.sheet_url === 'string' && config.sheet_url.trim()) {
+    try {
+      const parsed = new URL(config.sheet_url.trim());
+      if (parsed.protocol === 'https:' || parsed.protocol === 'http:') sheetUrl = parsed;
+    } catch {
+      sheetUrl = null;
+    }
+  }
+
+  const isGoogleSheet = sheetUrl?.hostname === 'docs.google.com';
+  const idFromUrl = isGoogleSheet ? sheetUrl!.pathname.match(/\/spreadsheets\/d\/([A-Za-z0-9_-]+)/)?.[1] : undefined;
+  const rawId = typeof config.spreadsheet_id === 'string' ? config.spreadsheet_id.trim() : '';
+  const id = [idFromUrl, rawId].find((candidate) => candidate && SHEET_ID_PATTERN.test(candidate)) || null;
+
+  if (!id) {
+    // A link we cannot embed (not a recognisable Google Sheet) can still be opened.
+    return sheetUrl ? { openUrl: sheetUrl.toString(), embedUrl: null } : null;
+  }
+
+  // Keep the tab the team linked to, if the saved URL points at one.
+  const gid = isGoogleSheet ? (sheetUrl!.hash + sheetUrl!.search).match(/gid=(\d+)/)?.[1] : undefined;
+  const base = `https://docs.google.com/spreadsheets/d/${id}/edit`;
+  return {
+    openUrl: `${base}${gid ? `#gid=${gid}` : ''}`,
+    embedUrl: `${base}?rm=minimal${gid ? `#gid=${gid}` : ''}`,
+  };
 }
 
 export default function CampaignTrackingPage() {
@@ -18,20 +52,34 @@ export default function CampaignTrackingPage() {
   const clientId = (params?.clientId as string) || 'demo';
 
   const [loading, setLoading] = useState(true);
-  const [url, setUrl] = useState<string | null>(null);
+  const [loadError, setLoadError] = useState('');
+  const [links, setLinks] = useState<SheetLinks | null>(null);
 
   useEffect(() => {
     let isMounted = true;
     fetch(`/api/portal/${clientId}/data`)
-      .then((res) => (res.ok ? res.json() : null))
+      .then(async (res) => {
+        if (!res.ok) {
+          const data = await res.json().catch(() => ({}));
+          throw new Error(data?.error || 'Your tracking sheet could not be loaded. Please refresh the page.');
+        }
+        return res.json();
+      })
       .then((data) => {
-        if (!isMounted || !data) return;
+        if (!isMounted) return;
         const sheet = (data.integrations || []).find(
           (i: any) => i.integration_type === 'google_sheets' && i.is_active
         );
-        setUrl(sheetLink(sheet?.config_data));
+        setLinks(sheetLinks(sheet?.config_data));
       })
-      .catch(() => {})
+      .catch((err: any) => {
+        if (!isMounted) return;
+        setLoadError(
+          err instanceof TypeError
+            ? 'Could not reach the server. Please check your connection and refresh the page.'
+            : err?.message || 'Your tracking sheet could not be loaded. Please refresh the page.'
+        );
+      })
       .finally(() => isMounted && setLoading(false));
     return () => {
       isMounted = false;
@@ -50,35 +98,64 @@ export default function CampaignTrackingPage() {
       <Card>
         <CardHeader
           title="Your tracking sheet"
+          subtitle="Leads, replies, appointments, jobs won, revenue and your targets."
           action={
-            loading ? undefined : (
-              <StatusBadge status={url ? 'Ready' : 'Being set up'} variant={url ? 'done' : 'pending'} />
+            loading || loadError ? undefined : (
+              <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-3)', flexWrap: 'wrap', justifyContent: 'flex-end' }}>
+                <StatusBadge status={links ? 'Ready' : 'Being set up'} variant={links ? 'done' : 'pending'} />
+                {links && (
+                  <a
+                    href={links.openUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className={buttonClasses({ variant: links.embedUrl ? 'secondary' : 'primary', size: 'sm' })}
+                    style={{ textDecoration: 'none' }}
+                  >
+                    Open in new tab
+                  </a>
+                )}
+              </div>
             )
           }
         />
 
         {loading ? (
-          <Skeleton width="200px" height="38px" />
-        ) : url ? (
-          <a href={url} target="_blank" rel="noopener noreferrer">
-            <Button variant="primary">Open my tracking sheet</Button>
-          </a>
+          <Skeleton width="100%" height="520px" borderRadius="var(--radius-md)" />
+        ) : loadError ? (
+          <p role="alert" style={{ margin: 0, color: 'var(--color-status-danger-text)' }}>
+            {loadError}
+          </p>
+        ) : !links ? (
+          <p style={{ color: 'var(--color-text-secondary)', margin: 0 }}>
+            Your sheet is being created. It will appear here as soon as it is ready.
+          </p>
+        ) : links.embedUrl ? (
+          <>
+            <iframe
+              src={links.embedUrl}
+              title="Your tracking sheet (Google Sheets)"
+              loading="lazy"
+              referrerPolicy="no-referrer"
+              allow="clipboard-read; clipboard-write"
+              style={{
+                display: 'block',
+                width: '100%',
+                height: '75vh',
+                minHeight: '520px',
+                border: '1px solid var(--color-border-default)',
+                borderRadius: 'var(--radius-md)',
+                backgroundColor: 'var(--color-bg-surface)',
+              }}
+            />
+            <p style={{ margin: 'var(--space-3) 0 0 0', fontSize: 'var(--font-size-xs)', color: 'var(--color-text-muted)' }}>
+              Not loading? Sign in to Google with the email this sheet was shared with, or open it in a new tab.
+            </p>
+          </>
         ) : (
           <p style={{ color: 'var(--color-text-secondary)', margin: 0 }}>
-            Your sheet is being created. The button will appear here as soon as it is ready.
+            This sheet cannot be shown inside the portal. Use &ldquo;Open in new tab&rdquo; to view it.
           </p>
         )}
-
-        <div style={{ marginTop: 'var(--space-6)' }}>
-          <span style={{ fontSize: 'var(--font-size-xs)', color: 'var(--color-text-muted)', display: 'block', marginBottom: 'var(--space-2)' }}>
-            What the sheet tracks
-          </span>
-          <ul style={{ margin: 0, paddingLeft: 'var(--space-5)', color: 'var(--color-text-secondary)', fontSize: 'var(--font-size-sm)', lineHeight: 1.8 }}>
-            {TRACKED_METRICS.map((m) => (
-              <li key={m}>{m}</li>
-            ))}
-          </ul>
-        </div>
       </Card>
     </div>
   );

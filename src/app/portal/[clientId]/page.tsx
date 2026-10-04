@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
 import { Card, CardHeader, Button, StatusBadge, Input, Skeleton } from '@/components/ui';
@@ -14,6 +14,68 @@ interface SetupStep {
   what_it_is: string;
   right_now: string;
   unlocks: string;
+}
+
+// Mirrors the server-side rules in src/lib/storage (the server re-validates every file).
+const MAX_ATTACHMENTS = 3;
+const MAX_ATTACHMENT_BYTES = 10 * 1024 * 1024;
+const ATTACHMENT_EXTENSIONS = ['png', 'jpg', 'jpeg', 'webp', 'gif', 'svg', 'pdf'];
+const ATTACHMENT_ACCEPT = '.png,.jpg,.jpeg,.webp,.gif,.svg,.pdf,image/png,image/jpeg,image/webp,image/gif,image/svg+xml,application/pdf';
+const WEBSITE_REQUEST_INTRO =
+  'Want different colors, new wording, an updated photo or phone number? Describe it below \u2014 use \u{1F4CE} to attach your logo or a photo \u2014 and it goes straight to our website team, who update your live site, usually the same day.';
+
+function formatFileSize(bytes: number): string {
+  return bytes >= 1024 * 1024 ? `${(bytes / (1024 * 1024)).toFixed(1)} MB` : `${Math.max(1, Math.round(bytes / 1024))} KB`;
+}
+
+const RING_RADIUS = 52;
+const RING_CIRCUMFERENCE = 2 * Math.PI * RING_RADIUS;
+
+/** Circular "N% SET UP" progress ring. Colours come from theme tokens only. */
+function SetupProgressRing({ percentage, completed, total }: { percentage: number; completed: number; total: number }) {
+  return (
+    <div
+      role="img"
+      aria-label={`Setup ${percentage}% complete: ${completed} of ${total} steps done`}
+      style={{ position: 'relative', width: '132px', height: '132px', flexShrink: 0 }}
+    >
+      <svg width="132" height="132" viewBox="0 0 120 120" aria-hidden="true" focusable="false">
+        <circle cx="60" cy="60" r={RING_RADIUS} fill="none" stroke="var(--color-border-default)" strokeWidth="9" />
+        <circle
+          cx="60"
+          cy="60"
+          r={RING_RADIUS}
+          fill="none"
+          stroke="var(--color-primary)"
+          strokeWidth="9"
+          strokeLinecap="round"
+          strokeDasharray={RING_CIRCUMFERENCE}
+          strokeDashoffset={RING_CIRCUMFERENCE * (1 - percentage / 100)}
+          transform="rotate(-90 60 60)"
+          style={{ transition: 'stroke-dashoffset var(--transition-normal, 0.3s ease)' }}
+        />
+      </svg>
+      <div
+        aria-hidden="true"
+        style={{
+          position: 'absolute',
+          inset: 0,
+          display: 'flex',
+          flexDirection: 'column',
+          alignItems: 'center',
+          justifyContent: 'center',
+          lineHeight: 1.1,
+        }}
+      >
+        <span style={{ fontSize: '1.75rem', fontWeight: 700, color: 'var(--color-text-primary)', letterSpacing: '-0.02em' }}>
+          {percentage}%
+        </span>
+        <span style={{ fontSize: '0.68rem', fontWeight: 600, letterSpacing: '0.12em', color: 'var(--color-text-muted)', marginTop: '4px' }}>
+          SET UP
+        </span>
+      </div>
+    </div>
+  );
 }
 
 export default function ClientOverviewPage() {
@@ -31,6 +93,7 @@ export default function ClientOverviewPage() {
   const [viewerRole, setViewerRole] = useState<string | null>(null);
   const [loadError, setLoadError] = useState('');
   const [companyName, setCompanyName] = useState('');
+  const [contactName, setContactName] = useState('');
   const [featureToggles, setFeatureToggles] = useState<Record<string, boolean>>({});
 
   // Website change request state
@@ -39,6 +102,9 @@ export default function ClientOverviewPage() {
   const [changeUrl, setChangeUrl] = useState('');
   const [isSubmittingChange, setIsSubmittingChange] = useState(false);
   const [changeNotice, setChangeNotice] = useState<{ text: string; isError: boolean } | null>(null);
+  const [changeFiles, setChangeFiles] = useState<File[]>([]);
+  const [fileError, setFileError] = useState('');
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     let isMounted = true;
@@ -59,6 +125,7 @@ export default function ClientOverviewPage() {
           const data = await res.json();
           if (isMounted) {
             if (data.tenant?.name) setCompanyName(data.tenant.name);
+            setContactName(typeof data.tenant?.primary_contact_name === 'string' ? data.tenant.primary_contact_name : '');
             if (data.setupSteps) setSteps(data.setupSteps);
             if (data.leads) setLeadCount(data.leads.length);
             // Appointments are calls between the client and their CSM (client answer 2.1).
@@ -104,16 +171,22 @@ export default function ClientOverviewPage() {
     setIsSubmittingChange(true);
     setChangeNotice(null);
     try {
-      const res = await fetch(`/api/portal/${clientId}/website-update`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          title: changeTitle,
-          description: changeDesc,
-          targetPageUrl: changeUrl,
-          isUrgent: false,
-        }),
-      });
+      const form = new FormData();
+      form.append('title', changeTitle);
+      form.append('description', changeDesc);
+      form.append('targetPageUrl', changeUrl);
+      form.append('isUrgent', 'false');
+      changeFiles.forEach((file) => form.append('files', file, file.name));
+      // No Content-Type header: the browser sets the multipart boundary itself.
+      const res = await fetch(`/api/portal/${clientId}/website-update`, { method: 'POST', body: form });
+
+      if (res.status === 413) {
+        setChangeNotice({
+          text: 'Those files are too large to send together, so your request was not sent. Remove a file or attach smaller ones and try again.',
+          isError: true,
+        });
+        return;
+      }
 
       const data = await res.json().catch(() => ({}));
       if (res.ok && data.success) {
@@ -121,6 +194,8 @@ export default function ClientOverviewPage() {
         setChangeTitle('');
         setChangeDesc('');
         setChangeUrl('');
+        setChangeFiles([]);
+        setFileError('');
       } else {
         setChangeNotice({ text: data.error || 'Your request could not be submitted. Please try again.', isError: true });
       }
@@ -131,6 +206,36 @@ export default function ClientOverviewPage() {
     }
   };
 
+  const handleFilesPicked = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const picked = Array.from(e.target.files || []);
+    e.target.value = ''; // allow picking the same file again after removing it
+    const problems: string[] = [];
+    const next = [...changeFiles];
+    for (const file of picked) {
+      const ext = file.name.includes('.') ? file.name.split('.').pop()!.toLowerCase() : '';
+      if (!ATTACHMENT_EXTENSIONS.includes(ext)) {
+        problems.push(`"${file.name}" is not an image or PDF.`);
+      } else if (file.size > MAX_ATTACHMENT_BYTES) {
+        problems.push(`"${file.name}" is larger than 10 MB.`);
+      } else if (file.size === 0) {
+        problems.push(`"${file.name}" is empty.`);
+      } else if (next.some((f) => f.name === file.name && f.size === file.size)) {
+        // already attached
+      } else if (next.length >= MAX_ATTACHMENTS) {
+        problems.push(`You can attach up to ${MAX_ATTACHMENTS} files; "${file.name}" was not added.`);
+      } else {
+        next.push(file);
+      }
+    }
+    setChangeFiles(next);
+    setFileError(problems.join(' '));
+  };
+
+  const removeFile = (index: number) => {
+    setChangeFiles((files) => files.filter((_, i) => i !== index));
+    setFileError('');
+  };
+
   if (loading) {
     return <ClientOverviewSkeleton />;
   }
@@ -138,7 +243,7 @@ export default function ClientOverviewPage() {
   if (loadError) {
     return (
       <div>
-        <h1 style={{ marginBottom: 'var(--space-4)' }}>Overview</h1>
+        <h1 style={{ marginBottom: 'var(--space-4)' }}>Welcome.</h1>
         <Card>
           <p role="alert" style={{ margin: 0, color: 'var(--color-status-danger-text)' }}>
             {loadError}
@@ -151,115 +256,80 @@ export default function ClientOverviewPage() {
   // Contract details are only shown to roles allowed to see them (the API hides them from team members).
   const showContractCard = featureToggles?.contracts !== false && viewerRole !== 'client_member';
 
+  const onboardingEnabled = !featureToggles || featureToggles.onboarding !== false;
+  // Hero: first name of the primary contact, else the company name, else no name at all.
+  const greetingName = contactName.trim().split(/\s+/)[0] || companyName.trim();
+  const showProgress = onboardingEnabled && totalSteps > 0;
+  const pendingIndex = activeSteps.findIndex((s) => s.status !== 'done');
+  const phaseLabel = !showProgress
+    ? null
+    : pendingIndex === -1
+      ? 'SETUP COMPLETE'
+      : `STEP ${pendingIndex + 1} OF ${totalSteps} \u00B7 ${activeSteps[pendingIndex].name.toUpperCase()}`;
+
   return (
     <div>
-      {/* 1. Breadcrumb */}
-      <div className="ui-breadcrumb">
-        <span>Portal</span>
-        <span className="ui-breadcrumb-separator">&gt;</span>
-        <span className="ui-breadcrumb-current">Overview</span>
-      </div>
-
-      {/* 2. Welcome Banner */}
-      <div style={{ marginBottom: 'var(--space-6)' }}>
-        <h1 style={{ fontSize: '1.75rem', fontWeight: 700, color: 'var(--color-text-primary)', marginBottom: 'var(--space-1)', letterSpacing: '-0.02em' }}>
-          Overview
-        </h1>
-        <p style={{ color: 'var(--color-text-secondary)', fontSize: 'var(--font-size-sm)', margin: 0 }}>
-          {companyName ? (
-            <>
-              Welcome back to the <strong style={{ color: 'var(--color-text-primary)' }}>{companyName}</strong> onboarding dashboard.
-            </>
-          ) : (
-            'Welcome back to your onboarding dashboard.'
-          )}
-        </p>
-      </div>
-
-      {/* 3. Progress & Next Step Grid */}
-      {(!featureToggles || featureToggles.onboarding !== false) && (
-        <div
-          style={{
-            display: 'grid',
-            gap: 'var(--space-4)',
-            gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))',
-            marginBottom: 'var(--space-6)',
-          }}
-        >
-          {/* Setup Progress Card */}
-          <div className="ui-stat-card" style={{ flexDirection: 'column', alignItems: 'flex-start', padding: '24px' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', width: '100%', marginBottom: 'var(--space-3)' }}>
-              <div>
-                <h2 style={{ fontSize: '1.1rem', fontWeight: 600, color: 'var(--color-text-primary)', margin: 0 }}>
-                  Setup Progress
-                </h2>
-                <p style={{ fontSize: 'var(--font-size-xs)', color: 'var(--color-text-muted)', margin: '2px 0 0 0' }}>
-                  Overall onboarding completion
-                </p>
-              </div>
-              <div className="ui-stat-gauge">
-                <svg viewBox="0 0 44 44">
-                  <circle cx="22" cy="22" r="18" className="ui-stat-gauge-circle-bg" />
-                  <circle
-                    cx="22"
-                    cy="22"
-                    r="18"
-                    className="ui-stat-gauge-circle-val"
-                    strokeDasharray="113.1"
-                    strokeDashoffset={113.1 - (113.1 * setupPercentage) / 100}
-                  />
-                </svg>
-                <span className="ui-stat-gauge-text">{setupPercentage}%</span>
-              </div>
-            </div>
-
-            <div
+      {/* 1. Hero: current phase, welcome and setup progress ring */}
+      <section
+        aria-label="Welcome"
+        style={{
+          display: 'flex',
+          flexWrap: 'wrap',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          gap: 'var(--space-6)',
+          padding: 'clamp(20px, 4vw, 36px)',
+          marginBottom: 'var(--space-6)',
+          backgroundColor: 'var(--color-bg-card)',
+          border: '1px solid var(--color-border-subtle)',
+          borderRadius: 'var(--radius-lg, var(--radius-md))',
+        }}
+      >
+        <div style={{ flex: '1 1 320px', minWidth: 0 }}>
+          {phaseLabel && (
+            <span
               style={{
-                width: '100%',
-                height: '8px',
-                backgroundColor: '#0b121c',
+                display: 'inline-block',
+                maxWidth: '100%',
+                padding: '5px 12px',
+                marginBottom: 'var(--space-4)',
                 borderRadius: 'var(--radius-full)',
-                overflow: 'hidden',
-                marginBottom: 'var(--space-3)',
+                backgroundColor: 'var(--color-primary-muted)',
+                border: '1px solid var(--color-primary-border)',
+                color: 'var(--color-primary-text)',
+                fontSize: '0.7rem',
+                fontWeight: 600,
+                letterSpacing: '0.08em',
+                lineHeight: 1.4,
+                overflowWrap: 'anywhere',
               }}
             >
-              <div
-                style={{
-                  width: `${setupPercentage}%`,
-                  height: '100%',
-                  background: 'linear-gradient(90deg, #2563eb, #38bdf8)',
-                  boxShadow: '0 0 8px rgba(56, 189, 248, 0.5)',
-                  transition: 'width var(--transition-normal)',
-                }}
-              />
-            </div>
+              {phaseLabel}
+            </span>
+          )}
+          <h1
+            style={{
+              fontSize: 'clamp(1.75rem, 4vw, 2.5rem)',
+              fontWeight: 700,
+              color: 'var(--color-text-primary)',
+              margin: '0 0 var(--space-3) 0',
+              letterSpacing: '-0.02em',
+              lineHeight: 1.15,
+              overflowWrap: 'anywhere',
+            }}
+          >
+            {greetingName ? `Welcome, ${greetingName}.` : 'Welcome.'}
+          </h1>
+          <p style={{ color: 'var(--color-text-secondary)', fontSize: 'var(--font-size-base)', lineHeight: 1.55, margin: 0, maxWidth: '60ch' }}>
+            Here&apos;s exactly where your business stands. We handle most of it. The steps marked as yours are the quick actions we need from you.
+          </p>
+        </div>
+        {showProgress && <SetupProgressRing percentage={setupPercentage} completed={completedSteps} total={totalSteps} />}
+      </section>
 
-            <p style={{ marginBottom: 'var(--space-4)', color: 'var(--color-text-secondary)', fontSize: 'var(--font-size-sm)', lineHeight: 1.5 }}>
-              {totalSteps === 0 ? (
-                'Your onboarding checklist has not been set up yet.'
-              ) : (
-                <>
-                  {completedSteps} of {totalSteps} onboarding milestones completed.
-                  {currentStep && currentStep.status !== 'done' && (
-                    <>
-                      {' '}Current milestone: <strong style={{ color: '#38bdf8' }}>{currentStep.name}</strong>.
-                    </>
-                  )}
-                </>
-              )}
-            </p>
-
-            <Link href={`/portal/${clientId}/onboarding`} style={{ width: '100%', textDecoration: 'none' }}>
-              <button type="button" className="ui-btn-action-portal" style={{ width: '100%', justifyContent: 'center', padding: '10px 16px' }}>
-                View Setup Checklist
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                  <line x1="5" y1="12" x2="19" y2="12" />
-                  <polyline points="12 5 19 12 12 19" />
-                </svg>
-              </button>
-            </Link>
-          </div>
-
+      {/* 2. Current step */}
+      {onboardingEnabled && (
+        <div style={{ marginBottom: 'var(--space-6)' }}>
           {/* Current Active Step Card */}
           <div className="ui-stat-card" style={{ flexDirection: 'column', alignItems: 'flex-start', padding: '24px' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', width: '100%', marginBottom: 'var(--space-3)' }}>
@@ -267,7 +337,7 @@ export default function ClientOverviewPage() {
                 <h2 style={{ fontSize: '1.1rem', fontWeight: 600, color: 'var(--color-text-primary)', margin: 0 }}>
                   Current Action Step
                 </h2>
-                <p style={{ fontSize: 'var(--font-size-xs)', color: '#38bdf8', margin: '2px 0 0 0', fontWeight: 500 }}>
+                <p style={{ fontSize: 'var(--font-size-xs)', color: 'var(--color-primary-text)', margin: '2px 0 0 0', fontWeight: 500 }}>
                   {currentStep?.name || 'No steps yet'}
                 </p>
               </div>
@@ -288,9 +358,9 @@ export default function ClientOverviewPage() {
               style={{
                 width: '100%',
                 padding: '12px 14px',
-                backgroundColor: '#0b121c',
+                backgroundColor: 'var(--color-bg-input)',
                 borderRadius: 'var(--radius-md)',
-                border: '1px solid rgba(255, 255, 255, 0.06)',
+                border: '1px solid var(--color-border-subtle)',
                 marginBottom: 'var(--space-4)',
                 fontSize: 'var(--font-size-xs)',
                 color: 'var(--color-text-secondary)',
@@ -302,7 +372,7 @@ export default function ClientOverviewPage() {
 
             <div style={{ display: 'flex', gap: 'var(--space-2)', width: '100%', flexWrap: 'wrap' }}>
               <Link href={`/portal/${clientId}/onboarding`} style={{ flex: 1, minWidth: '130px', textDecoration: 'none' }}>
-                <Button variant="primary" fullWidth style={{ backgroundColor: '#2563eb' }}>
+                <Button variant="primary" fullWidth>
                   Review Step Details
                 </Button>
               </Link>
@@ -340,7 +410,7 @@ export default function ClientOverviewPage() {
                   <div className="ui-stat-info">
                     <span className="ui-stat-label">Total Leads</span>
                     <span className="ui-stat-value">{leadCount}</span>
-                    <Link href={`/portal/${clientId}/leads`} style={{ fontSize: '0.72rem', color: '#38bdf8', textDecoration: 'none' }}>
+                    <Link href={`/portal/${clientId}/leads`} style={{ fontSize: '0.72rem', color: 'var(--color-primary-text)', textDecoration: 'none' }}>
                       View Pipeline →
                     </Link>
                   </div>
@@ -367,7 +437,7 @@ export default function ClientOverviewPage() {
                         ? new Date(nextCall).toLocaleString(undefined, { weekday: 'short', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })
                         : 'Not booked'}
                     </span>
-                    <Link href={`/portal/${clientId}/book-call`} style={{ fontSize: '0.72rem', color: '#34d399', textDecoration: 'none' }}>
+                    <Link href={`/portal/${clientId}/book-call`} style={{ fontSize: '0.72rem', color: 'var(--color-status-done-text)', textDecoration: 'none' }}>
                       {nextCall ? 'Book another call →' : 'Book a call →'}
                     </Link>
                   </div>
@@ -392,7 +462,7 @@ export default function ClientOverviewPage() {
                     <span className="ui-stat-label">Tracking Sheet</span>
                     <span className="ui-stat-value">{sheetUrl ? 'Ready' : 'Not ready yet'}</span>
                     {sheetUrl ? (
-                      <a href={sheetUrl} target="_blank" rel="noopener noreferrer" style={{ fontSize: '0.72rem', color: '#fbbf24', textDecoration: 'none' }}>
+                      <a href={sheetUrl} target="_blank" rel="noopener noreferrer" style={{ fontSize: '0.72rem', color: 'var(--color-status-warning-text)', textDecoration: 'none' }}>
                         Open my tracking sheet →
                       </a>
                     ) : (
@@ -415,7 +485,7 @@ export default function ClientOverviewPage() {
                   </div>
                   <div className="ui-stat-info">
                     <span className="ui-stat-label">Signed Contract</span>
-                    <span className="ui-stat-value" style={{ color: contractState === 'signed' ? '#34d399' : '#fbbf24' }}>
+                    <span className="ui-stat-value" style={{ color: contractState === 'signed' ? 'var(--color-status-done-text)' : 'var(--color-status-warning-text)' }}>
                       {contractState === 'signed' ? 'Signed' : contractState === 'sent' ? 'Awaiting signature' : 'Not available yet'}
                     </span>
                     <Link href={`/portal/${clientId}/contract`} style={{ fontSize: '0.72rem', color: 'var(--color-text-muted)', textDecoration: 'none' }}>
@@ -495,8 +565,10 @@ export default function ClientOverviewPage() {
         <Card>
           <CardHeader
             title="Website Change Request"
-            subtitle="Submit copy or image revisions to your CSM"
           />
+          <p style={{ margin: '0 0 var(--space-4) 0', color: 'var(--color-text-secondary)', fontSize: 'var(--font-size-sm)', lineHeight: 1.55 }}>
+            {WEBSITE_REQUEST_INTRO}
+          </p>
           {changeNotice && (
             <div
               role={changeNotice.isError ? 'alert' : 'status'}
@@ -515,7 +587,7 @@ export default function ClientOverviewPage() {
           <form onSubmit={handleWebsiteChangeSubmit} style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-3)' }}>
             <Input
               label="Request Title"
-              placeholder="e.g. Update phone number on header"
+              placeholder="What should we change?"
               value={changeTitle}
               onChange={(e) => setChangeTitle(e.target.value)}
               maxLength={200}
@@ -552,19 +624,96 @@ export default function ClientOverviewPage() {
                   fontSize: 'var(--font-size-sm)',
                   fontFamily: 'inherit',
                 }}
-                placeholder="Explain the changes you would like us to make..."
+                placeholder="Describe the change in your own words"
                 value={changeDesc}
                 onChange={(e) => setChangeDesc(e.target.value)}
                 maxLength={5000}
                 required
               />
             </div>
+            <div>
+              <input
+                ref={fileInputRef}
+                type="file"
+                multiple
+                accept={ATTACHMENT_ACCEPT}
+                onChange={handleFilesPicked}
+                tabIndex={-1}
+                aria-hidden="true"
+                style={{ display: 'none' }}
+              />
+              <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 'var(--space-2)' }}>
+                <button
+                  type="button"
+                  className="ui-filter-clear-btn"
+                  style={{ height: '34px', padding: '0 12px' }}
+                  onClick={() => fileInputRef.current?.click()}
+                  disabled={isSubmittingChange || changeFiles.length >= MAX_ATTACHMENTS}
+                  aria-label="Attach a logo, photo or PDF"
+                >
+                  <span aria-hidden="true">{'\u{1F4CE}'}</span> Attach
+                </button>
+                {changeFiles.map((file, index) => (
+                  <span
+                    key={`${file.name}-${file.size}`}
+                    style={{
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: '6px',
+                      maxWidth: '100%',
+                      padding: '4px 6px 4px 10px',
+                      borderRadius: 'var(--radius-full)',
+                      backgroundColor: 'var(--color-bg-surface)',
+                      border: '1px solid var(--color-border-default)',
+                      fontSize: 'var(--font-size-xs)',
+                      color: 'var(--color-text-primary)',
+                    }}
+                  >
+                    <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '180px' }} title={file.name}>
+                      {file.name}
+                    </span>
+                    <span style={{ color: 'var(--color-text-muted)', whiteSpace: 'nowrap' }}>{formatFileSize(file.size)}</span>
+                    <button
+                      type="button"
+                      onClick={() => removeFile(index)}
+                      disabled={isSubmittingChange}
+                      aria-label={`Remove ${file.name}`}
+                      style={{
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        width: '20px',
+                        height: '20px',
+                        padding: 0,
+                        border: 'none',
+                        borderRadius: 'var(--radius-full)',
+                        background: 'transparent',
+                        color: 'var(--color-text-secondary)',
+                        cursor: 'pointer',
+                        fontSize: '14px',
+                        lineHeight: 1,
+                      }}
+                    >
+                      <span aria-hidden="true">{'\u00D7'}</span>
+                    </button>
+                  </span>
+                ))}
+              </div>
+              <p style={{ margin: 'var(--space-2) 0 0 0', fontSize: 'var(--font-size-xs)', color: 'var(--color-text-muted)' }}>
+                Up to {MAX_ATTACHMENTS} files. Images (PNG, JPG, WEBP, GIF, SVG) or PDF, 10 MB each.
+              </p>
+              {fileError && (
+                <p role="alert" style={{ margin: 'var(--space-1) 0 0 0', fontSize: 'var(--font-size-xs)', color: 'var(--color-status-danger-text)' }}>
+                  {fileError}
+                </p>
+              )}
+            </div>
             <Button
               type="submit"
               variant="primary"
               disabled={isSubmittingChange || !changeTitle.trim() || !changeDesc.trim()}
             >
-              {isSubmittingChange ? 'Submitting...' : 'Submit Change Request'}
+              {isSubmittingChange ? (changeFiles.length > 0 ? 'Uploading and sending...' : 'Sending...') : 'Send to website team'}
             </Button>
           </form>
         </Card>
@@ -619,34 +768,21 @@ export default function ClientOverviewPage() {
 function ClientOverviewSkeleton() {
   return (
     <div>
-      {/* Welcome Banner Skeleton */}
-      <div style={{ marginBottom: 'var(--space-6)' }}>
-        <Skeleton width="180px" height="32px" style={{ marginBottom: 'var(--space-2)' }} />
-        <Skeleton width="360px" height="18px" />
-      </div>
-
-      {/* Progress & Next Step Grid */}
-      <div
-        style={{
-          display: 'grid',
-          gap: 'var(--space-4)',
-          gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))',
-          marginBottom: 'var(--space-6)',
-        }}
-      >
-        <Card>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 'var(--space-3)' }}>
-            <div>
-              <Skeleton width="130px" height="20px" style={{ marginBottom: '6px' }} />
-              <Skeleton width="190px" height="14px" />
-            </div>
-            <Skeleton width="52px" height="24px" borderRadius="var(--radius-full)" />
+      {/* Hero Skeleton */}
+      <Card style={{ marginBottom: 'var(--space-6)' }}>
+        <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'space-between', gap: 'var(--space-6)' }}>
+          <div style={{ flex: '1 1 320px' }}>
+            <Skeleton width="200px" height="24px" borderRadius="var(--radius-full)" style={{ marginBottom: 'var(--space-4)' }} />
+            <Skeleton width="280px" height="40px" style={{ marginBottom: 'var(--space-3)' }} />
+            <Skeleton width="90%" height="16px" style={{ marginBottom: 'var(--space-2)' }} />
+            <Skeleton width="60%" height="16px" />
           </div>
-          <Skeleton width="100%" height="8px" borderRadius="var(--radius-full)" style={{ marginBottom: 'var(--space-4)' }} />
-          <Skeleton width="85%" height="16px" style={{ marginBottom: 'var(--space-4)' }} />
-          <Skeleton width="100%" height="38px" borderRadius="var(--radius-md)" />
-        </Card>
+          <Skeleton width="132px" height="132px" borderRadius="var(--radius-full)" />
+        </div>
+      </Card>
 
+      {/* Current Step Skeleton */}
+      <div style={{ marginBottom: 'var(--space-6)' }}>
         <Card>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 'var(--space-3)' }}>
             <div>

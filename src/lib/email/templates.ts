@@ -104,6 +104,8 @@ export function websiteChangeRequestEmail(params: {
   targetPageUrl?: string;
   isUrgent?: boolean;
   portalUrl: string;
+  /** Files the client attached. `url` is a time-limited signed link. */
+  attachments?: { name: string; url: string; size?: number }[];
 }): EmailMessage {
   const paragraphs = [
     `${params.requestedBy} from ${params.companyName} submitted a website change request through the client portal.`,
@@ -113,14 +115,34 @@ export function websiteChangeRequestEmail(params: {
     'Description:',
     params.description,
   ];
-  const message = build(
-    params.to,
-    `${params.isUrgent ? '[Urgent] ' : ''}Website change request: ${params.companyName}`,
-    `${params.companyName} requested a website change`,
-    paragraphs,
-    { label: 'Open client', url: params.portalUrl },
-    'Reply to the client once the change is scheduled or done.',
-    ['website-change-request']
-  );
+  const attachments = params.attachments || [];
+  const sizeLabel = (bytes?: number) =>
+    typeof bytes === 'number' ? ` (${bytes >= 1024 * 1024 ? `${(bytes / (1024 * 1024)).toFixed(1)} MB` : `${Math.max(1, Math.round(bytes / 1024))} KB`})` : '';
+  const attachmentHeading = `Attachments (${attachments.length}) - links expire in 7 days:`;
+  const subject = `${params.isUrgent ? '[Urgent] ' : ''}Website change request: ${params.companyName}`;
+  const heading = `${params.companyName} requested a website change`;
+  const action = { label: 'Open client', url: params.portalUrl };
+  const footer = 'Reply to the client once the change is scheduled or done.';
+  let message = build(params.to, subject, heading, paragraphs, action, footer, ['website-change-request']);
+  if (attachments.length > 0) {
+    // Text part: one "name (size): url" line per file. HTML part: the same list with clickable links.
+    const textVersion = build(
+      params.to,
+      subject,
+      heading,
+      [...paragraphs, attachmentHeading, ...attachments.map((a) => `${a.name}${sizeLabel(a.size)}: ${a.url}`)],
+      action,
+      footer
+    ).text;
+    const items = attachments
+      .map(
+        (a) =>
+          `<li style="margin:0 0 6px;"><a href="${escapeHtml(a.url)}" style="color:#1d4ed8;">${escapeHtml(a.name)}</a>${escapeHtml(sizeLabel(a.size))}</li>`
+      )
+      .join('');
+    const block = `<p style="margin:0 0 8px;line-height:1.5;">${escapeHtml(attachmentHeading)}</p><ul style="margin:0 0 16px;padding-left:20px;line-height:1.5;">${items}</ul>`;
+    const buttonMarker = '<p style="margin:24px 0;">';
+    message = { ...message, text: textVersion, html: message.html.replace(buttonMarker, () => block + buttonMarker) };
+  }
   return params.toName ? { ...message, toName: params.toName } : message;
 }

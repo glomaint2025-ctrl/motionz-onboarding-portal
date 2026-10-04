@@ -39,7 +39,7 @@ const nextConfig = {
               "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
               "font-src 'self' https://fonts.gstatic.com data:",
               "img-src 'self' data: https:",
-              "frame-src 'self' https://api.leadconnectorhq.com https://services.leadconnectorhq.com https://*.leadconnectorhq.com https://app.gohighlevel.com",
+              "frame-src 'self' https://docs.google.com https://api.leadconnectorhq.com https://services.leadconnectorhq.com https://*.leadconnectorhq.com https://app.gohighlevel.com",
               "connect-src 'self' https://*.supabase.co https://services.leadconnectorhq.com https://api.leadconnectorhq.com",
             ].join('; '),
           },
