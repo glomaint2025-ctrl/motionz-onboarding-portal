@@ -6,6 +6,11 @@ import {
   passwordResetRepository,
   auditLogRepository,
 } from '@/lib/db/repositories';
+import {
+  getCsmCalendarSettings,
+  setCsmCalendarSettings,
+  GHL_CALENDAR_ID_PATTERN,
+} from '@/lib/db/repositories/app-settings.repository';
 import type { User } from '@/lib/db/schema';
 import { requireAuth, handleAuthError } from '@/lib/auth/guard';
 import { isStaffEmail } from '@/lib/auth/staff';
@@ -50,10 +55,29 @@ async function findAuthUserIdByEmail(supabase: ServiceClient, email: string): Pr
   return null;
 }
 
-const present = (u: User) => ({ id: u.id, email: u.email, name: u.full_name, role: u.role, status: u.status || 'active' });
+const present = (u: User, calendarId: string | null = null) => ({
+  id: u.id,
+  email: u.email,
+  name: u.full_name,
+  role: u.role,
+  status: u.status || 'active',
+  calendarId,
+});
+
+const CALENDAR_ID_ERROR =
+  'That does not look like a GoHighLevel calendar id. Copy the id at the end of the booking link (…/widget/booking/<id>).';
+
+/** '' when cleared, the id when valid, null when malformed. */
+function parseCalendarId(value: unknown): string | null {
+  if (value === null || value === undefined) return '';
+  if (typeof value !== 'string') return null;
+  const id = value.trim();
+  return id === '' || GHL_CALENDAR_ID_PATTERN.test(id) ? id : null;
+}
 
 /**
- * { id, action: 'update', name?, email?, role? } — edits a staff member.
+ * { id, action: 'update', name?, email?, role?, calendar_id? } — edits a staff member.
+ * calendar_id is the CSM's own GHL booking calendar ('' = use the default calendar).
  * The sign-in email also lives in Supabase Auth, so it is changed there first and
  * reverted if the users row cannot be saved, keeping the two in step.
  */
@@ -96,6 +120,25 @@ async function updateStaff(body: any, target: User, session: SessionIdentity) {
     }
   }
 
+  // Booking calendar (CSMs only). Kept in app settings, not on the users row.
+  const calendars = await getCsmCalendarSettings();
+  const previousCalendarId = calendars.by_user[target.id] || '';
+  let nextCalendarId = previousCalendarId;
+  if (body.calendar_id !== undefined) {
+    const parsed = parseCalendarId(body.calendar_id);
+    if (parsed === null) return NextResponse.json({ error: CALENDAR_ID_ERROR }, { status: 400 });
+    nextCalendarId = parsed;
+  }
+  if ((updates.role || target.role) !== 'csm') {
+    if (body.calendar_id !== undefined && nextCalendarId) {
+      return NextResponse.json({ error: 'Only CSMs have a booking calendar.' }, { status: 400 });
+    }
+    // No longer a CSM: their calendar is not used for anyone.
+    nextCalendarId = '';
+  }
+  const calendarChanged = nextCalendarId !== previousCalendarId;
+  if (calendarChanged) changed.push('calendar');
+
   if (updates.email) {
     if (!isStaffEmail(updates.email)) {
       return NextResponse.json({ error: 'Staff accounts must use an @motionz.ai email address.' }, { status: 400 });
@@ -107,7 +150,7 @@ async function updateStaff(body: any, target: User, session: SessionIdentity) {
   }
 
   if (changed.length === 0) {
-    return NextResponse.json({ success: true, staff: present(target), changed });
+    return NextResponse.json({ success: true, staff: present(target, previousCalendarId || null), changed });
   }
 
   // 1. Supabase Auth first (only when the sign-in email changes).
@@ -144,7 +187,7 @@ async function updateStaff(body: any, target: User, session: SessionIdentity) {
 
   // 2. Then the users row; undo the auth change if it fails.
   try {
-    await userRepository.update(target.id, updates);
+    if (Object.keys(updates).length > 0) await userRepository.update(target.id, updates);
   } catch {
     let reverted = true;
     if (supabase && authUserId) {
@@ -164,6 +207,25 @@ async function updateStaff(body: any, target: User, session: SessionIdentity) {
     );
   }
 
+  // 3. Then the booking calendar.
+  let calendarSaved = true;
+  if (calendarChanged) {
+    const byUser = { ...calendars.by_user };
+    if (nextCalendarId) byUser[target.id] = nextCalendarId;
+    else delete byUser[target.id];
+    try {
+      await setCsmCalendarSettings({ ...calendars, by_user: byUser }, session.email);
+    } catch (err: any) {
+      console.error(`[staff] Booking calendar for ${target.id} could not be saved: ${err?.message}`);
+      calendarSaved = false;
+      changed.splice(changed.indexOf('calendar'), 1);
+    }
+  }
+  if (!calendarSaved && changed.length === 0) {
+    return NextResponse.json({ error: 'Could not save the booking calendar. Nothing was changed.' }, { status: 500 });
+  }
+  const savedCalendarId = calendarSaved ? nextCalendarId : previousCalendarId;
+
   const updated = { ...before, ...updates } as User;
   await auditLogRepository.create({
     actor_email: session.email,
@@ -177,17 +239,30 @@ async function updateStaff(body: any, target: User, session: SessionIdentity) {
       ...(updates.full_name ? { previousName: before.full_name || null, name: updates.full_name } : {}),
       ...(updates.email ? { previousEmail: before.email } : {}),
       ...(updates.role ? { previousRole: before.role, role: updates.role } : {}),
+      ...(calendarChanged && calendarSaved
+        ? { previousCalendarId: previousCalendarId || null, calendarId: nextCalendarId || null }
+        : {}),
     },
   });
 
-  return NextResponse.json({ success: true, staff: present(updated), changed });
+  if (!calendarSaved) {
+    return NextResponse.json(
+      { error: 'The other changes were saved, but the booking calendar could not be saved. Try again.' },
+      { status: 500 }
+    );
+  }
+  return NextResponse.json({ success: true, staff: present(updated, savedCalendarId || null), changed });
 }
 
 /** Admin > Staff: list Motionz staff with their assigned client counts. */
 export async function GET(request: Request) {
   try {
     const { session } = await requireAuth(request, { roles: ['admin'] });
-    const [admins, csms] = await Promise.all([userRepository.listAllByRole('admin'), userRepository.listAllByRole('csm')]);
+    const [admins, csms, calendars] = await Promise.all([
+      userRepository.listAllByRole('admin'),
+      userRepository.listAllByRole('csm'),
+      getCsmCalendarSettings(),
+    ]);
     const staff = await Promise.all(
       [...admins, ...csms].map(async (u) => ({
         id: u.id,
@@ -196,12 +271,14 @@ export async function GET(request: Request) {
         role: u.role,
         status: u.status || 'active',
         assignedClients: u.role === 'csm' ? (await csmAssignmentRepository.listByCsm(u.id)).length : null,
+        // A CSM's own GHL booking calendar; null = their clients book on the default calendar.
+        calendarId: u.role === 'csm' ? calendars.by_user[u.id] || null : null,
         created_at: u.created_at,
         // The signed-in admin's own row: the UI hides Disable and locks the role.
         self: isSelf(u, session),
       }))
     );
-    return NextResponse.json({ success: true, staff });
+    return NextResponse.json({ success: true, staff, defaultCalendarId: calendars.default_calendar_id });
   } catch (err: any) {
     if (err.statusCode === 401 || err.statusCode === 403) return handleAuthError(err);
     return NextResponse.json({ error: 'Failed to load staff.' }, { status: 500 });
@@ -272,12 +349,38 @@ export async function POST(request: Request) {
 
 /**
  * { id, action: 'disable' | 'enable' } — disabling blocks sign-in and removes nothing.
- * { id, action: 'update', name?, email?, role? } — see updateStaff.
+ * { id, action: 'update', name?, email?, role?, calendar_id? } — see updateStaff.
+ * { action: 'set_default_calendar', calendar_id } — the booking calendar for clients whose CSM has none.
  */
 export async function PATCH(request: Request) {
   try {
     const { session } = await requireAuth(request, { roles: ['admin'] });
     const body = await request.json().catch(() => ({}));
+
+    if (body.action === 'set_default_calendar') {
+      const calendarId = parseCalendarId(body.calendar_id);
+      if (!calendarId) {
+        return NextResponse.json(
+          { error: calendarId === '' ? 'Enter the default booking calendar id.' : CALENDAR_ID_ERROR },
+          { status: 400 }
+        );
+      }
+      const calendars = await getCsmCalendarSettings();
+      const previous = calendars.default_calendar_id;
+      if (calendarId !== previous) {
+        await setCsmCalendarSettings({ ...calendars, default_calendar_id: calendarId }, session!.email);
+        await auditLogRepository.create({
+          actor_email: session!.email,
+          actor_role: 'admin',
+          action: 'staff.default_calendar_changed',
+          resource_type: 'app_setting',
+          resource_id: 'csm_calendars',
+          details: { previousCalendarId: previous, calendarId },
+        });
+      }
+      return NextResponse.json({ success: true, defaultCalendarId: calendarId, changed: calendarId !== previous });
+    }
+
     const target = body.id ? await userRepository.findById(String(body.id)) : null;
     if (!target || (target.role !== 'admin' && target.role !== 'csm')) {
       return NextResponse.json({ error: 'Staff member not found.' }, { status: 404 });

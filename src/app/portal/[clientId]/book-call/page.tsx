@@ -14,6 +14,8 @@ export default function BookCallPage() {
   const [prefillEmail, setPrefillEmail] = useState<string | undefined>();
   const [prefillName, setPrefillName] = useState<string | undefined>();
   const [csmName, setCsmName] = useState<string | null>(null);
+  // The assigned CSM's calendar from the portal data API; the default calendar until (or unless) it loads.
+  const [calendarId, setCalendarId] = useState<string>(PORTAL_LINKS.csmBookingCalendarId);
 
   useEffect(() => {
     let isMounted = true;
@@ -37,6 +39,7 @@ export default function BookCallPage() {
         setPrefillEmail(viewerEmail);
         setPrefillName(name);
         setCsmName(data.csm?.name || null);
+        if (typeof data.bookingCalendarId === 'string' && data.bookingCalendarId) setCalendarId(data.bookingCalendarId);
       } catch {
         // The calendar still works without prefill; the client can type their details.
       } finally {
@@ -67,7 +70,7 @@ export default function BookCallPage() {
         </Card>
       ) : (
         <BookingWidget
-          calendarId={PORTAL_LINKS.csmBookingCalendarId}
+          calendarId={calendarId}
           prefillEmail={prefillEmail}
           prefillName={prefillName}
         />

@@ -13,6 +13,7 @@ import {
 } from '@/lib/db';
 import { userRepository } from '@/lib/db/repositories/users.repository';
 import { csmAssignmentRepository } from '@/lib/db/repositories';
+import { resolveBookingCalendarId } from '@/lib/db/repositories/app-settings.repository';
 import { assertPortalAccess, handleAuthError } from '@/lib/auth/guard';
 import { hasPermission } from '@/lib/auth/permissions';
 
@@ -73,6 +74,8 @@ export async function GET(
 
     const assignment = await csmAssignmentRepository.findByTenant(tenantId);
     const csmUser = assignment ? await userRepository.findById(assignment.csm_user_id) : null;
+    // The assigned CSM's own GHL booking calendar, else the default one (also when there is no CSM).
+    const bookingCalendarId = await resolveBookingCalendarId(assignment?.csm_user_id);
 
     const isClientRole = session?.role === 'client' || session?.role === 'client_member';
     const canSee = (moduleKey: string) => !isClientRole || effectiveFeatureToggles[moduleKey] !== false;
@@ -101,6 +104,7 @@ export async function GET(
       teamMembers,
       invitations: session?.role === 'client_member' ? [] : invitations,
       csm: csmUser ? { name: csmUser.full_name, email: csmUser.email } : null,
+      bookingCalendarId,
       viewer: session ? { email: session.email, role: session.role } : null,
     });
   } catch (error: any) {

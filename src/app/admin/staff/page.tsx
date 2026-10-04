@@ -10,9 +10,14 @@ interface StaffMember {
   role: 'admin' | 'csm';
   status: string;
   assignedClients: number | null;
+  /** The CSM's own GHL booking calendar; null = the default calendar. */
+  calendarId?: string | null;
   /** True on the signed-in admin's own row. */
   self?: boolean;
 }
+
+const CALENDAR_ID_PATTERN = /^[A-Za-z0-9_-]{10,40}$/;
+const CALENDAR_ID_ERROR = 'Use the id at the end of the booking link: letters, numbers, - and _ only (10 to 40 characters).';
 
 export default function StaffPage() {
   const [staff, setStaff] = useState<StaffMember[]>([]);
@@ -29,11 +34,24 @@ export default function StaffPage() {
   const [editRole, setEditRole] = useState<'csm' | 'admin'>('csm');
   const [editBusy, setEditBusy] = useState(false);
   const [editError, setEditError] = useState('');
+  const [editCalendar, setEditCalendar] = useState('');
+
+  // null until loaded from the server: never show a calendar id the server did not return.
+  const [defaultCalendar, setDefaultCalendar] = useState<string | null>(null);
+  const [defaultDraft, setDefaultDraft] = useState('');
+  const [defaultBusy, setDefaultBusy] = useState(false);
+  const [defaultError, setDefaultError] = useState('');
 
   const load = async () => {
     try {
       const data = await (await fetch('/api/admin/staff')).json();
-      if (data.success) setStaff(data.staff);
+      if (data.success) {
+        setStaff(data.staff);
+        if (typeof data.defaultCalendarId === 'string') {
+          setDefaultCalendar(data.defaultCalendarId);
+          setDefaultDraft(data.defaultCalendarId);
+        }
+      }
     } finally {
       setLoading(false);
     }
@@ -95,12 +113,48 @@ export default function StaffPage() {
     setEditName(member.name || '');
     setEditEmail(member.email);
     setEditRole(member.role);
+    setEditCalendar(member.calendarId || '');
     setEditError('');
+  };
+
+  const saveDefaultCalendar = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const id = defaultDraft.trim();
+    if (!CALENDAR_ID_PATTERN.test(id)) {
+      setDefaultError(CALENDAR_ID_ERROR);
+      return;
+    }
+    setDefaultBusy(true);
+    setDefaultError('');
+    try {
+      const res = await fetch('/api/admin/staff', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'set_default_calendar', calendar_id: id }),
+      });
+      const data = await res.json();
+      if (data.success) {
+        setDefaultCalendar(data.defaultCalendarId);
+        setDefaultDraft(data.defaultCalendarId);
+        setMessage({ type: 'ok', text: data.changed ? 'Default booking calendar saved.' : 'No changes to save.' });
+      } else {
+        setDefaultError(data.error || 'Could not save the default booking calendar.');
+      }
+    } catch {
+      setDefaultError('Network error. Nothing was saved.');
+    } finally {
+      setDefaultBusy(false);
+    }
   };
 
   const saveEdit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!editing) return;
+    const calendar = editCalendar.trim();
+    if (editRole === 'csm' && calendar && !CALENDAR_ID_PATTERN.test(calendar)) {
+      setEditError(CALENDAR_ID_ERROR);
+      return;
+    }
     setEditBusy(true);
     setEditError('');
     try {
@@ -114,6 +168,7 @@ export default function StaffPage() {
           email: editEmail,
           // Your own role is locked; the server rejects it too.
           ...(editing.self ? {} : { role: editRole }),
+          ...(editRole === 'csm' ? { calendar_id: calendar } : {}),
         }),
       });
       const data = await res.json();
@@ -180,6 +235,45 @@ export default function StaffPage() {
         </form>
       </Card>
 
+      <Card style={{ marginBottom: 'var(--space-6)' }}>
+        <CardHeader
+          title="Default booking calendar"
+          subtitle="The GoHighLevel calendar clients book on when their CSM has no calendar of their own (set per CSM under Edit)."
+        />
+        {loading ? (
+          <Skeleton height="48px" />
+        ) : defaultCalendar === null ? (
+          <p style={{ color: 'var(--color-text-secondary)', fontSize: 'var(--font-size-sm)' }}>
+            The default booking calendar could not be loaded. Reload the page to try again.
+          </p>
+        ) : (
+          <form
+            onSubmit={saveDefaultCalendar}
+            style={{ display: 'flex', gap: 'var(--space-3)', flexWrap: 'wrap', alignItems: 'flex-start' }}
+          >
+            <div style={{ flex: '1 1 260px' }}>
+              <Input
+                id="default-booking-calendar"
+                label="Default booking calendar ID (GoHighLevel)"
+                value={defaultDraft}
+                onChange={(e) => setDefaultDraft(e.target.value)}
+                error={defaultError || undefined}
+                helperText="GHL → Calendars → the calendar → the id in the booking link (…/widget/booking/<id>)."
+                required
+              />
+            </div>
+            <Button
+              type="submit"
+              variant="outline"
+              disabled={defaultBusy || defaultDraft.trim() === defaultCalendar}
+              style={{ marginTop: 'var(--space-6)' }}
+            >
+              {defaultBusy ? 'Saving...' : 'Save default'}
+            </Button>
+          </form>
+        )}
+      </Card>
+
       <Card>
         <CardHeader title="Team" subtitle={loading ? undefined : `${staff.length} people`} />
         {loading ? (
@@ -206,6 +300,11 @@ export default function StaffPage() {
                     {m.email}
                     {m.assignedClients !== null ? ` · ${m.assignedClients} assigned client${m.assignedClients === 1 ? '' : 's'}` : ''}
                   </div>
+                  {m.role === 'csm' && (
+                    <div style={{ fontSize: 'var(--font-size-xs)', color: 'var(--color-text-muted)' }}>
+                      {m.calendarId ? `Calendar: ${m.calendarId}` : 'Default calendar'}
+                    </div>
+                  )}
                 </div>
                 <div style={{ display: 'flex', gap: 'var(--space-2)', alignItems: 'center' }}>
                   <StatusBadge status={m.role === 'admin' ? 'Admin' : 'CSM'} variant="progress" />
@@ -279,6 +378,15 @@ export default function StaffPage() {
               <option value="csm">CSM</option>
               <option value="admin">Admin (CSM manager)</option>
             </Select>
+            {editRole === 'csm' && (
+              <Input
+                id="edit-staff-calendar"
+                label="Booking calendar ID (GoHighLevel)"
+                value={editCalendar}
+                onChange={(e) => setEditCalendar(e.target.value)}
+                helperText="GHL → Calendars → the CSM's calendar → the id in the booking link (…/widget/booking/<id>). Leave empty to use the default calendar."
+              />
+            )}
           </form>
         )}
       </Modal>

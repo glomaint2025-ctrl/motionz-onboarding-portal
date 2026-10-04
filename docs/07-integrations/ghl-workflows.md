@@ -46,6 +46,15 @@ Shows "Your next call with your CSM" on the client's home page (client answers 2
 
 **Routing:** by the booking contact's **email**, matched to the client's portal users or the client's primary email. The portal's booking page pre-fills the client's email, so this normally matches.
 
+### When a CSM gets their own booking calendar
+
+Each client's **Book a Call** page shows their assigned CSM's calendar. A CSM with no calendar of their own uses the default calendar (`SRn2ONyB295xnnPR5JwR` unless changed under **Admin → Staff → Default booking calendar**). No code change is needed to add one. Do both steps:
+
+1. **In the portal:** **Admin → Staff → Edit** (the CSM) → paste the calendar id into **Booking calendar ID (GoHighLevel)** and save. The id is the last part of the calendar's booking link: GHL → Calendars → the CSM's calendar → `…/widget/booking/<id>`. Leave the field empty to go back to the default calendar.
+2. **In GHL:** open the `Portal: CSM calls` workflow and add the new calendar to the **calendar filter of both triggers** (Customer Booked Appointment and Appointment Status), then publish. Without this, clients can still book on the new calendar but those bookings never reach the portal, so "Your next call with your CSM" stays empty for that CSM's clients.
+
+The same applies if the default calendar is changed: the new default must also be in the workflow's trigger filters.
+
 ## 3. Onboarding form: in the sub-account that owns form `wyM27h1ZCiwGoyXE03oC`
 
 Saves the answers to the client's portal and emails the notification list (client answers 5.2/5.3).
