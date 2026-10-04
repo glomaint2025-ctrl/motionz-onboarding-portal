@@ -53,6 +53,8 @@ export async function GET(request: Request) {
         cancelledOrArchived: tenants.filter((t: any) => t.deleted_at || t.status === 'cancelled').length,
         newLast30Days: tenants.filter((t) => Date.now() - new Date(t.created_at).getTime() < 30 * DAY).length,
       },
+      // Same client set as /admin/ghl (live clients: not archived, not cancelled).
+      ghl: { connected: setup.filter((s) => s.ghlConnected).length, total: setup.length },
       ghlNotConnected: setup.filter((s) => !s.ghlConnected).map(({ id, name }) => ({ id, name })),
       withoutCsm: setup.filter((s) => !s.hasCsm).map(({ id, name }) => ({ id, name })),
       inSetup: setup.filter((s) => !s.done).length,

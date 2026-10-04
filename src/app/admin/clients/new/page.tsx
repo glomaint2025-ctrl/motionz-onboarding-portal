@@ -44,6 +44,9 @@ export default function AddClientPage() {
   const [magicLink, setMagicLink] = useState<string | null>(null);
   const [isSuccessModalOpen, setIsSuccessModalOpen] = useState(false);
   const [isCopied, setIsCopied] = useState(false);
+  const [emailDelivered, setEmailDelivered] = useState(false);
+  const [invitedEmail, setInvitedEmail] = useState('');
+  const [sheet, setSheet] = useState<{ ok?: boolean; url?: string; error?: string } | null>(null);
 
   const toggleFeature = (key: string) => {
     setFeatures((prev) => ({ ...prev, [key]: !prev[key] }));
@@ -74,6 +77,9 @@ export default function AddClientPage() {
         setErrorMessage(data.error || 'Failed to provision client portal.');
       } else {
         setCreatedTenant(data.tenant);
+        setEmailDelivered(data.emailDelivered === true);
+        setInvitedEmail(data.tenant?.primary_email || email.trim().toLowerCase());
+        setSheet(data.sheet && typeof data.sheet === 'object' ? data.sheet : null);
         let link = data.magicLinkUrl || '';
         if (typeof window !== 'undefined' && link) {
           try {
@@ -183,7 +189,7 @@ export default function AddClientPage() {
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               required
-              helperText="An expiring single-use magic link invitation will be generated for this email."
+              helperText="The invite link is emailed to this address when you create the client."
             />
             <Input
               label="Business Phone Number"
@@ -259,9 +265,9 @@ export default function AddClientPage() {
                   alignItems: 'center',
                   gap: '10px',
                   padding: '12px 14px',
-                  backgroundColor: enabled ? 'rgba(59, 130, 246, 0.08)' : '#0b121c',
+                  backgroundColor: enabled ? 'var(--color-primary-muted)' : 'var(--color-bg-input)',
                   borderRadius: 'var(--radius-md)',
-                  border: enabled ? '1px solid rgba(59, 130, 246, 0.3)' : '1px solid rgba(255, 255, 255, 0.06)',
+                  border: enabled ? '1px solid var(--color-primary-border)' : '1px solid var(--color-border-subtle)',
                   cursor: 'pointer',
                   transition: 'all var(--transition-fast)',
                 }}
@@ -270,7 +276,7 @@ export default function AddClientPage() {
                   type="checkbox"
                   checked={enabled}
                   onChange={() => toggleFeature(key)}
-                  style={{ accentColor: '#3b82f6', width: '16px', height: '16px' }}
+                  style={{ accentColor: 'var(--color-primary)', width: '16px', height: '16px' }}
                 />
                 <span style={{ fontSize: 'var(--font-size-sm)', fontWeight: 500, color: enabled ? 'var(--color-text-primary)' : 'var(--color-text-muted)', textTransform: 'capitalize' }}>
                   {key.replace(/_/g, ' ')}
@@ -281,6 +287,19 @@ export default function AddClientPage() {
         </div>
 
         {/* Buttons */}
+        <p
+          aria-live="polite"
+          style={{
+            textAlign: 'right',
+            fontSize: 'var(--font-size-xs)',
+            color: loading ? 'var(--color-status-warning-text)' : 'var(--color-text-muted)',
+            margin: '0 0 var(--space-3)',
+          }}
+        >
+          {loading
+            ? 'Creating the portal, tracking sheet and invite. This takes about 15 seconds. Please keep this page open.'
+            : 'Creating a client takes about 15 seconds while the portal, tracking sheet and invite are set up.'}
+        </p>
         <div style={{ display: 'flex', gap: 'var(--space-3)', justifyContent: 'flex-end', marginBottom: 'var(--space-8)' }}>
           <Link href="/admin/clients" style={{ textDecoration: 'none' }}>
             <button type="button" className="ui-filter-clear-btn">
@@ -291,7 +310,7 @@ export default function AddClientPage() {
             type="submit"
             variant="primary"
             disabled={loading}
-            style={{ backgroundColor: '#2563eb', padding: '10px 20px', fontWeight: 600, borderRadius: 'var(--radius-md)' }}
+            style={{ padding: '10px 20px', fontWeight: 600, borderRadius: 'var(--radius-md)' }}
           >
             {loading ? 'Provisioning...' : 'Provision Client Portal'}
           </Button>
@@ -319,7 +338,6 @@ export default function AddClientPage() {
             </Button>
             <Button
               variant="primary"
-              style={{ backgroundColor: '#2563eb' }}
               onClick={() => router.push('/admin/clients')}
             >
               Done
@@ -328,39 +346,83 @@ export default function AddClientPage() {
         }
       >
         <div>
-          <div style={{ marginBottom: 'var(--space-3)' }}>
-            <span className="ui-pill-status ui-pill-status-active">
-              <span className="ui-pill-status-dot" />
-              Tenant Active
-            </span>
-          </div>
-          <h3 style={{ margin: 'var(--space-2) 0 var(--space-1)', fontSize: '1.25rem', color: 'var(--color-text-primary)' }}>
+          <h3 style={{ margin: '0 0 var(--space-3)', fontSize: '1.25rem', color: 'var(--color-text-primary)' }}>
             {createdTenant?.name}
           </h3>
-          <p style={{ marginBottom: 'var(--space-4)', fontSize: 'var(--font-size-sm)', color: 'var(--color-text-secondary)' }}>
-            Portal cloned from Master Template with the 5 confirmed setup steps.
-          </p>
+
+          {/* Invite email: say what actually happened. */}
+          <div
+            role="status"
+            style={{
+              padding: 'var(--space-3)',
+              borderRadius: 'var(--radius-md)',
+              fontSize: 'var(--font-size-sm)',
+              marginBottom: 'var(--space-3)',
+              wordBreak: 'break-word',
+              backgroundColor: emailDelivered ? 'var(--color-status-done-bg)' : 'var(--color-status-warning-bg)',
+              border: `1px solid ${emailDelivered ? 'var(--color-status-done-border)' : 'var(--color-status-warning-border)'}`,
+              color: emailDelivered ? 'var(--color-status-done-text)' : 'var(--color-status-warning-text)',
+            }}
+          >
+            {emailDelivered
+              ? `Invite emailed to ${invitedEmail}`
+              : 'The invite email could not be sent. Copy this link and send it to the client yourself.'}
+          </div>
+
+          {/* Tracking sheet */}
+          {sheet && (
+            <div
+              style={{
+                padding: 'var(--space-3)',
+                borderRadius: 'var(--radius-md)',
+                fontSize: 'var(--font-size-sm)',
+                marginBottom: 'var(--space-3)',
+                wordBreak: 'break-word',
+                backgroundColor: sheet.ok ? 'var(--color-status-done-bg)' : 'var(--color-status-warning-bg)',
+                border: `1px solid ${sheet.ok ? 'var(--color-status-done-border)' : 'var(--color-status-warning-border)'}`,
+                color: sheet.ok ? 'var(--color-status-done-text)' : 'var(--color-status-warning-text)',
+              }}
+            >
+              {sheet.ok ? (
+                <>
+                  Tracking sheet created.
+                  {sheet.url && (
+                    <>
+                      {' '}
+                      <a href={sheet.url} target="_blank" rel="noopener noreferrer" style={{ color: 'inherit', textDecoration: 'underline' }}>
+                        Open sheet
+                      </a>
+                    </>
+                  )}
+                </>
+              ) : (
+                `Tracking sheet was not created${sheet.error ? `: ${sheet.error}` : '.'} You can add it later from the client's page.`
+              )}
+            </div>
+          )}
 
           <div
             style={{
               padding: 'var(--space-3)',
-              backgroundColor: '#0b121c',
-              border: '1px solid rgba(59, 130, 246, 0.3)',
+              backgroundColor: 'var(--color-bg-input)',
+              border: '1px solid var(--color-primary-border)',
               borderRadius: 'var(--radius-md)',
               fontSize: 'var(--font-size-xs)',
               marginBottom: 'var(--space-3)',
             }}
           >
             <span style={{ display: 'block', color: 'var(--color-text-muted)', marginBottom: '4px' }}>
-              Single-Use Expiring Invitation Link (72 Hours):
+              Invitation link (single use, expires in 72 hours):
             </span>
-            <span style={{ wordBreak: 'break-all', color: '#38bdf8', fontFamily: 'var(--font-family-mono)' }}>
+            <span style={{ wordBreak: 'break-all', color: 'var(--color-primary-text)', fontFamily: 'var(--font-family-mono)' }}>
               {magicLink}
             </span>
           </div>
 
           <p style={{ fontSize: 'var(--font-size-xs)', color: 'var(--color-text-muted)', margin: 0 }}>
-            Deliver this link to the client. Upon first click, it will verify and establish an authenticated session.
+            {emailDelivered
+              ? 'The same link is in the email. Keep a copy here in case the client cannot find it.'
+              : 'The client opens the link to set up their sign-in.'}
           </p>
         </div>
       </Modal>
