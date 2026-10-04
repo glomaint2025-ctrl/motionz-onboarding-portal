@@ -15,6 +15,9 @@ interface RecentMeasurement {
   result_data?: RoofMeasurementResult;
 }
 
+/** How many roof facets are listed before "Show all". */
+const FACETS_SHOWN = 8;
+
 export default function RoofMeasurementPage() {
   const params = useParams();
   const clientId = (params?.clientId as string) || 'demo';
@@ -28,6 +31,12 @@ export default function RoofMeasurementPage() {
   const [measuring, setMeasuring] = useState(false);
   const [error, setError] = useState('');
   const [result, setResult] = useState<RoofMeasurementResult | null>(null);
+  const [showAllFacets, setShowAllFacets] = useState(false);
+
+  // A new result starts with the short list again.
+  useEffect(() => {
+    setShowAllFacets(false);
+  }, [result]);
 
   useEffect(() => {
     let isMounted = true;
@@ -95,6 +104,12 @@ export default function RoofMeasurementPage() {
     </div>
   );
 
+  // Largest facets first; big buildings can have dozens, so only the top few show until asked.
+  const sortedFacets = result
+    ? result.segments.map((s, i) => ({ ...s, number: i + 1 })).sort((a, b) => b.areaSqFt - a.areaSqFt)
+    : [];
+  const visibleFacets = showAllFacets ? sortedFacets : sortedFacets.slice(0, FACETS_SHOWN);
+
   return (
     <div>
       <div style={{ marginBottom: 'var(--space-6)' }}>
@@ -149,7 +164,7 @@ export default function RoofMeasurementPage() {
             <Card style={{ marginBottom: 'var(--space-6)' }}>
               <CardHeader
                 title={result.formattedAddress}
-                subtitle={`Satellite imagery quality: ${result.imageryQuality.toLowerCase()}${result.imageryDate ? ` · captured ${result.imageryDate}` : ''}`}
+                subtitle={`Satellite imagery quality: ${result.imageryQuality.toLowerCase()}${result.imageryDate ? ` · captured ${formatDate(`${result.imageryDate}T12:00:00`) || result.imageryDate}` : ''}`}
               />
               <div style={{ display: 'grid', gap: 'var(--space-4)', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', marginBottom: 'var(--space-5)' }}>
                 {fact('Roof area', `${result.roofAreaSqFt.toLocaleString()} sq ft`)}
@@ -170,9 +185,9 @@ export default function RoofMeasurementPage() {
                     </tr>
                   </thead>
                   <tbody>
-                    {result.segments.map((s, i) => (
-                      <tr key={i} style={{ borderTop: '1px solid var(--color-border-subtle)' }}>
-                        <td style={{ padding: 'var(--space-2)' }}>{i + 1}</td>
+                    {visibleFacets.map((s) => (
+                      <tr key={s.number} style={{ borderTop: '1px solid var(--color-border-subtle)' }}>
+                        <td style={{ padding: 'var(--space-2)' }}>{s.number}</td>
                         <td style={{ padding: 'var(--space-2)' }}>{s.pitch}</td>
                         <td style={{ padding: 'var(--space-2)' }}>{s.facing}</td>
                         <td style={{ padding: 'var(--space-2)' }}>{s.areaSqFt.toLocaleString()} sq ft</td>
@@ -181,6 +196,24 @@ export default function RoofMeasurementPage() {
                   </tbody>
                 </table>
               </div>
+              {sortedFacets.length > FACETS_SHOWN && (
+                <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-3)', flexWrap: 'wrap', marginTop: 'var(--space-3)' }}>
+                  <Button
+                    type="button"
+                    variant="secondary"
+                    size="sm"
+                    aria-expanded={showAllFacets}
+                    onClick={() => setShowAllFacets((v) => !v)}
+                  >
+                    {showAllFacets ? `Show the ${FACETS_SHOWN} largest` : `Show all ${sortedFacets.length} facets`}
+                  </Button>
+                  {!showAllFacets && (
+                    <span style={{ fontSize: 'var(--font-size-xs)', color: 'var(--color-text-muted)' }}>
+                      Showing the {FACETS_SHOWN} largest facets.
+                    </span>
+                  )}
+                </div>
+              )}
               <p style={{ fontSize: 'var(--font-size-xs)', color: 'var(--color-text-muted)', margin: 'var(--space-4) 0 0' }}>
                 Estimates from Google satellite data. Always confirm on site before ordering materials.
               </p>

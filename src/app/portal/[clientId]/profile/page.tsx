@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useParams } from 'next/navigation';
 import { Card, CardHeader, Button, Input, Skeleton } from '@/components/ui';
 
@@ -12,13 +12,20 @@ export default function ClientProfilePage() {
   const [primaryContact, setPrimaryContact] = useState('');
   const [email, setEmail] = useState('');
   const [phone, setPhone] = useState('');
-  const [tenantStatus, setTenantStatus] = useState<string>('');
   const [viewerRole, setViewerRole] = useState<string | null>(null);
   const [loadError, setLoadError] = useState('');
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
   const [statusMessage, setStatusMessage] = useState('');
   const [isError, setIsError] = useState(false);
+  const statusRef = useRef<HTMLDivElement>(null);
+
+  // The result appears right above the save button; bring it into view and announce it.
+  useEffect(() => {
+    if (!statusMessage) return;
+    statusRef.current?.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+    statusRef.current?.focus({ preventScroll: true });
+  }, [statusMessage, isSaving]);
 
   useEffect(() => {
     let isMounted = true;
@@ -35,7 +42,6 @@ export default function ClientProfilePage() {
           setPrimaryContact(data.tenant.primary_contact_name || '');
           setEmail(data.tenant.primary_email || '');
           setPhone(data.tenant.phone || '');
-          setTenantStatus(data.tenant.status || '');
           setViewerRole(data.viewer?.role || null);
         }
       } catch {
@@ -94,12 +100,6 @@ export default function ClientProfilePage() {
 
   // Team members (client_member) can view the profile but only the account owner can edit it.
   const readOnly = viewerRole === 'client_member';
-  const statusLabels: Record<string, string> = {
-    active: 'Active',
-    onboarding: 'Onboarding',
-    cancelled: 'Cancelled',
-    suspended: 'Suspended',
-  };
 
   return (
     <div>
@@ -127,29 +127,7 @@ export default function ClientProfilePage() {
         </div>
       )}
 
-      {statusMessage && (
-        <div
-          role={isError ? 'alert' : 'status'}
-          style={{
-            padding: 'var(--space-3)',
-            backgroundColor: isError ? 'var(--color-status-blocked-bg)' : 'var(--color-status-done-bg)',
-            color: isError ? 'var(--color-status-blocked-text)' : 'var(--color-status-done-text)',
-            borderRadius: 'var(--radius-md)',
-            marginBottom: 'var(--space-4)',
-            fontSize: 'var(--font-size-sm)',
-          }}
-        >
-          {statusMessage}
-        </div>
-      )}
-
-      <div
-        style={{
-          display: 'grid',
-          gap: 'var(--space-6)',
-          gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))',
-        }}
-      >
+      <div style={{ maxWidth: '640px' }}>
         {/* Profile Edit Form */}
         <Card>
           <CardHeader
@@ -210,35 +188,29 @@ export default function ClientProfilePage() {
                 placeholder={readOnly ? '' : 'e.g. +1 555 234 5678'}
               />
 
+              {statusMessage && (
+                <div
+                  ref={statusRef}
+                  tabIndex={-1}
+                  role={isError ? 'alert' : 'status'}
+                  style={{
+                    padding: 'var(--space-3)',
+                    backgroundColor: isError ? 'var(--color-status-blocked-bg)' : 'var(--color-status-done-bg)',
+                    color: isError ? 'var(--color-status-blocked-text)' : 'var(--color-status-done-text)',
+                    borderRadius: 'var(--radius-md)',
+                    fontSize: 'var(--font-size-sm)',
+                  }}
+                >
+                  {statusMessage}
+                </div>
+              )}
+
               {!readOnly && (
                 <Button type="submit" variant="primary" disabled={isSaving}>
                   {isSaving ? 'Saving...' : 'Save changes'}
                 </Button>
               )}
             </form>
-          )}
-        </Card>
-
-        {/* Account information (real values only; unknown values are labelled as such) */}
-        <Card>
-          <CardHeader title="Account" />
-          {isLoading ? (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-4)' }}>
-              <Skeleton width="100%" height="32px" />
-            </div>
-          ) : (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-4)', fontSize: 'var(--font-size-sm)' }}>
-              <div>
-                <span style={{ fontSize: 'var(--font-size-xs)', color: 'var(--color-text-muted)', display: 'block' }}>
-                  Account status
-                </span>
-                {tenantStatus ? (
-                  <span style={{ fontWeight: 'var(--font-weight-medium)' }}>{statusLabels[tenantStatus] || tenantStatus}</span>
-                ) : (
-                  <span style={{ color: 'var(--color-text-muted)' }}>Unknown</span>
-                )}
-              </div>
-            </div>
           )}
         </Card>
       </div>

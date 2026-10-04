@@ -40,6 +40,10 @@ export async function GET(
     // Enforce active account, tenant suspension, and tenant isolation
     const session = await assertPortalAccess(request, targetTenant, rawClientId);
     const isMember = session?.role === 'client_member';
+    // The signed-in person (not the account owner), for the greeting and the header.
+    const viewerUser = session
+      ? (await userRepository.findById(session.userId)) || (await userRepository.findByEmail(session.email))
+      : null;
 
     const [
       steps,
@@ -66,7 +70,7 @@ export async function GET(
     // Every known module is checked, including ones the client has no saved on/off setting for.
     const effectiveFeatureToggles: Record<string, boolean> = { ...featureToggles };
     if (session && isMember) {
-      const currentUser = (await userRepository.findById(session.userId)) || (await userRepository.findByEmail(session.email));
+      const currentUser = viewerUser;
       if (currentUser && Array.isArray(currentUser.allowed_modules)) {
         const allowedSet = new Set(currentUser.allowed_modules);
         const moduleKeys = [...PORTAL_MODULES.map((m) => m.key), ...Object.keys(featureToggles)];
@@ -102,6 +106,19 @@ export async function GET(
       ),
     }));
 
+    // Connected when the location is saved on the client or on their GoHighLevel integration.
+    // Leads only ever arrive from GoHighLevel, so having leads also means it is connected.
+    const ghlConnected =
+      Boolean(targetTenant?.ghl_location_id) ||
+      integrations.some((i: any) => i.integration_type === 'ghl' && i.is_active !== false && Boolean(i.config_data?.location_id)) ||
+      leadCount > 0;
+
+    // A team member who cannot open the Team page only gets their own entry.
+    const visibleTeamMembers =
+      isMember && effectiveFeatureToggles.team === false
+        ? teamMembers.filter((m) => m.id === session?.userId || m.email.toLowerCase() === session?.email.toLowerCase())
+        : teamMembers;
+
     return NextResponse.json({
       tenant: targetTenant
         ? publicTenant(targetTenant)
@@ -115,11 +132,14 @@ export async function GET(
       featureToggles: effectiveFeatureToggles,
       organizationFeatureToggles: featureToggles,
       integrations: publicIntegrations,
-      teamMembers: teamMembers.map(publicTeamMember),
+      ghlConnected,
+      teamMembers: visibleTeamMembers.map(publicTeamMember),
       invitations: invitations.map(publicInvitation),
       csm: csmUser ? { name: csmUser.full_name, email: csmUser.email } : null,
       bookingCalendarId,
-      viewer: session ? { email: session.email, role: session.role } : null,
+      viewer: session
+        ? { email: session.email, role: session.role, full_name: viewerUser?.full_name || '' }
+        : null,
     });
   } catch (error: any) {
     if (

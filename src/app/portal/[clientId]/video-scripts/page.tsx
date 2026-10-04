@@ -472,7 +472,7 @@ export default function VideoScriptsPage() {
               <Card style={{ marginBottom: 'var(--space-4)' }}>
                 <CardHeader
                   title="Your 3 scripts"
-                  subtitle={`${chosenCount} of ${requiredCount} chosen`}
+                  subtitle={chosenCount === requiredCount ? 'All chosen' : 'Pick one script for each type below.'}
                   action={
                     <StatusBadge
                       status={chosenCount === requiredCount ? 'Ready to record' : `${chosenCount} of ${requiredCount} chosen`}

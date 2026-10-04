@@ -34,6 +34,7 @@ export default function ClientPortalLayout({
   const [companyName, setCompanyName] = useState<string>('');
   const [tenantId, setTenantId] = useState<string>('');
   const [viewerRole, setViewerRole] = useState<string | null>(null);
+  const [viewerName, setViewerName] = useState<string>('');
   const [featureToggles, setFeatureToggles] = useState<Record<string, boolean>>({});
   const [isLoading, setIsLoading] = useState(true);
   const [loadError, setLoadError] = useState('');
@@ -75,6 +76,7 @@ export default function ClientPortalLayout({
         setCompanyName(data.tenant?.name || '');
         setTenantId(data.tenant?.id || '');
         setViewerRole(data.viewer?.role || null);
+        setViewerName(typeof data.viewer?.full_name === 'string' ? data.viewer.full_name : '');
         setFeatureToggles(data.featureToggles || {});
       } catch {
         if (isMounted) setLoadError('We could not reach the server. Check your connection and try again.');
@@ -144,6 +146,8 @@ export default function ClientPortalLayout({
   }
 
   const isStaffViewer = viewerRole === 'admin' || viewerRole === 'csm';
+  // The header shows the signed-in person (staff stay themselves while viewing a client).
+  const shellViewer = viewerRole ? { name: viewerName, role: viewerRole } : null;
   const staffBackHref =
     viewerRole === 'admin'
       ? `/admin/clients/${tenantId || clientId}`
@@ -187,6 +191,7 @@ export default function ClientPortalLayout({
         companyName={companyName || 'Client Workspace'}
         portalTitle="Client Portal"
         featureToggles={featureToggles}
+        viewer={shellViewer}
       >
         <div className="portal-container">
           {staffBar}

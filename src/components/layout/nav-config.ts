@@ -56,7 +56,6 @@ export function getNavGroups(
       {
         label: 'Workspace',
         items: [
-          { label: 'Dashboard', href: '/csm', icon: 'dashboard' },
           { label: 'My Clients', shortLabel: 'Clients', href: '/csm/clients', icon: 'clients' },
         ],
       },
@@ -125,12 +124,12 @@ export function getBottomBarItems(
       ? [`/portal/${clientId}`, `/portal/${clientId}/onboarding`, `/portal/${clientId}/leads`, `/portal/${clientId}/tracking`]
       : role === 'admin'
         ? ['/admin', '/admin/clients', '/admin/templates']
-        : ['/csm', '/csm/clients'];
+        : ['/csm/clients'];
   return wanted
     .map((href) => all.find((item) => item.href === href))
     .filter((item): item is NavConfigItem => Boolean(item));
 }
 
 export function roleHomeHref(role: ShellRole, clientId: string): string {
-  return role === 'admin' ? '/admin' : role === 'csm' ? '/csm' : `/portal/${clientId}`;
+  return role === 'admin' ? '/admin' : role === 'csm' ? '/csm/clients' : `/portal/${clientId}`;
 }

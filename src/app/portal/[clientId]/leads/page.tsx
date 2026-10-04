@@ -22,9 +22,54 @@ interface LeadsResponse {
   page: number;
   pageSize: number;
   totalPages: number;
-  counts: { all: number; newThisWeek: number; byStage: { stage: string; count: number }[] };
-  connected: boolean;
+  counts: { all: number; newThisWeek: number; byStage: StageCount[] };
+  ghlConnected: boolean;
 }
+
+interface StageCount {
+  stage: string;
+  count: number;
+}
+
+/**
+ * Pipeline order: "New Lead" first, then "Day 1" to "Day 7" by number, then everything else
+ * A to Z, with closing stages (won, lost and similar) last.
+ */
+function stageRank(stage: string): [number, number] {
+  const name = stage.trim();
+  if (/^new(\s+leads?)?$/i.test(name)) return [0, 0];
+  const day = name.match(/^day\s*(\d+)/i);
+  if (day) return [1, parseInt(day[1], 10)];
+  if (/\b(won|lost|closed|sold|dead|disqualified|unqualified|not interested|abandoned)\b/i.test(name)) {
+    return [3, /\b(won|sold)\b/i.test(name) ? 0 : 1];
+  }
+  return [2, 0];
+}
+
+function sortStages(stages: StageCount[]): StageCount[] {
+  return [...stages].sort((a, b) => {
+    const [groupA, orderA] = stageRank(a.stage);
+    const [groupB, orderB] = stageRank(b.stage);
+    return groupA - groupB || orderA - orderB || a.stage.localeCompare(b.stage);
+  });
+}
+
+const stageChipStyle = (isActive: boolean): React.CSSProperties => ({
+  display: 'inline-flex',
+  alignItems: 'center',
+  gap: '6px',
+  minHeight: '32px',
+  padding: '4px 12px',
+  borderRadius: 'var(--radius-full)',
+  border: `1px solid ${isActive ? 'var(--color-primary-border)' : 'var(--color-border-default)'}`,
+  backgroundColor: isActive ? 'var(--color-primary-muted)' : 'var(--color-bg-surface)',
+  color: isActive ? 'var(--color-primary-text)' : 'var(--color-text-primary)',
+  fontSize: 'var(--font-size-xs)',
+  fontWeight: 'var(--font-weight-medium)',
+  fontFamily: 'inherit',
+  cursor: 'pointer',
+  whiteSpace: 'nowrap',
+});
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 const SEARCH_DELAY_MS = 300;
@@ -99,11 +144,15 @@ export default function LeadsPage() {
 
   const firstLoad = isLoading && !data;
   const leads = data?.leads || [];
-  const stages = data?.counts.byStage || [];
+  const stages = sortStages(data?.counts.byStage || []);
+  const pickStage = (stage: string) => {
+    setStageFilter(stage);
+    setPage(1);
+  };
   const isFiltered = Boolean(search) || stageFilter !== 'ALL';
 
   const stat = (label: string, value: React.ReactNode) => (
-    <Card>
+    <Card style={{ minWidth: 0 }}>
       <span style={{ fontSize: 'var(--font-size-xs)', color: 'var(--color-text-muted)' }}>{label}</span>
       <div style={{ fontSize: 'var(--font-size-2xl)', fontWeight: 'bold', marginTop: 'var(--space-1)' }}>{value}</div>
     </Card>
@@ -119,7 +168,8 @@ export default function LeadsPage() {
         </p>
       </div>
 
-      {data && !data.connected && (
+      {/* Only when there is truly nothing: a client with leads is connected, whatever the setting says. */}
+      {data && !data.ghlConnected && data.counts.all === 0 && (
         <Card style={{ marginBottom: 'var(--space-6)' }}>
           <p style={{ margin: 0, color: 'var(--color-text-secondary)' }}>
             Your GoHighLevel account is not connected yet. Your CSM is setting it up, and leads will appear here
@@ -144,16 +194,48 @@ export default function LeadsPage() {
           style={{
             display: 'grid',
             gap: 'var(--space-4)',
-            gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))',
-            marginBottom: 'var(--space-6)',
+            // Two cards side by side on every screen, phones included.
+            gridTemplateColumns: 'repeat(2, minmax(0, 1fr))',
+            maxWidth: '640px',
+            marginBottom: 'var(--space-4)',
           }}
         >
           {stat('Total leads', data ? data.counts.all : '-')}
           {stat('New this week', data ? data.counts.newThisWeek : '-')}
-          {stages.slice(0, 2).map(({ stage, count }) => (
-            <React.Fragment key={stage}>{stat(stage, count)}</React.Fragment>
-          ))}
         </div>
+      )}
+
+      {data && stages.length > 0 && (
+        <Card style={{ marginBottom: 'var(--space-6)' }}>
+          <div
+            role="group"
+            aria-label="Leads by stage"
+            style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 'var(--space-2)' }}
+          >
+            <span style={{ fontSize: 'var(--font-size-xs)', color: 'var(--color-text-muted)', marginRight: 'var(--space-1)' }}>
+              By stage
+            </span>
+            <button
+              type="button"
+              aria-pressed={stageFilter === 'ALL'}
+              onClick={() => pickStage('ALL')}
+              style={stageChipStyle(stageFilter === 'ALL')}
+            >
+              All <strong>{data.counts.all}</strong>
+            </button>
+            {stages.map(({ stage, count }) => (
+              <button
+                key={stage}
+                type="button"
+                aria-pressed={stageFilter === stage}
+                onClick={() => pickStage(stageFilter === stage ? 'ALL' : stage)}
+                style={stageChipStyle(stageFilter === stage)}
+              >
+                {stage} <strong>{count}</strong>
+              </button>
+            ))}
+          </div>
+        </Card>
       )}
 
       {(data || firstLoad) && (
@@ -183,10 +265,7 @@ export default function LeadsPage() {
               <Select
                 aria-label="Filter by stage"
                 value={stageFilter}
-                onChange={(e) => {
-                  setStageFilter(e.target.value);
-                  setPage(1);
-                }}
+                onChange={(e) => pickStage(e.target.value)}
               >
                 <option value="ALL">All stages</option>
                 {stages.map(({ stage, count }) => (
