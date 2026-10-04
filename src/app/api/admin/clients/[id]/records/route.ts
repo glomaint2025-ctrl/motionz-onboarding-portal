@@ -42,6 +42,10 @@ export async function POST(request: Request, { params }: { params: { id: string 
       if (signedAt && isNaN(signedAt.getTime())) {
         return NextResponse.json({ error: 'Signed date is not a valid date.' }, { status: 400 });
       }
+      // One day of leeway covers admins whose local date is ahead of the server's.
+      if (signedAt && signedAt.getTime() > Date.now() + 24 * 60 * 60 * 1000) {
+        return NextResponse.json({ error: 'The signed date cannot be in the future.' }, { status: 400 });
+      }
       const contract = await contractRepository.create({
         tenant_id: tenant.id,
         title: validateText(body.title, 'Contract title', { required: true, max: 255 })!,

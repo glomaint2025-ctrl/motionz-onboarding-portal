@@ -87,9 +87,20 @@ export async function PUT(
     } catch (e: any) {
       return NextResponse.json({ error: e.message }, { status: 400 });
     }
-    if (status) {
-      if (!['active', 'onboarding', 'cancelled', 'suspended'].includes(status)) {
-        return NextResponse.json({ error: 'Invalid portal status.' }, { status: 400 });
+    // Suspending and archiving have their own buttons (reason, team lock-out, history),
+    // so this form may only move a client between Active and Onboarding.
+    if (status !== undefined && status !== null && status !== '') {
+      if (status !== 'active' && status !== 'onboarding') {
+        return NextResponse.json(
+          { error: 'Status can only be set to Active or Onboarding here. Use the Suspend or Archive buttons instead.' },
+          { status: 400 }
+        );
+      }
+      if (tenant.deleted_at || tenant.status === 'suspended' || tenant.status === 'cancelled') {
+        return NextResponse.json(
+          { error: 'This client is suspended or archived. Use Reactivate or Unarchive first.' },
+          { status: 400 }
+        );
       }
       updates.status = status;
     }
@@ -101,18 +112,19 @@ export async function PUT(
       updates.ghl_location_id = loc || null;
     }
 
+    // Check the CSM before saving anything, so a bad choice never leaves a half-saved form.
+    if (csmChange && csm_user_id) {
+      const csmUser = await userRepository.findById(String(csm_user_id));
+      if (!csmUser || csmUser.role !== 'csm') {
+        return NextResponse.json({ error: 'Choose a valid CSM.' }, { status: 400 });
+      }
+    }
+
     const updatedTenant = Object.keys(updates).length > 0
       ? await tenantRepository.update(tenant.id, updates)
       : tenant;
 
-    // Update CSM assignment if supplied
     if (csmChange) {
-      if (csm_user_id) {
-        const csmUser = await userRepository.findById(String(csm_user_id));
-        if (!csmUser || csmUser.role !== 'csm') {
-          return NextResponse.json({ error: 'Choose a valid CSM.' }, { status: 400 });
-        }
-      }
       await csmAssignmentRepository.setForTenant(tenant.id, csm_user_id ? String(csm_user_id) : null);
     }
 
@@ -266,11 +278,11 @@ export async function PATCH(
       }
       const targetUser = await userRepository.findById(memberId);
       if (!targetUser || targetUser.tenant_id !== tenant.id) {
-        return NextResponse.json({ error: 'Member not found for this tenant' }, { status: 404 });
+        return NextResponse.json({ error: 'That person is not part of this client.' }, { status: 404 });
       }
       if (targetUser.role === 'client') {
         return NextResponse.json(
-          { error: 'The primary account holder cannot be disabled individually. Use "Ban Client Portal" to suspend the client company.' },
+          { error: 'The account owner cannot be disabled on their own. Use "Suspend client" to lock the whole company out.' },
           { status: 400 }
         );
       }
@@ -297,7 +309,7 @@ export async function PATCH(
       }
       const targetUser = await userRepository.findById(memberId);
       if (!targetUser || targetUser.tenant_id !== tenant.id) {
-        return NextResponse.json({ error: 'Member not found for this tenant' }, { status: 404 });
+        return NextResponse.json({ error: 'That person is not part of this client.' }, { status: 404 });
       }
       const updatedUser = await userRepository.unsuspendUser(targetUser.id);
 
@@ -321,7 +333,7 @@ export async function PATCH(
       }
       const targetUser = await userRepository.findById(memberId);
       if (!targetUser || targetUser.tenant_id !== tenant.id) {
-        return NextResponse.json({ error: 'Member not found for this tenant' }, { status: 404 });
+        return NextResponse.json({ error: 'That person is not part of this client.' }, { status: 404 });
       }
       const { allowed_modules } = body;
       if (!Array.isArray(allowed_modules)) {
@@ -389,20 +401,44 @@ export async function PATCH(
 
       return NextResponse.json({
         success: true,
-        message: 'Magic link generated successfully.',
+        message: 'Invitation created.',
+        emailDelivered: Boolean(result.emailDelivered),
         invitation: result.invitation,
         magicLinkUrl: result.magicLinkUrl,
       });
     }
 
-    // 6. Invitation operations (resend, revoke)
+    // 6. Unarchive / Restore client portal (must run before the invitation checks below)
+    if (action === 'unarchive' || action === 'restore') {
+      const updatedTenant = await tenantRepository.unarchive(tenant.id);
+
+      await auditLogRepository.create({
+        tenant_id: tenant.id,
+        actor_email: actorEmail,
+        actor_role: 'admin',
+        action: 'client.unarchived',
+        resource_type: 'tenant',
+        resource_id: tenant.id,
+      });
+
+      return NextResponse.json({
+        success: true,
+        message: 'Client unarchived.',
+        tenant: updatedTenant,
+      });
+    }
+
+    // 7. Invitation operations (resend, revoke)
+    if (action !== 'resend' && action !== 'revoke') {
+      return NextResponse.json({ error: 'That action is not supported.' }, { status: 400 });
+    }
     if (!invitationId) {
-      return NextResponse.json({ error: 'Invitation ID or valid action is required' }, { status: 400 });
+      return NextResponse.json({ error: 'Choose an invitation first.' }, { status: 400 });
     }
 
     const existing = await invitationRepository.findById(invitationId);
     if (!existing || existing.tenant_id !== tenant.id) {
-      return NextResponse.json({ error: 'Invitation not found for this tenant' }, { status: 404 });
+      return NextResponse.json({ error: 'That invitation does not belong to this client.' }, { status: 404 });
     }
 
     if (action === 'revoke') {
@@ -433,27 +469,7 @@ export async function PATCH(
       });
     }
 
-    // 7. Unarchive / Restore client portal
-    if (action === 'unarchive' || action === 'restore') {
-      const updatedTenant = await tenantRepository.unarchive(tenant.id);
-
-      await auditLogRepository.create({
-        tenant_id: tenant.id,
-        actor_email: actorEmail,
-        actor_role: 'admin',
-        action: 'client.unarchived',
-        resource_type: 'tenant',
-        resource_id: tenant.id,
-      });
-
-      return NextResponse.json({
-        success: true,
-        message: 'Client portal unarchived and reactivated successfully.',
-        tenant: updatedTenant,
-      });
-    }
-
-    return NextResponse.json({ error: 'Invalid action. Supported: create_invitation, resend, revoke, suspend_client, unsuspend_client, suspend_member, unsuspend_member, unarchive' }, { status: 400 });
+    return NextResponse.json({ error: 'That action is not supported.' }, { status: 400 });
   } catch (err: any) {
     if (err.statusCode === 401 || err.statusCode === 403) {
       return handleAuthError(err);

@@ -10,6 +10,11 @@ export const SECURITY_EVENT_LABELS: Record<string, string> = {
   staff_unregistered_email_attempt: 'Staff sign-in with an unknown email',
   staff_privilege_escalation_attempt: 'Blocked: admin access requested without approval',
   unauthorized_staff_domain_access: 'Blocked: staff sign-in from a non-Motionz email',
+  staff_login_code_sent: 'Sign-in code emailed (staff)',
+  staff_login_code_verified: 'Sign-in code accepted (staff)',
+  staff_login_code_failed: 'Wrong or expired sign-in code (staff)',
+  staff_login_code_delivery_failed: 'Sign-in code email could not be sent (staff)',
+  failed_login: 'Sign-in failed',
   client_invalid_credentials: 'Wrong password (client)',
   invitation_created: 'Invitation sent',
   invitation_accepted: 'Invitation accepted',
@@ -29,6 +34,8 @@ export const AUDIT_ACTION_LABELS: Record<string, string> = {
   'auth.password_reset_completed': 'Password reset completed',
   'staff.authenticated': 'Staff signed in',
   'staff.dev_authenticated': 'Staff signed in (development)',
+  'staff.login_code_verified': 'Staff signed in with an emailed code',
+  'staff.default_calendar_changed': 'Default booking calendar changed',
   'staff.created': 'Staff member added',
   'staff.updated': 'Staff member edited',
   'staff.disabled': 'Staff member disabled',
@@ -37,9 +44,16 @@ export const AUDIT_ACTION_LABELS: Record<string, string> = {
   'client.updated': 'Client details updated',
   'client.deleted': 'Client archived',
   'client.unarchived': 'Client restored',
+  'client.script_picks_updated': 'Video script choices updated',
   'client.video_preference_updated': 'Video preference updated',
   'client.website_change_requested': 'Website change requested',
+  'contract.added': 'Contract attached',
+  'contract.removed': 'Contract removed',
   'integration.sheet_created': 'Tracking sheet created',
+  'ghl.webhook.lead': 'New lead received from GoHighLevel',
+  'ghl.webhook.csm_call': 'Call booking received from GoHighLevel',
+  'ghl.webhook.onboarding_form': 'Onboarding form received from GoHighLevel',
+  'ghl.webhook.unknown': 'Unrecognised message from GoHighLevel',
   'invitation.created': 'Invitation sent',
   'invitation.resent': 'Invitation re-sent',
   'invitation.accepted': 'Invitation accepted',
@@ -47,23 +61,26 @@ export const AUDIT_ACTION_LABELS: Record<string, string> = {
   'onboarding.step_updated': 'Onboarding step updated',
   'step.updated': 'Setup step updated',
   'settings.notifications_updated': 'Notification settings updated',
+  'settings.security_updated': 'Staff sign-in security updated',
   'team.invite_sent': 'Team member invited',
   'team.invite_revoked': 'Team invite cancelled',
   'team.member_suspended': 'Team member disabled',
   'team.member_unsuspended': 'Team member enabled',
   'team.permissions_updated': 'Team member permissions updated',
-  'template.step_updated': 'Master template step edited',
-  'template.script_updated': 'Master script edited',
+  'template.step_updated': 'Standard setup step edited',
+  'template.script_updated': 'Video script edited',
+  'template.script_created': 'Video script added',
+  'template.script_deleted': 'Video script deleted',
   'tenant.provision': 'Client portal created',
   'tenant.provisioned': 'Client portal created',
   'tenant.archived': 'Client archived',
   'tenant.suspended': 'Client suspended',
-  'tenant.unsuspended': 'Client unsuspended',
+  'tenant.unsuspended': 'Client reactivated',
   'tenant.features_updated': 'Portal modules updated',
   'tenant.profile_updated': 'Client profile updated',
-  'user.permissions_updated_by_admin': 'User permissions updated',
-  'user.suspended_by_admin': 'User disabled',
-  'user.unsuspended_by_admin': 'User enabled',
+  'user.permissions_updated_by_admin': 'Team member permissions updated by Motionz',
+  'user.suspended_by_admin': 'Team member disabled by Motionz',
+  'user.unsuspended_by_admin': 'Team member enabled by Motionz',
   'security.staff_login_domain_rejected': 'Blocked: staff sign-in from a non-Motionz email',
 };
 
@@ -85,7 +102,7 @@ export function securityEventLabel(eventType: string): string {
 export function auditActionLabel(action: string): string {
   if (AUDIT_ACTION_LABELS[action]) return AUDIT_ACTION_LABELS[action];
   if (action.startsWith('security.')) return securityEventLabel(action.slice('security.'.length));
-  if (action.startsWith('ghl.webhook.')) return `GoHighLevel webhook: ${titleCaseKey(action.slice('ghl.webhook.'.length))}`;
+  if (action.startsWith('ghl.webhook.')) return `Message from GoHighLevel: ${titleCaseKey(action.slice('ghl.webhook.'.length)).toLowerCase()}`;
   return titleCaseKey(action);
 }
 
@@ -114,7 +131,32 @@ const DETAIL_LABELS: Record<string, string> = {
   emailDelivered: 'Email delivered',
   missingCapability: 'Missing permission',
   changed: 'Changed',
+  title: 'Title',
+  allowed_modules: 'Allowed sections',
+  cascadedMembersDisabled: 'Team members locked out',
+  unlockedMembersCount: 'Team members unlocked',
+  stepKey: 'Step',
+  status: 'Status',
+  ok: 'Worked',
+  error: 'Problem',
 };
+
+/** Plain names for the roles stored in the database. */
+const ROLE_LABELS: Record<string, string> = {
+  admin: 'Admin',
+  csm: 'CSM',
+  client: 'Account owner',
+  client_member: 'Team member',
+  system: 'System',
+};
+
+/** "client_member" -> "Team member". Unknown values become readable words, never raw keys. */
+export function roleLabel(role: string | null | undefined): string {
+  if (!role) return 'Unknown';
+  return ROLE_LABELS[role] || titleCaseKey(role);
+}
+
+const ROLE_FIELDS = new Set(['role', 'userRole', 'resolvedRole', 'currentRole', 'requestedRole', 'attemptedRole', 'requiredRoles']);
 
 /** Shown first, in this order, when present. */
 const KEY_FIELDS = ['email', 'attemptedEmail', 'userEmail', 'role', 'userRole', 'resolvedRole', 'requestedRole', 'reason', 'ip', 'ipAddress', 'ip_address'];
@@ -144,7 +186,14 @@ function formatDetailValue(value: unknown): string | null {
 export function detailChips(details: Record<string, unknown> | null | undefined, extra?: { ip?: string | null }, max = 6): DetailChip[] {
   const chips: DetailChip[] = [];
   const seen = new Set<string>();
-  const push = (key: string, value: unknown) => {
+  const push = (key: string, rawValue: unknown) => {
+    const value = ROLE_FIELDS.has(key)
+      ? Array.isArray(rawValue)
+        ? rawValue.map((v) => roleLabel(String(v)))
+        : typeof rawValue === 'string'
+          ? roleLabel(rawValue)
+          : rawValue
+      : rawValue;
     const text = formatDetailValue(value);
     if (text === null) return;
     const label = DETAIL_LABELS[key] || titleCaseKey(key);

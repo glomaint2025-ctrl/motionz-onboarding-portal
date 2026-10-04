@@ -2,7 +2,8 @@
 
 import React, { useCallback, useEffect, useState } from 'react';
 import Link from 'next/link';
-import { Button, Input, Select } from '@/components/ui';
+import { Button, Input, Select, buttonClasses } from '@/components/ui';
+import { formatDate } from '@/lib/utils/format';
 
 type StepOwner = 'we_handle' | 'client_action';
 
@@ -26,30 +27,23 @@ interface TemplateStep {
   sort_order: number;
 }
 
-interface ScriptTemplate {
-  id: string;
-  title: string;
-  script_content: string;
-  sort_order: number;
-}
-
 type StepDraft = Pick<TemplateStep, 'name' | 'owner' | 'what_it_is' | 'right_now' | 'unlocks'>;
 
 const OWNER_LABELS: Record<StepOwner, string> = {
-  we_handle: 'WE HANDLE',
-  client_action: 'YOUR ACTION',
+  we_handle: 'Motionz handles',
+  client_action: 'Client action',
 };
 
 const OWNER_OPTIONS = [
-  { value: 'we_handle', label: 'We handle' },
+  { value: 'we_handle', label: 'Motionz handles' },
   { value: 'client_action', label: 'Client action' },
 ];
 
 const panelStyle: React.CSSProperties = {
   padding: '12px',
-  backgroundColor: '#0b121c',
+  backgroundColor: 'var(--color-bg-surface)',
   borderRadius: 'var(--radius-md)',
-  border: '1px solid rgba(255, 255, 255, 0.05)',
+  border: '1px solid var(--color-border-subtle)',
 };
 
 const panelLabelStyle: React.CSSProperties = {
@@ -104,6 +98,8 @@ function TextArea({
         rows={3}
         value={value}
         disabled={disabled}
+        maxLength={2000}
+        required
         onChange={(e) => onChange(e.target.value)}
         style={{ width: '100%', fontFamily: 'inherit', resize: 'vertical' }}
       />
@@ -114,7 +110,7 @@ function TextArea({
 export default function TemplatesPage() {
   const [template, setTemplate] = useState<PortalTemplate | null>(null);
   const [steps, setSteps] = useState<TemplateStep[]>([]);
-  const [scripts, setScripts] = useState<ScriptTemplate[]>([]);
+  const [scriptCount, setScriptCount] = useState(0);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState('');
 
@@ -130,13 +126,13 @@ export default function TemplatesPage() {
       const res = await fetch('/api/admin/templates', { cache: 'no-store' });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) {
-        throw new Error(data.error || `Failed to load templates (HTTP ${res.status}).`);
+        throw new Error(data.error || 'Could not load the portal templates.');
       }
       setTemplate(data.template || null);
       setSteps(Array.isArray(data.steps) ? data.steps : []);
-      setScripts(Array.isArray(data.scripts) ? data.scripts : []);
+      setScriptCount(Array.isArray(data.scripts) ? data.scripts.length : 0);
     } catch (err: any) {
-      setLoadError(err.message || 'Failed to load templates.');
+      setLoadError(err.message || 'Could not load the portal templates.');
     } finally {
       setLoading(false);
     }
@@ -167,7 +163,7 @@ export default function TemplatesPage() {
     if (!draft) return;
     const missing = (['name', 'what_it_is', 'right_now', 'unlocks'] as const).filter((f) => !draft[f].trim());
     if (missing.length > 0) {
-      setNotice({ kind: 'error', text: 'All step fields are required and cannot be empty.' });
+      setNotice({ kind: 'error', text: 'Fill in every field before saving. None of them can be empty.' });
       return;
     }
 
@@ -181,13 +177,13 @@ export default function TemplatesPage() {
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) {
-        throw new Error(data.error || `Save failed (HTTP ${res.status}).`);
+        throw new Error(data.error || 'The step was not saved. Please try again.');
       }
       setSteps((prev) => prev.map((s) => (s.step_key === stepKey ? { ...s, ...data.step } : s)));
-      setNotice({ kind: 'success', text: `Saved "${data.step?.name || stepKey}". New clients will receive this copy.` });
+      setNotice({ kind: 'success', text: `Saved "${data.step?.name || draft.name.trim()}". New clients will get this wording.` });
       cancelEdit();
     } catch (err: any) {
-      setNotice({ kind: 'error', text: err.message || 'Failed to save step.' });
+      setNotice({ kind: 'error', text: err.message || 'The step was not saved. Please try again.' });
     } finally {
       setSaving(false);
     }
@@ -199,28 +195,19 @@ export default function TemplatesPage() {
       <div className="ui-breadcrumb">
         <Link href="/admin">Home</Link>
         <span className="ui-breadcrumb-separator">&gt;</span>
-        <span className="ui-breadcrumb-current">Master Templates</span>
+        <span className="ui-breadcrumb-current">Portal Templates</span>
       </div>
 
       {/* 2. Page Header */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 'var(--space-6)', flexWrap: 'wrap', gap: 'var(--space-4)' }}>
         <div>
           <h1 style={{ fontSize: '1.75rem', fontWeight: 700, color: 'var(--color-text-primary)', marginBottom: 'var(--space-1)', letterSpacing: '-0.02em' }}>
-            Master Portal Templates
+            Portal Templates
           </h1>
           <p style={{ color: 'var(--color-text-secondary)', fontSize: 'var(--font-size-sm)', margin: 0 }}>
-            Govern baseline onboarding milestones and script blueprints cloned into client portals.
+            The standard setup steps every new client starts with.
           </p>
         </div>
-        <Link href="/admin/clients/new" style={{ textDecoration: 'none' }}>
-          <Button variant="primary" style={{ display: 'inline-flex', alignItems: 'center', gap: '8px', padding: '9px 18px', fontWeight: 600, borderRadius: 'var(--radius-md)' }}>
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-              <line x1="12" y1="5" x2="12" y2="19" />
-              <line x1="5" y1="12" x2="19" y2="12" />
-            </svg>
-            Provision Client from Template
-          </Button>
-        </Link>
       </div>
 
       {notice && <Notice kind={notice.kind}>{notice.text}</Notice>}
@@ -237,7 +224,7 @@ export default function TemplatesPage() {
         <div>
           <Notice kind="error">{loadError}</Notice>
           <Button variant="outline" size="sm" onClick={loadTemplates}>
-            Retry
+            Try again
           </Button>
         </div>
       )}
@@ -260,16 +247,17 @@ export default function TemplatesPage() {
                     <h2 style={{ fontSize: '1.2rem', fontWeight: 600, color: 'var(--color-text-primary)', margin: 0 }}>
                       {template.title}
                     </h2>
-                    <span style={{ fontSize: 'var(--font-size-xs)', color: 'var(--color-text-muted)' }}>
-                      Slug: <code style={{ color: 'var(--color-primary-text)' }}>{template.slug}</code>
-                      {template.updated_at ? ` · Last updated ${new Date(template.updated_at).toLocaleDateString()}` : ''}
-                    </span>
+                    {formatDate(template.updated_at) && (
+                      <span style={{ fontSize: 'var(--font-size-xs)', color: 'var(--color-text-muted)' }}>
+                        Last updated {formatDate(template.updated_at)}
+                      </span>
+                    )}
                   </div>
                 </div>
                 {template.is_default && (
                   <span className="ui-pill-status ui-pill-status-active">
                     <span className="ui-pill-status-dot" />
-                    Canonical Default
+                    Used for new clients
                   </span>
                 )}
               </div>
@@ -280,16 +268,16 @@ export default function TemplatesPage() {
               )}
             </div>
           ) : (
-            <Notice kind="error">No default portal template exists in the database.</Notice>
+            <Notice kind="error">No standard template has been set up yet, so new clients would start with no setup steps.</Notice>
           )}
 
           {/* 4. Baseline Setup Steps */}
           <div style={{ marginBottom: 'var(--space-8)' }}>
             <h2 style={{ fontSize: '1.15rem', fontWeight: 600, color: 'var(--color-text-primary)', marginBottom: 'var(--space-1)' }}>
-              Baseline Setup Step Blueprints ({steps.length} {steps.length === 1 ? 'Step' : 'Steps'})
+              Standard setup steps ({steps.length})
             </h2>
             <p style={{ fontSize: 'var(--font-size-xs)', color: 'var(--color-text-muted)', margin: '0 0 var(--space-4) 0' }}>
-              Edits apply to newly provisioned clients only. Existing clients keep their current setup steps.
+              Changes here only affect clients added from now on. Existing clients keep the setup steps they already have.
             </p>
 
             {steps.length === 0 ? (
@@ -362,14 +350,14 @@ export default function TemplatesPage() {
                             />
                           </div>
                           <TextArea label="What it is" value={draft.what_it_is} disabled={saving} onChange={(v) => setDraft({ ...draft, what_it_is: v })} />
-                          <TextArea label="Default initial state" value={draft.right_now} disabled={saving} onChange={(v) => setDraft({ ...draft, right_now: v })} />
+                          <TextArea label="Right now (starting text)" value={draft.right_now} disabled={saving} onChange={(v) => setDraft({ ...draft, right_now: v })} />
                           <TextArea label="Unlocks" value={draft.unlocks} disabled={saving} onChange={(v) => setDraft({ ...draft, unlocks: v })} />
                           <div style={{ display: 'flex', gap: 'var(--space-2)', justifyContent: 'flex-end' }}>
                             <Button variant="outline" size="sm" onClick={cancelEdit} disabled={saving}>
                               Cancel
                             </Button>
                             <Button variant="primary" size="sm" onClick={() => saveStep(step.step_key)} disabled={saving}>
-                              {saving ? 'Saving...' : 'Save Step'}
+                              {saving ? 'Saving...' : 'Save step'}
                             </Button>
                           </div>
                         </div>
@@ -382,13 +370,13 @@ export default function TemplatesPage() {
                             </p>
                           </div>
                           <div style={panelStyle}>
-                            <span style={panelLabelStyle}>Default Initial State</span>
+                            <span style={panelLabelStyle}>Right now (starting text)</span>
                             <p style={{ margin: 0, fontSize: 'var(--font-size-xs)', color: 'var(--color-text-secondary)', lineHeight: 1.4 }}>
                               {step.right_now}
                             </p>
                           </div>
                           <div style={panelStyle}>
-                            <span style={{ ...panelLabelStyle, color: '#10b981' }}>Unlocks</span>
+                            <span style={{ ...panelLabelStyle, color: 'var(--color-status-done-text)' }}>Unlocks</span>
                             <p style={{ margin: 0, fontSize: 'var(--font-size-xs)', color: 'var(--color-text-primary)', lineHeight: 1.4 }}>
                               {step.unlocks}
                             </p>
@@ -402,52 +390,19 @@ export default function TemplatesPage() {
             )}
           </div>
 
-          {/* 5. Base Script Blueprints */}
-          <div>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 'var(--space-4)', flexWrap: 'wrap', gap: 'var(--space-2)' }}>
-              <h2 style={{ fontSize: '1.15rem', fontWeight: 600, color: 'var(--color-text-primary)', margin: 0 }}>
-                Base Video Script Blueprints ({scripts.length} {scripts.length === 1 ? 'Script' : 'Scripts'})
-              </h2>
-              <Link href="/admin/templates/scripts" style={{ textDecoration: 'none' }}>
-                <Button variant="secondary" size="sm">
-                  Edit Scripts
-                </Button>
-              </Link>
-            </div>
-            {scripts.length === 0 ? (
-              <p style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-secondary)' }}>
-                No script templates exist yet.
+          {/* 5. Video scripts live on their own page; only the count is shown here. */}
+          <div className="ui-stat-card" style={{ padding: '20px 24px', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 'var(--space-3)' }}>
+            <div>
+              <h2 style={{ fontSize: '1.15rem', fontWeight: 600, color: 'var(--color-text-primary)', margin: 0 }}>Video scripts</h2>
+              <p style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-secondary)', margin: 'var(--space-1) 0 0' }}>
+                {scriptCount === 0
+                  ? 'No video scripts have been added yet.'
+                  : `${scriptCount} video script${scriptCount === 1 ? '' : 's'} in the library.`}
               </p>
-            ) : (
-              <div style={{ display: 'grid', gap: 'var(--space-4)', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))' }}>
-                {scripts.map((script) => (
-                  <div
-                    key={script.id}
-                    className="ui-stat-card"
-                    style={{
-                      flexDirection: 'column',
-                      alignItems: 'flex-start',
-                      padding: '20px',
-                      justifyContent: 'space-between',
-                    }}
-                  >
-                    <div>
-                      <h3 style={{ fontSize: '0.95rem', fontWeight: 600, color: 'var(--color-text-primary)', margin: '0 0 var(--space-3) 0' }}>
-                        {script.title}
-                      </h3>
-                      <p style={{ fontSize: 'var(--font-size-xs)', fontStyle: 'italic', color: 'var(--color-text-secondary)', lineHeight: 1.6, margin: 0 }}>
-                        &ldquo;{script.script_content}&rdquo;
-                      </p>
-                    </div>
-                    <div style={{ marginTop: 'var(--space-4)', paddingTop: 'var(--space-2)', borderTop: '1px solid rgba(255, 255, 255, 0.06)', width: '100%' }}>
-                      <span style={{ fontSize: '0.7rem', color: 'var(--color-text-muted)' }}>
-                        Variables: <code style={{ color: 'var(--color-primary-text)' }}>&#123;&#123;client_name&#125;&#125;</code>, <code style={{ color: 'var(--color-primary-text)' }}>&#123;&#123;company_name&#125;&#125;</code>
-                      </span>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
+            </div>
+            <Link href="/admin/templates/scripts" className={buttonClasses({ variant: 'secondary', size: 'sm' })}>
+              Manage scripts
+            </Link>
           </div>
         </>
       )}

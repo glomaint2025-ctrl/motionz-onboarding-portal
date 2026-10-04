@@ -2,7 +2,8 @@
 
 import React, { useEffect, useState } from 'react';
 import Link from 'next/link';
-import { Button, Card, CardHeader, Skeleton, StatusBadge } from '@/components/ui';
+import { Card, CardHeader, Skeleton, StatusBadge, buttonClasses } from '@/components/ui';
+import { Notice } from '@/components/admin/Notice';
 
 interface ClientRef {
   id: string;
@@ -12,14 +13,11 @@ interface ClientRef {
 interface Dashboard {
   clients: { total: number; active: number; onboarding: number; suspended: number; cancelledOrArchived: number; newLast30Days: number };
   ghl: { connected: number; total: number };
-  ghlNotConnected: ClientRef[];
   withoutCsm: ClientRef[];
   inSetup: number;
   stuck: (ClientRef & { currentStep: string; daysOnStep: number })[];
   security: { last7Days: number; highSeverity: number };
   unmatchedSubmissions: number;
-  revenue: number | null;
-  churnRate: number | null;
 }
 
 function Metric({ label, value, hint, href }: { label: string; value: React.ReactNode; hint?: string; href?: string }) {
@@ -76,11 +74,16 @@ export default function AdminDashboardPage() {
   const [data, setData] = useState<Dashboard | null>(null);
   const [error, setError] = useState('');
 
-  useEffect(() => {
+  const load = () => {
+    setError('');
     fetch('/api/admin/dashboard')
-      .then((res) => res.json())
-      .then((d) => (d.success ? setData(d) : setError(d.error || 'Could not load the dashboard.')))
-      .catch(() => setError('Network error while loading the dashboard.'));
+      .then(async (res) => ({ ok: res.ok, d: await res.json().catch(() => ({})) }))
+      .then(({ ok, d }) => (ok && d.success ? setData(d) : setError(d.error || 'Could not load the dashboard.')))
+      .catch(() => setError('Could not reach the server. Check your connection and try again.'));
+  };
+
+  useEffect(() => {
+    load();
   }, []);
 
   return (
@@ -90,15 +93,15 @@ export default function AdminDashboardPage() {
           <h1 style={{ marginBottom: 'var(--space-1)' }}>Dashboard</h1>
           <p style={{ color: 'var(--color-text-secondary)', margin: 0 }}>Where every client stands, and what needs attention.</p>
         </div>
-        <Link href="/admin/clients/new">
-          <Button variant="primary">Add client</Button>
+        <Link href="/admin/clients/new" className={buttonClasses({ variant: 'primary' })}>
+          Add client
         </Link>
       </div>
 
       {error && (
-        <Card style={{ marginBottom: 'var(--space-6)' }}>
-          <p style={{ margin: 0, color: 'var(--color-status-danger-text)' }}>{error}</p>
-        </Card>
+        <Notice onRetry={load} style={{ marginBottom: 'var(--space-6)' }}>
+          {error}
+        </Notice>
       )}
 
       {!data && !error ? (
@@ -115,7 +118,7 @@ export default function AdminDashboardPage() {
             <Metric label="Active clients" value={data.clients.active} hint={`${data.clients.onboarding} onboarding · ${data.clients.total} total`} href="/admin/clients" />
             <Metric label="Still in setup" value={data.inSetup} hint={`${data.stuck.length} stuck 14+ days on one step`} />
             <Metric
-              label="GHL connect"
+              label="GHL Connect"
               value={`${data.ghl.connected} / ${data.ghl.total}`}
               hint={
                 data.ghl.total === 0
@@ -132,8 +135,7 @@ export default function AdminDashboardPage() {
               hint={data.security.highSeverity ? `${data.security.highSeverity} high severity` : 'None high severity'}
               href="/admin/security-alerts"
             />
-            <Metric label="New clients (30 days)" value={data.clients.newLast30Days} hint={`${data.clients.cancelledOrArchived} cancelled or archived`} />
-            <Metric label="Revenue & churn" value="Not connected" hint="Payments run through Stripe links outside the portal" />
+            <Metric label="New clients (30 days)" value={data.clients.newLast30Days} hint={`${data.clients.cancelledOrArchived} archived`} />
           </div>
 
           {data.unmatchedSubmissions > 0 && (
@@ -143,8 +145,8 @@ export default function AdminDashboardPage() {
                   <StatusBadge status="Action needed" variant="warning" />{' '}
                   {data.unmatchedSubmissions} onboarding form submission{data.unmatchedSubmissions === 1 ? '' : 's'} could not be matched to a client.
                 </span>
-                <Link href="/admin/integrations">
-                  <Button variant="secondary" size="sm">Review</Button>
+                <Link href="/admin/integrations" className={buttonClasses({ variant: 'secondary', size: 'sm' })}>
+                  Review
                 </Link>
               </div>
             </Card>
@@ -152,20 +154,8 @@ export default function AdminDashboardPage() {
 
           <div style={{ display: 'grid', gap: 'var(--space-4)', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))' }}>
             <Card>
-              <CardHeader title="Stuck in setup" subtitle="Same onboarding step for 14+ days" />
+              <CardHeader title="Stuck in setup" subtitle="On the same setup step for 14 days or more" />
               <ClientList items={data.stuck} empty="Nobody is stuck." render={(c) => `${c.currentStep} · ${c.daysOnStep} days`} />
-            </Card>
-            <Card>
-              <CardHeader
-                title="GoHighLevel not connected"
-                subtitle="Add the sub-account Location ID"
-                action={
-                  <Link href="/admin/ghl" style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-primary-text)', whiteSpace: 'nowrap' }}>
-                    View all
-                  </Link>
-                }
-              />
-              <ClientList items={data.ghlNotConnected} empty="All clients are connected." />
             </Card>
             <Card>
               <CardHeader title="No CSM assigned" />

@@ -3,8 +3,17 @@
 import React, { useState, useEffect } from 'react';
 import { useParams } from 'next/navigation';
 import Link from 'next/link';
-import { Card, CardHeader, Select, Button, StatusBadge } from '@/components/ui';
+import { Card, CardHeader, Select, Button, StatusBadge, buttonClasses } from '@/components/ui';
 import { OnboardingAnswers, OnboardingSubmissionView } from '@/components/onboarding/OnboardingAnswers';
+import { Notice } from '@/components/admin/Notice';
+
+const STEP_STATUS_LABELS: Record<string, string> = {
+  not_started: 'Not started',
+  in_progress: 'In progress',
+  done: 'Done',
+};
+const stepStatusLabel = (status: string) => STEP_STATUS_LABELS[status] || 'Unknown';
+const TEXT_MAX = 2000;
 
 interface SetupStep {
   id: string;
@@ -29,6 +38,7 @@ export default function CSMClientSetupEditorPage() {
   const [progressPercent, setProgressPercent] = useState(0);
   const [submissions, setSubmissions] = useState<OnboardingSubmissionView[]>([]);
   const [accessError, setAccessError] = useState('');
+  const [loadError, setLoadError] = useState('');
 
   const [editingKey, setEditingKey] = useState<string | null>(null);
   const [editStatus, setEditStatus] = useState<'not_started' | 'in_progress' | 'done'>('not_started');
@@ -44,18 +54,23 @@ export default function CSMClientSetupEditorPage() {
   const fetchSetupData = async () => {
     try {
       setLoading(true);
+      setLoadError('');
       const res = await fetch(`/api/csm/clients/${clientId}/setup`);
-      const data = await res.json();
+      const data = await res.json().catch(() => ({}));
       if (res.status === 403) {
         setAccessError(data.error || 'This client is not assigned to you.');
-      } else if (data.success) {
+      } else if (res.status === 404) {
+        setAccessError('This client could not be found. It may have been archived.');
+      } else if (res.ok && data.success) {
         setTenant(data.tenant);
         setSteps(data.steps || []);
         setSubmissions(data.onboardingSubmissions || []);
         setProgressPercent(data.progressPercent || 0);
+      } else {
+        setLoadError(data.error || 'Could not load this client’s setup steps.');
       }
-    } catch (err) {
-      console.error('Failed to load setup steps:', err);
+    } catch {
+      setLoadError('Could not reach the server. Check your connection and try again.');
     } finally {
       setLoading(false);
     }
@@ -78,8 +93,20 @@ export default function CSMClientSetupEditorPage() {
   };
 
   const handleSaveStep = async (stepKey: string) => {
+    const required: [string, string][] = [
+      ['Step name', editName],
+      ['Right now', editRightNow],
+      ['What it is', editWhatItIs],
+      ['Unlocks', editUnlocks],
+    ];
+    const blank = required.find(([, text]) => !text.trim());
+    if (blank) {
+      setSaveError(`"${blank[0]}" cannot be empty. The client sees this text.`);
+      return;
+    }
     try {
       setSaving(true);
+      setSaveError('');
       const res = await fetch(`/api/csm/clients/${clientId}/setup`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
@@ -94,18 +121,17 @@ export default function CSMClientSetupEditorPage() {
         }),
       });
 
-      const data = await res.json();
-      if (data.success) {
-        setFeedbackMessage(`Step "${stepKey}" updated successfully.`);
+      const data = await res.json().catch(() => ({}));
+      if (res.ok && data.success) {
+        setFeedbackMessage(`"${data.step?.name || editName.trim()}" was saved.`);
         setEditingKey(null);
         await fetchSetupData();
         setTimeout(() => setFeedbackMessage(null), 3000);
       } else {
         setSaveError(data.error || 'Could not save this step.');
       }
-    } catch (err) {
-      console.error('Failed to save step:', err);
-      setSaveError('Network error while saving.');
+    } catch {
+      setSaveError('Could not reach the server. Your changes were not saved.');
     } finally {
       setSaving(false);
     }
@@ -114,7 +140,7 @@ export default function CSMClientSetupEditorPage() {
   if (loading) {
     return (
       <Card style={{ textAlign: 'center', padding: 'var(--space-8)' }}>
-        <p>Loading client setup roadmap...</p>
+        <p>Loading setup steps...</p>
       </Card>
     );
   }
@@ -123,8 +149,21 @@ export default function CSMClientSetupEditorPage() {
     return (
       <Card style={{ textAlign: 'center', padding: 'var(--space-8)' }}>
         <p style={{ marginBottom: 'var(--space-4)' }}>{accessError}</p>
-        <Link href="/csm/clients">
-          <Button variant="secondary">Back to my clients</Button>
+        <Link href="/csm/clients" className={buttonClasses({ variant: 'secondary' })}>
+          Back to my clients
+        </Link>
+      </Card>
+    );
+  }
+
+  if (loadError || !tenant) {
+    return (
+      <Card style={{ padding: 'var(--space-6)' }}>
+        <Notice onRetry={fetchSetupData} style={{ marginBottom: 'var(--space-4)' }}>
+          {loadError || 'Could not load this client’s setup steps.'}
+        </Notice>
+        <Link href="/csm/clients" className={buttonClasses({ variant: 'secondary' })}>
+          Back to my clients
         </Link>
       </Card>
     );
@@ -135,34 +174,22 @@ export default function CSMClientSetupEditorPage() {
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 'var(--space-6)', flexWrap: 'wrap', gap: 'var(--space-3)' }}>
         <div>
           <Link href="/csm/clients" style={{ fontSize: 'var(--font-size-xs)', color: 'var(--color-primary)' }}>
-            Back to Assigned Clients
+            Back to my clients
           </Link>
           <h1 style={{ marginTop: 'var(--space-2)', marginBottom: 'var(--space-1)' }}>
-            {tenant?.name} Setup Progress
+            {tenant.name}: setup progress
           </h1>
-          <p>Update onboarding milestones, edit real-time guidance copy, and advance setup velocity.</p>
+          <p>Update each setup step and the wording the client sees for it.</p>
         </div>
-        <Link href={`/portal/${clientId}`}>
-          <Button variant="secondary">
-            Open Client Portal View
-          </Button>
+        <Link href={`/portal/${clientId}`} className={buttonClasses({ variant: 'secondary' })}>
+          Open portal
         </Link>
       </div>
 
       {feedbackMessage && (
-        <div
-          style={{
-            padding: 'var(--space-3)',
-            backgroundColor: 'var(--color-status-done-bg)',
-            border: '1px solid var(--color-status-done-border)',
-            borderRadius: 'var(--radius-md)',
-            color: 'var(--color-status-done-text)',
-            fontSize: 'var(--font-size-sm)',
-            marginBottom: 'var(--space-5)',
-          }}
-        >
+        <Notice tone="success" style={{ marginBottom: 'var(--space-5)' }}>
           {feedbackMessage}
-        </div>
+        </Notice>
       )}
 
       <OnboardingAnswers submissions={submissions} />
@@ -170,9 +197,9 @@ export default function CSMClientSetupEditorPage() {
       {/* Progress Bar Summary */}
       <Card style={{ marginBottom: 'var(--space-6)' }}>
         <CardHeader
-          title="Onboarding Completion Velocity"
-          subtitle={`Mathematically derived from the 5 confirmed setup steps`}
-          action={<StatusBadge status={`${progressPercent}% Done`} variant="progress" />}
+          title="Setup progress"
+          subtitle="The share of this client’s setup steps marked Done."
+          action={<StatusBadge status={`${progressPercent}% done`} variant={progressPercent === 100 ? 'done' : 'progress'} />}
         />
         <div
           style={{
@@ -194,11 +221,13 @@ export default function CSMClientSetupEditorPage() {
           />
         </div>
         <p style={{ fontSize: 'var(--font-size-xs)', color: 'var(--color-text-secondary)' }}>
-          {steps.filter((s) => s.status === 'done').length} of {steps.length} milestones complete.
+          {steps.length === 0
+            ? 'This client has no setup steps yet.'
+            : `${steps.filter((s) => s.status === 'done').length} of ${steps.length} steps done.`}
         </p>
       </Card>
 
-      {/* Five Confirmed Setup Cards */}
+      {/* Setup step cards */}
       <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-4)' }}>
         {steps.map((step, idx) => {
           const isCurrentlyEditing = editingKey === step.step_key;
@@ -208,7 +237,7 @@ export default function CSMClientSetupEditorPage() {
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 'var(--space-3)', flexWrap: 'wrap', gap: 'var(--space-2)' }}>
                 <div>
                   <span style={{ fontSize: 'var(--font-size-xs)', color: 'var(--color-primary)', fontWeight: 'bold' }}>
-                    STEP {idx + 1} &middot; {step.owner === 'we_handle' ? 'WE HANDLE' : 'YOUR ACTION'}
+                    STEP {idx + 1} &middot; {step.owner === 'we_handle' ? 'MOTIONZ HANDLES' : 'CLIENT ACTION'}
                   </span>
                   <h3 style={{ fontSize: 'var(--font-size-lg)', marginTop: 'var(--space-1)' }}>
                     {step.name}
@@ -216,10 +245,13 @@ export default function CSMClientSetupEditorPage() {
                 </div>
 
                 <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-2)' }}>
-                  <StatusBadge status={step.status.replace('_', ' ')} />
+                  <StatusBadge
+                    status={stepStatusLabel(step.status)}
+                    variant={step.status === 'done' ? 'done' : step.status === 'in_progress' ? 'progress' : 'pending'}
+                  />
                   {!isCurrentlyEditing && (
-                    <Button variant="outline" size="sm" onClick={() => startEditing(step)}>
-                      Edit Guidance & Status
+                    <Button variant="outline" size="sm" disabled={saving} onClick={() => startEditing(step)}>
+                      Edit step
                     </Button>
                   )}
                 </div>
@@ -229,68 +261,79 @@ export default function CSMClientSetupEditorPage() {
                 /* Inline Editing Form for CSM */
                 <div style={{ borderTop: '1px solid var(--color-border-subtle)', paddingTop: 'var(--space-4)', marginTop: 'var(--space-3)' }}>
                   {saveError && (
-                    <p style={{ color: 'var(--color-status-danger-text)', fontSize: 'var(--font-size-sm)', marginTop: 0 }}>{saveError}</p>
+                    <Notice style={{ marginBottom: 'var(--space-3)' }}>{saveError}</Notice>
                   )}
                   <div className="ui-form-group">
-                    <label className="ui-label">Step name</label>
-                    <input className="ui-input" value={editName} maxLength={120} onChange={(e) => setEditName(e.target.value)} />
+                    <label className="ui-label" htmlFor={`step-name-${step.step_key}`}>Step name</label>
+                    <input id={`step-name-${step.step_key}`} className="ui-input" value={editName} maxLength={120} required onChange={(e) => setEditName(e.target.value)} />
                   </div>
                   <div style={{ marginBottom: 'var(--space-4)' }}>
                     <Select
-                      label="Milestone Status"
+                      label="Status"
                       value={editStatus}
                       onChange={(e) => setEditStatus(e.target.value as any)}
                     >
-                      <option value="not_started">Not Started</option>
-                      <option value="in_progress">In Progress</option>
-                      <option value="done">Done</option>
+                      <option value="not_started">{STEP_STATUS_LABELS.not_started}</option>
+                      <option value="in_progress">{STEP_STATUS_LABELS.in_progress}</option>
+                      <option value="done">{STEP_STATUS_LABELS.done}</option>
                     </Select>
                   </div>
 
                   <div className="ui-form-group">
-                    <label className="ui-label">Right Now (Live Operational Status)</label>
+                    <label className="ui-label" htmlFor={`step-now-${step.step_key}`}>Right now (what is happening on this step)</label>
                     <textarea
+                      id={`step-now-${step.step_key}`}
                       className="ui-textarea"
                       rows={2}
+                      maxLength={TEXT_MAX}
+                      required
                       value={editRightNow}
                       onChange={(e) => setEditRightNow(e.target.value)}
                     />
-                    <span className="ui-helper-text">Visible to the client as the current live state.</span>
+                    <span className="ui-helper-text">The client sees this as the current state of the step.</span>
                   </div>
 
                   <div className="ui-form-group">
-                    <label className="ui-label">We Need From You (Client Action If Applicable)</label>
+                    <label className="ui-label" htmlFor={`step-need-${step.step_key}`}>What we need from the client (optional)</label>
                     <textarea
+                      id={`step-need-${step.step_key}`}
                       className="ui-textarea"
                       rows={2}
+                      maxLength={TEXT_MAX}
                       value={editWeNeed}
                       onChange={(e) => setEditWeNeed(e.target.value)}
-                      placeholder="e.g. Awaiting client Facebook page admin access delegation."
+                      placeholder="e.g. Please add us as an admin on your Facebook page."
                     />
                   </div>
 
                   <div className="ui-form-group">
-                    <label className="ui-label">What It Is (Milestone Description)</label>
+                    <label className="ui-label" htmlFor={`step-what-${step.step_key}`}>What it is (a short description of the step)</label>
                     <textarea
+                      id={`step-what-${step.step_key}`}
                       className="ui-textarea"
                       rows={2}
+                      maxLength={TEXT_MAX}
+                      required
                       value={editWhatItIs}
                       onChange={(e) => setEditWhatItIs(e.target.value)}
                     />
                   </div>
 
                   <div className="ui-form-group">
-                    <label className="ui-label">Unlocks</label>
+                    <label className="ui-label" htmlFor={`step-unlocks-${step.step_key}`}>Unlocks (what the client gets when this is done)</label>
                     <textarea
+                      id={`step-unlocks-${step.step_key}`}
                       className="ui-textarea"
                       rows={2}
+                      maxLength={TEXT_MAX}
+                      required
                       value={editUnlocks}
                       onChange={(e) => setEditUnlocks(e.target.value)}
                     />
                   </div>
 
                   <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 'var(--space-2)', marginTop: 'var(--space-4)' }}>
-                    <Button variant="secondary" size="sm" onClick={() => setEditingKey(null)}>
+                    <Button variant="secondary" size="sm" disabled={saving} onClick={() => setEditingKey(null)}>
                       Cancel
                     </Button>
                     <Button
@@ -299,7 +342,7 @@ export default function CSMClientSetupEditorPage() {
                       disabled={saving}
                       onClick={() => handleSaveStep(step.step_key)}
                     >
-                      {saving ? 'Saving...' : 'Save Step Updates'}
+                      {saving ? 'Saving...' : 'Save step'}
                     </Button>
                   </div>
                 </div>
@@ -314,9 +357,9 @@ export default function CSMClientSetupEditorPage() {
                   </div>
 
                   {step.we_need_from_you && (
-                    <div style={{ marginBottom: 'var(--space-3)', padding: 'var(--space-3)', backgroundColor: 'rgba(245, 158, 11, 0.08)', border: '1px solid rgba(245, 158, 11, 0.2)', borderRadius: 'var(--radius-md)' }}>
+                    <div style={{ marginBottom: 'var(--space-3)', padding: 'var(--space-3)', backgroundColor: 'var(--color-status-warning-bg)', border: '1px solid var(--color-status-warning-border)', borderRadius: 'var(--radius-md)' }}>
                       <span style={{ fontSize: 'var(--font-size-xs)', color: 'var(--color-status-warning-text)', fontWeight: 'bold', display: 'block', marginBottom: '2px' }}>
-                        WE NEED FROM YOU
+                        WHAT WE NEED FROM THE CLIENT
                       </span>
                       <p style={{ color: 'var(--color-text-primary)' }}>{step.we_need_from_you}</p>
                     </div>

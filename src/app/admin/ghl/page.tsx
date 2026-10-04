@@ -3,6 +3,8 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import Link from 'next/link';
 import { Button, Card, CardHeader, Input, Skeleton, StatusBadge, buttonClasses } from '@/components/ui';
+import { Notice, clientStatusLabel } from '@/components/admin/Notice';
+import { formatDateTime } from '@/lib/utils/format';
 
 interface GhlClient {
   id: string;
@@ -18,13 +20,6 @@ interface GhlData {
   notConnected: GhlClient[];
 }
 
-function formatDateTime(iso: string): string {
-  const date = new Date(iso);
-  const day = `${date.toLocaleDateString('en-US', { weekday: 'short' })}, ${date.getDate()} ${date.toLocaleDateString('en-US', { month: 'short' })} ${date.getFullYear()}`;
-  return `${day}, ${date.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })}`;
-}
-
-const statusLabel = (status: string) => (status ? status.charAt(0).toUpperCase() + status.slice(1) : 'Unknown');
 
 function ClientRow({ client, onSaved }: { client: GhlClient; onSaved: (message: string) => void }) {
   const [editing, setEditing] = useState(false);
@@ -56,7 +51,7 @@ function ClientRow({ client, onSaved }: { client: GhlClient; onSaved: (message: 
       setEditing(false);
       onSaved(`Location ID saved for ${client.name}.`);
     } catch {
-      setError('Network error. Nothing was saved.');
+      setError('Could not reach the server. Nothing was saved.');
     } finally {
       setBusy(false);
     }
@@ -70,7 +65,7 @@ function ClientRow({ client, onSaved }: { client: GhlClient; onSaved: (message: 
         <div style={{ minWidth: 0, flex: '1 1 260px' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-2)', flexWrap: 'wrap' }}>
             <span style={{ fontWeight: 'var(--font-weight-semibold)' }}>{client.name}</span>
-            <StatusBadge status={statusLabel(client.status)} />
+            <StatusBadge status={clientStatusLabel(client.status)} />
           </div>
           <dl style={{ display: 'flex', flexWrap: 'wrap', gap: 'var(--space-1) var(--space-5)', margin: 'var(--space-2) 0 0', fontSize: 'var(--font-size-sm)' }}>
             <div style={{ display: 'flex', gap: 'var(--space-2)', minWidth: 0 }}>
@@ -81,14 +76,14 @@ function ClientRow({ client, onSaved }: { client: GhlClient; onSaved: (message: 
             </div>
             <div style={{ display: 'flex', gap: 'var(--space-2)' }}>
               <dt style={{ color: 'var(--color-text-muted)' }}>Last lead received</dt>
-              <dd style={{ margin: 0 }}>{client.lastLeadAt ? formatDateTime(client.lastLeadAt) : 'No leads yet'}</dd>
+              <dd style={{ margin: 0 }}>{(client.lastLeadAt && formatDateTime(client.lastLeadAt)) || 'No leads yet'}</dd>
             </div>
           </dl>
         </div>
         <div style={{ display: 'flex', gap: 'var(--space-2)', flexWrap: 'wrap' }}>
-          {!connected && !editing && (
-            <Button type="button" variant="primary" size="sm" onClick={() => setEditing(true)}>
-              Set Location ID
+          {!editing && (
+            <Button type="button" variant={connected ? 'secondary' : 'primary'} size="sm" onClick={() => setEditing(true)}>
+              {connected ? 'Change Location ID' : 'Set Location ID'}
             </Button>
           )}
           <Link href={`/admin/clients/${client.id}`} className={buttonClasses({ variant: 'outline', size: 'sm' })}>
@@ -103,7 +98,9 @@ function ClientRow({ client, onSaved }: { client: GhlClient; onSaved: (message: 
             <Input
               id={fieldId}
               label={`GoHighLevel Location ID for ${client.name}`}
-              placeholder="From the sub-account URL: /location/<Location ID>/"
+              placeholder="Paste it from the sub-account’s web address"
+              helperText="In GoHighLevel, open the client’s sub-account. The ID is the part of the web address right after /location/."
+              maxLength={64}
               value={value}
               onChange={(e) => setValue(e.target.value)}
               error={error || undefined}
@@ -159,15 +156,15 @@ export default function GhlConnectPage() {
   const load = useCallback(async () => {
     try {
       const res = await fetch('/api/admin/ghl');
-      const body = await res.json();
-      if (body.success) {
+      const body = await res.json().catch(() => ({}));
+      if (res.ok && body.success) {
         setData(body);
         setError('');
       } else {
         setError(body.error || 'Could not load GoHighLevel connections.');
       }
     } catch {
-      setError('Network error while loading GoHighLevel connections.');
+      setError('Could not reach the server. Check your connection and try again.');
     }
   }, []);
 
@@ -185,11 +182,11 @@ export default function GhlConnectPage() {
       <div className="ui-breadcrumb">
         <Link href="/admin">Home</Link>
         <span className="ui-breadcrumb-separator">&gt;</span>
-        <span className="ui-breadcrumb-current">GHL connect</span>
+        <span className="ui-breadcrumb-current">GHL Connect</span>
       </div>
 
       <div style={{ marginBottom: 'var(--space-6)' }}>
-        <h1 style={{ marginBottom: 'var(--space-1)' }}>GHL connect</h1>
+        <h1 style={{ marginBottom: 'var(--space-1)' }}>GHL Connect</h1>
         <p style={{ color: 'var(--color-text-secondary)', margin: 0 }}>
           {data
             ? `${data.counts.connected} / ${data.counts.total} connected. A client counts as connected once its GoHighLevel sub-account Location ID is saved.`
@@ -198,25 +195,15 @@ export default function GhlConnectPage() {
       </div>
 
       {notice && (
-        <div
-          role="status"
-          style={{
-            padding: 'var(--space-3)',
-            borderRadius: 'var(--radius-md)',
-            marginBottom: 'var(--space-4)',
-            fontSize: 'var(--font-size-sm)',
-            backgroundColor: 'var(--color-status-done-bg)',
-            color: 'var(--color-status-done-text)',
-          }}
-        >
+        <Notice tone="success" style={{ marginBottom: 'var(--space-4)' }}>
           {notice}
-        </div>
+        </Notice>
       )}
 
       {error && (
-        <Card style={{ marginBottom: 'var(--space-5)' }}>
-          <p style={{ margin: 0, color: 'var(--color-status-danger-text)' }}>{error}</p>
-        </Card>
+        <Notice onRetry={load} style={{ marginBottom: 'var(--space-5)' }}>
+          {error}
+        </Notice>
       )}
 
       {!data && !error ? (

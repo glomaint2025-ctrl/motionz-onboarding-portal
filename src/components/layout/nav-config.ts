@@ -32,13 +32,14 @@ export function getNavGroups(
           { label: 'Dashboard', href: '/admin', icon: 'dashboard' },
           { label: 'Clients', href: '/admin/clients', icon: 'clients' },
           { label: 'Staff', href: '/admin/staff', icon: 'team' },
-          { label: 'GHL connect', href: '/admin/ghl', icon: 'settings' },
+          { label: 'GHL Connect', shortLabel: 'GHL', href: '/admin/ghl', icon: 'external' },
         ],
       },
       {
         label: 'Configuration',
         items: [
           { label: 'Portal Templates', shortLabel: 'Templates', href: '/admin/templates', icon: 'template' },
+          { label: 'Video Scripts', shortLabel: 'Scripts', href: '/admin/templates/scripts', icon: 'video' },
           { label: 'Settings & Integrations', shortLabel: 'Settings', href: '/admin/integrations', icon: 'settings' },
         ],
       },
@@ -57,7 +58,6 @@ export function getNavGroups(
         items: [
           { label: 'Dashboard', href: '/csm', icon: 'dashboard' },
           { label: 'My Clients', shortLabel: 'Clients', href: '/csm/clients', icon: 'clients' },
-          { label: 'Setup Review Queue', shortLabel: 'Queue', href: '/csm/setup-queue', icon: 'queue' },
         ],
       },
     ];
@@ -108,6 +108,8 @@ export function isNavItemActive(href: string, pathname: string | null, role: She
   if (!pathname) return false;
   const isRoot = href === `/portal/${clientId}` || href === '/admin' || href === '/csm';
   if (isRoot) return pathname === href;
+  // "Portal Templates" must not light up while its child "Video Scripts" page is open.
+  if (href === '/admin/templates') return pathname === href;
   return pathname === href || pathname.startsWith(`${href}/`);
 }
 
@@ -123,7 +125,7 @@ export function getBottomBarItems(
       ? [`/portal/${clientId}`, `/portal/${clientId}/onboarding`, `/portal/${clientId}/leads`, `/portal/${clientId}/tracking`]
       : role === 'admin'
         ? ['/admin', '/admin/clients', '/admin/templates']
-        : ['/csm', '/csm/clients', '/csm/setup-queue'];
+        : ['/csm', '/csm/clients'];
   return wanted
     .map((href) => all.find((item) => item.href === href))
     .filter((item): item is NavConfigItem => Boolean(item));
