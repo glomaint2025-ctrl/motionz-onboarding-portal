@@ -87,6 +87,12 @@ function extractAnswers(p: Payload): Record<string, string> {
   return answers;
 }
 
+/** Key-order independent JSON: Postgres JSONB does not keep the order answers were sent in. */
+function stableJson(value: Record<string, unknown> | null | undefined): string {
+  const source = value || {};
+  return JSON.stringify(Object.keys(source).sort().map((key) => [key, source[key]]));
+}
+
 async function handleLead(p: Payload) {
   const tenant = await tenantByLocation(str(p.location?.id) || str(p.locationId));
   if (!tenant) return { ignored: 'Unknown or missing location id.' };
@@ -139,7 +145,7 @@ async function handleOnboardingForm(request: NextRequest, p: Payload) {
     (r) =>
       r.submitter_email === email &&
       Date.now() - new Date(r.submitted_at).getTime() < 10 * 60 * 1000 &&
-      JSON.stringify(r.answers) === JSON.stringify(answers)
+      stableJson(r.answers) === stableJson(answers)
   );
   if (duplicate) return { tenant: tenant || undefined, ignored: 'Duplicate submission.' };
 
