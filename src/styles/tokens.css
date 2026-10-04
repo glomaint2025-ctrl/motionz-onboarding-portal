@@ -1,34 +1,44 @@
 /*
  * Motionz design tokens.
- * Dark theme (default). Soft blue-grey surfaces, one confident brand blue,
- * and a small warm accent. Text colours are tuned for WCAG AA on every
- * surface below (muted text >= 4.5:1 on --color-bg-card).
+ * Dark theme (default). Warm near-black surfaces derived from the client's
+ * base colour #090703, with the logo's orange (#FC8A01, sampled from
+ * public/brand/logo.webp) as the single brand accent. Text colours are tuned
+ * for WCAG AA on every surface below (muted text >= 4.5:1 on --color-bg-card-hover).
+ * Text on the orange is always dark (--color-on-primary): white on orange fails AA.
  */
 :root {
   color-scheme: dark;
 
   /* Surface and Background Colors (lowest -> highest elevation) */
-  --color-bg-base: #0E1217;
-  --color-bg-surface: #13181F;
-  --color-bg-card: #171D25;
-  --color-bg-card-hover: #1D242E;
-  --color-bg-elevated: #1B222B;   /* menus, dropdowns, popovers */
-  --color-bg-input: #11161C;
-  --color-bg-subtle: rgba(255, 255, 255, 0.03);
-  --color-bg-hover: rgba(255, 255, 255, 0.05);
-  --color-bg-overlay: rgba(6, 9, 13, 0.72);
+  --color-bg-base: #090703;
+  --color-bg-surface: #100D09;
+  --color-bg-card: #16120D;
+  --color-bg-card-hover: #1E1912;
+  --color-bg-elevated: #1B1610;   /* menus, dropdowns, popovers */
+  --color-bg-input: #0D0A06;
+  --color-bg-control-hover: #272018; /* hover of buttons that already sit on card-hover */
+  --color-bg-header: rgba(9, 7, 3, 0.8);        /* translucent sticky header */
+  --color-bg-bar: rgba(16, 13, 9, 0.93);        /* translucent mobile tab bar */
+  --color-bg-subtle: rgba(255, 244, 228, 0.03);
+  --color-bg-hover: rgba(255, 244, 228, 0.055);
+  --color-bg-overlay: rgba(4, 3, 1, 0.76);
 
   /* Primary and Brand Accent Colors */
-  --color-primary: #45B0D8;
-  --color-primary-hover: #63BFE2;
-  --color-primary-strong: #2D93BD;
-  --color-primary-text: #7CCBEA;       /* primary used as text on dark surfaces */
-  --color-primary-muted: rgba(69, 176, 216, 0.14);
-  --color-primary-border: rgba(69, 176, 216, 0.38);
-  --color-on-primary: #061219;
-  --color-accent-warm: #F4A764;
-  --color-accent-warm-muted: rgba(244, 167, 100, 0.14);
-  --brand-gradient: linear-gradient(135deg, #4CC0E6 0%, #2D8FC4 55%, #3466C9 100%);
+  --color-primary: #FC8A01;
+  --color-primary-hover: #FFA033;
+  --color-primary-strong: #D97300;
+  --color-primary-text: #FFA63D;       /* primary used as text on dark surfaces */
+  --color-primary-soft: rgba(252, 138, 1, 0.14);         /* low-alpha tint background */
+  --color-primary-soft-hover: rgba(252, 138, 1, 0.22);
+  --color-primary-muted: var(--color-primary-soft);      /* legacy alias */
+  --color-primary-glow: rgba(252, 138, 1, 0.12);         /* page/hero ambient glows */
+  --color-primary-selection: rgba(252, 138, 1, 0.38);
+  --color-primary-border: rgba(252, 138, 1, 0.4);
+  --color-on-primary: #090703;
+  --color-accent-warm: #F0C690;
+  --color-accent-warm-muted: rgba(240, 198, 144, 0.12);
+  --color-accent-warm-border: rgba(240, 198, 144, 0.3);
+  --brand-gradient: linear-gradient(135deg, #FFAA3B 0%, #FC8A01 55%, #EC6F00 100%);
 
   /* Semantic Status Colors */
   --color-status-done-bg: rgba(52, 199, 123, 0.13);
@@ -36,25 +46,27 @@
   --color-status-done-border: rgba(52, 199, 123, 0.32);
   --color-status-done-solid: #34C77B;
 
-  --color-status-progress-bg: rgba(69, 176, 216, 0.13);
-  --color-status-progress-text: #7CCBEA;
-  --color-status-progress-border: rgba(69, 176, 216, 0.34);
-  --color-status-progress-solid: #45B0D8;
+  --color-status-progress-bg: rgba(252, 138, 1, 0.13);
+  --color-status-progress-text: #FFA63D;
+  --color-status-progress-border: rgba(252, 138, 1, 0.36);
+  --color-status-progress-solid: #FC8A01;
 
-  --color-status-pending-bg: rgba(160, 172, 189, 0.11);
-  --color-status-pending-text: #B9C3D0;
-  --color-status-pending-border: rgba(160, 172, 189, 0.24);
-  --color-status-pending-solid: #8E9AAB;
+  --color-status-pending-bg: rgba(190, 178, 160, 0.11);
+  --color-status-pending-text: #C6BDB0;
+  --color-status-pending-border: rgba(190, 178, 160, 0.24);
+  --color-status-pending-solid: #9A9082;
 
-  --color-status-warning-bg: rgba(242, 178, 62, 0.13);
-  --color-status-warning-text: #F5C463;
-  --color-status-warning-border: rgba(242, 178, 62, 0.34);
-  --color-status-warning-solid: #F2B23E;
+  --color-status-warning-bg: rgba(242, 204, 46, 0.13);   /* yellow, kept clear of the brand orange */
+  --color-status-warning-text: #F5D85A;
+  --color-status-warning-border: rgba(242, 204, 46, 0.34);
+  --color-status-warning-solid: #F2CC2E;
 
   --color-status-danger-bg: rgba(240, 98, 98, 0.13);
   --color-status-danger-text: #F78C8C;
   --color-status-danger-border: rgba(240, 98, 98, 0.34);
   --color-status-danger-solid: #EF5D5D;
+  --color-status-danger-bg-hover: rgba(240, 98, 98, 0.22);
+  --color-status-danger-text-hover: #FFB0B0;
 
   --color-status-suspended-bg: rgba(232, 74, 120, 0.15);
   --color-status-suspended-text: #F68AAA;
@@ -67,17 +79,17 @@
   --color-warning: var(--color-status-warning-text);
 
   /* Typography Colors */
-  --color-text-primary: #EDF1F5;
-  --color-text-secondary: #AEB8C5;
-  --color-text-muted: #8B97A7;
-  --color-text-inverse: #0E1217;
+  --color-text-primary: #F4EFE8;
+  --color-text-secondary: #BFB6A9;
+  --color-text-muted: #9A9082;
+  --color-text-inverse: #090703;
 
   /* Border and Line Colors */
-  --color-border-subtle: rgba(255, 255, 255, 0.07);
-  --color-border-default: rgba(255, 255, 255, 0.11);
-  --color-border-strong: rgba(255, 255, 255, 0.18);
-  --color-border-focus: #63BFE2;
-  --color-focus-ring: rgba(99, 191, 226, 0.75);
+  --color-border-subtle: rgba(255, 240, 220, 0.075);
+  --color-border-default: rgba(255, 240, 220, 0.12);
+  --color-border-strong: rgba(255, 240, 220, 0.2);
+  --color-border-focus: #FFA033;
+  --color-focus-ring: rgba(255, 160, 51, 0.8);
 
   /* Typography Tokens */
   --font-family-base: var(--font-inter, 'Inter'), -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
