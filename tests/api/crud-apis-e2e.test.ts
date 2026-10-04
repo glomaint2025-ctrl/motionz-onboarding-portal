@@ -12,7 +12,6 @@ import { GET as csmSetupGetHandler, PUT as csmSetupPutHandler } from '../../src/
 import { GET as portalDataHandler } from '../../src/app/api/portal/[clientId]/data/route';
 import { GET as portalLeadsHandler } from '../../src/app/api/portal/[clientId]/leads/route';
 import { GET as portalContractsHandler } from '../../src/app/api/portal/[clientId]/contracts/route';
-import { GET as portalOrdersHandler } from '../../src/app/api/portal/[clientId]/orders/route';
 import { PUT as portalProfileHandler } from '../../src/app/api/portal/[clientId]/profile/route';
 import { GET as portalTeamGetHandler, POST as portalTeamHandler, DELETE as portalTeamDeleteHandler, PATCH as portalTeamPatchHandler } from '../../src/app/api/portal/[clientId]/team/route';
 import { GET as videoPrefGetHandler, POST as videoPrefPostHandler } from '../../src/app/api/portal/[clientId]/video-preference/route';
@@ -239,16 +238,6 @@ async function runCrudApiTests() {
   assert.ok(Array.isArray(contractsBody.contracts));
   assert.strictEqual((contractsBody as any).leads, undefined, 'Contracts endpoint must not leak leads');
   console.log(` PASS: Focused Contracts API returned strictly contracts.`);
-
-  // GET: Orders
-  const ordersReq = makeJsonRequest('/api/portal/abc-roofing/orders', 'GET', undefined, {
-    motionz_session: clientSessionCookie,
-  });
-  const ordersRes = await portalOrdersHandler(ordersReq, { params: { clientId: 'abc-roofing' } });
-  assert.strictEqual(ordersRes.status, 200);
-  const ordersBody = await ordersRes.json();
-  assert.ok(Array.isArray(ordersBody.orders));
-  console.log(` PASS: Focused Orders API returned strictly orders.`);
 
   // PUT: Update Profile
   const profileReq = makeJsonRequest('/api/portal/abc-roofing/profile', 'PUT', {

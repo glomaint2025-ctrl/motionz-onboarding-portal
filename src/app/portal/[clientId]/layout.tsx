@@ -11,7 +11,6 @@ const FEATURE_ROUTE_MAP: Record<string, string> = {
   'tracking': 'tracking',
   'performance': 'tracking',
   'contract': 'contracts',
-  'orders': 'orders',
   'tools': 'tools',
   'roof-measurement': 'roof_measurement',
   'measure': 'roof_measurement',

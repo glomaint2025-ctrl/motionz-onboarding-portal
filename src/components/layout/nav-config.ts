@@ -85,7 +85,6 @@ export function getNavGroups(
         label: 'Account',
         items: [
           { label: 'Contract', href: `${base}/contract`, icon: 'contract', featureKey: 'contracts' },
-          { label: 'Orders & Shipping', shortLabel: 'Orders', href: `${base}/orders`, icon: 'package', featureKey: 'orders' },
           { label: 'Company Profile', shortLabel: 'Profile', href: `${base}/profile`, icon: 'building' },
           { label: 'Team', href: `${base}/team`, icon: 'team', featureKey: 'team' },
         ],

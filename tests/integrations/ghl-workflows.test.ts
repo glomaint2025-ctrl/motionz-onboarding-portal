@@ -2,7 +2,7 @@ import assert from 'node:assert';
 import { NextRequest } from 'next/server';
 import { POST as ghlWebhook } from '../../src/app/api/webhooks/ghl/route';
 import { GET as getSettings, PUT as putSettings } from '../../src/app/api/admin/settings/notifications/route';
-import { GET as getRecords, POST as postRecord, PATCH as patchRecord, DELETE as deleteRecord } from '../../src/app/api/admin/clients/[id]/records/route';
+import { GET as getRecords, POST as postRecord, DELETE as deleteRecord } from '../../src/app/api/admin/clients/[id]/records/route';
 import { GET as getAdminClient } from '../../src/app/api/admin/clients/[id]/route';
 import {
   leadRepository,
@@ -104,22 +104,21 @@ async function run() {
   assert.ok(detail.onboardingSubmissions.length >= 1, 'admin client detail includes onboarding answers');
   console.log(' PASS: onboarding form answers are stored per client, unmatched ones are queued.');
 
-  // 6. Contracts and orders managed by admin
+  // 6. Contracts managed by admin
   const recordsUrl = `/api/admin/clients/${DEMO_TENANT}/records`;
   const p = { params: { id: DEMO_TENANT } };
   const badUrl = await postRecord(req(recordsUrl, 'POST', { kind: 'contract', title: 'Agreement', document_url: 'javascript:alert(1)' }, adminCookie), p);
   assert.strictEqual(badUrl.status, 400, 'non-https document links rejected');
   const contract = await (await postRecord(req(recordsUrl, 'POST', { kind: 'contract', title: 'Service Agreement', document_url: 'https://example.com/a.pdf', signed_at: '2026-09-10' }, adminCookie), p)).json();
   assert.ok(contract.success);
-  const order = await (await postRecord(req(recordsUrl, 'POST', { kind: 'order', label: 'Yard signs', carrier: 'UPS' }, adminCookie), p)).json();
-  const moved = await (await patchRecord(req(recordsUrl, 'PATCH', { kind: 'order', id: order.order.id, stage: 'shipped' }, adminCookie), p)).json();
-  assert.strictEqual(moved.order.stage, 'shipped');
   const list = await (await getRecords(req(recordsUrl, 'GET', undefined, adminCookie), p)).json();
   assert.ok(list.contracts.some((c: any) => c.id === contract.contract.id));
-  const del = await deleteRecord(req(`${recordsUrl}?kind=order&recordId=${order.order.id}`, 'DELETE', undefined, adminCookie), p);
+  assert.strictEqual(list.orders, undefined, 'records API no longer returns orders');
+  assert.strictEqual((await postRecord(req(recordsUrl, 'POST', { kind: 'order', label: 'x' }, adminCookie), p)).status, 400, 'order records are no longer accepted');
+  assert.strictEqual((await postRecord(req(recordsUrl, 'POST', { kind: 'contract', title: 'x' }, csmCookie), p)).status, 403);
+  const del = await deleteRecord(req(`${recordsUrl}?kind=contract&recordId=${contract.contract.id}`, 'DELETE', undefined, adminCookie), p);
   assert.strictEqual(del.status, 200);
-  assert.strictEqual((await postRecord(req(recordsUrl, 'POST', { kind: 'order', label: 'x' }, csmCookie), p)).status, 403);
-  console.log(' PASS: admin can attach contracts and manage orders; CSM cannot.');
+  console.log(' PASS: admin can attach and remove contracts; CSM cannot.');
 
   // 7. Phone validation
   assert.strictEqual(validatePhone('+1 (555) 234-5678'), '+1 (555) 234-5678');

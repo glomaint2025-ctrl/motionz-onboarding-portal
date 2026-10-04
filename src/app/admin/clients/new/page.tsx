@@ -31,7 +31,6 @@ export default function AddClientPage() {
     leads: true,
     tracking: true,
     contracts: true,
-    orders: true,
     tools: true,
     roof_measurement: true,
     video_scripts: true,

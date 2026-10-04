@@ -852,7 +852,9 @@ export default function ClientDetailPage() {
             subtitle="Enable or disable specific modules for this client portal"
           />
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 'var(--space-3)' }}>
-            {Object.entries(features).map(([key, enabled]) => (
+            {Object.entries(features)
+              .filter(([key]) => PORTAL_MODULES.some((m) => m.key === key))
+              .map(([key, enabled]) => (
               <label
                 key={key}
                 style={{
