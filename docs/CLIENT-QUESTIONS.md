@@ -14,7 +14,20 @@ Each question says what we built in the meantime, so nothing is blocked while we
 | 5 | Roof measurement (P1.5) | We recommend Google's Solar API (10,000 free lookups/month, then about $10 per 1,000). Please create a Google Cloud project with billing, enable **Geocoding API** and **Solar API**, and send an API key. Or tell us if you prefer another provider. | Fully built; shows "Coming soon" until the key is added. Squares for Sales has no public API, so it can only be a link. |
 | 6 | Signed contracts | Where does each client's signed contract come from: a GHL document, a PDF you upload, or an e-sign link? Should client team members see it, or only the owner? | Admin attaches a contract (title, https link, signed date) per client. Only the account owner sees it. |
 | 7 | Orders & shipping | What physical items do you ship to clients (signs, door hangers, product)? If nothing ships, we will hide the Orders page. | Admin can add orders and move them through Ordered → Packaged → Shipped → Delivered (or Issue). |
-| 8 | Sending domain | Please let us add 3–4 DNS records to motionz.ai (or a subdomain) so portal emails come from your domain. Until then emails can only be delivered to our test inbox. | Emails are sent through Resend from a test sender. |
+| 8 | Sending domain | Please add the 3 DNS records below so portal emails (invites, sign-in links, password resets) come from your domain and reach every client. Until then emails can only be delivered to our test inbox. | Emails are sent through Resend from a test sender. |
+
+### DNS records for portal email (question 8)
+
+Add these in your domain provider (GoDaddy → My Products → DNS for the domain). They only create the
+`mail.` subdomain used for sending; they do not change your website, Kit, or existing email.
+
+| Type | Name (host) | Value | TTL |
+|---|---|---|---|
+| TXT | `resend._domainkey.mail` | `p=MIGfMA0GCSqGSIb3DQEBAQUAA4GNADCBiQKBgQDnzXEfAgzKQP0na0o3FLyUZsh67tqNyyzYV2XNaDHE5+hbqMeB9GbM1GdRm5785uhJWZEKde5VAQBTBls2ewvssOp39yE2B0/WurNRdYBmbv8p6DWs+1p2npSXOmGZ6Ff46nBIEhPxI1lznmmJhgaa3XebD90xekGZZY2Fl+BWtwIDAQAB` | Auto / 1 hour |
+| CNAME | `rsend.mail` | `rsend-apne1.forge.rmta.net` | Auto / 1 hour |
+| CNAME | `send.mail` | `send.forge.rmta.net` | Auto / 1 hour |
+
+After adding them, tell us; we click "Verify" in Resend and switch the portal's sender to `portal@mail.<your-domain>`.
 | 9 | Follow-up days (1.4) | Is a simple "Day 1–7" follow-up counter on each lead helpful, with a flag after Day 7 for leads still in an early stage? | Shown on the Leads page. |
 | 10 | Website change requests | The original brief had a "website change request" form on the client home page. Still wanted? Who should receive them? | Kept; requests email the client's CSM (or all admins if no CSM). |
 
