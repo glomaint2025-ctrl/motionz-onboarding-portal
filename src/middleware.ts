@@ -54,7 +54,7 @@ export async function middleware(request: NextRequest) {
       return secureResponse(NextResponse.redirect(new URL('/admin', request.url)));
     }
     if (session.role === 'csm') {
-      return secureResponse(NextResponse.redirect(new URL('/csm', request.url)));
+      return secureResponse(NextResponse.redirect(new URL('/csm/clients', request.url)));
     }
     if (session.role === 'client' || session.role === 'client_member') {
       const targetTenant = session.tenantId ? resolveTenantId(session.tenantId) : 'demo';
@@ -164,6 +164,10 @@ export async function middleware(request: NextRequest) {
 
   // 4. Protect Admin UI routes (/admin/*)
   if (pathname.startsWith('/admin')) {
+    // A signed-in CSM goes back to their own area instead of the sign-in page.
+    if (session && session.role === 'csm') {
+      return secureResponse(NextResponse.redirect(new URL('/csm/clients', request.url)));
+    }
     if (!session || session.role !== 'admin') {
       const loginUrl = new URL('/auth/login', request.url);
       loginUrl.searchParams.set('redirect', pathname);
