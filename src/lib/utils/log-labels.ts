@@ -158,6 +158,7 @@ const DETAIL_LABELS: Record<string, string> = {
   cascadedMembersDisabled: 'Team members locked out',
   unlockedMembersCount: 'Team members unlocked',
   stepKey: 'Step',
+  step_key: 'Step',
   status: 'Status',
   ok: 'Worked',
   error: 'Problem',
@@ -181,11 +182,13 @@ export function roleLabel(role: string | null | undefined): string {
 }
 
 const ROLE_FIELDS = new Set(['role', 'userRole', 'resolvedRole', 'currentRole', 'requestedRole', 'attemptedRole', 'requiredRoles']);
+/** Fields whose values are internal keys ("pain_point", "google_sheet"): shown as words ("Pain point"). */
+const WORD_VALUE_FIELDS = new Set(['category', 'step_key', 'stepKey', 'allowed_modules', 'video_preference', 'staff_login_code']);
 
 /** Shown first, in this order, when present. */
 const KEY_FIELDS = ['email', 'attemptedEmail', 'userEmail', 'role', 'userRole', 'resolvedRole', 'requestedRole', 'reason', 'ip', 'ipAddress', 'ip_address'];
 /** Already shown elsewhere on the row, or internal-only (still available under "Show raw"). */
-const HIDDEN_FIELDS = new Set(['timestamp', 'mode']);
+const HIDDEN_FIELDS = new Set(['timestamp', 'mode', 'event']);
 
 /** Database ids mean nothing to a reader: "invitationId", "invitation_id", "resourceId", "id". */
 const ID_KEY = /(^id$|[a-z]Ids?$|_ids?$)/;
@@ -231,7 +234,13 @@ export function detailChips(details: Record<string, unknown> | null | undefined,
         : typeof rawValue === 'string'
           ? roleLabel(rawValue)
           : rawValue
-      : rawValue;
+      : WORD_VALUE_FIELDS.has(key)
+        ? Array.isArray(rawValue)
+          ? rawValue.map((v) => titleCaseKey(String(v)))
+          : typeof rawValue === 'string'
+            ? titleCaseKey(rawValue)
+            : rawValue
+        : rawValue;
     const text = formatDetailValue(value);
     if (text === null) return;
     const label = DETAIL_LABELS[key] || titleCaseKey(key);

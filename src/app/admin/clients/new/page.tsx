@@ -344,119 +344,65 @@ export default function AddClientPage() {
         </div>
       </form>
 
-      {/* Success: the one-time invitation link is shown here, so a stray click must not close it. */}
+      {/* Success: one plain sentence. The invite link is only shown when the email could not be sent. */}
       <Modal
         isOpen={isSuccessModalOpen}
         onClose={() => router.push('/admin/clients')}
         title="Client added"
-        dismissOnOverlay={false}
+        dismissOnOverlay={emailDelivered}
         footer={
           <div style={{ display: 'flex', gap: 'var(--space-2)', width: '100%', justifyContent: 'flex-end' }}>
-            <Button
-              type="button"
-              variant="outline"
-              disabled={!magicLink}
-              onClick={async () => {
-                if (!magicLink) return;
-                const ok = await copyText(magicLink);
-                setCopyState(ok ? 'copied' : 'failed');
-                if (ok) setTimeout(() => setCopyState('idle'), 2500);
-              }}
-            >
-              {copyState === 'copied' ? 'Copied' : 'Copy invitation link'}
-            </Button>
-            <Button
-              variant="primary"
-              onClick={() => router.push('/admin/clients')}
-            >
+            {!emailDelivered && magicLink && (
+              <Button
+                type="button"
+                variant="outline"
+                onClick={async () => {
+                  const ok = await copyText(magicLink);
+                  setCopyState(ok ? 'copied' : 'failed');
+                  if (ok) setTimeout(() => setCopyState('idle'), 2500);
+                }}
+              >
+                {copyState === 'copied' ? 'Copied' : 'Copy invitation link'}
+              </Button>
+            )}
+            <Button variant="primary" onClick={() => router.push('/admin/clients')}>
               Done
             </Button>
           </div>
         }
       >
-        <div>
-          <h3 style={{ margin: '0 0 var(--space-3)', fontSize: '1.25rem', color: 'var(--color-text-primary)' }}>
-            {createdTenant?.name}
-          </h3>
+        <p style={{ margin: 0, color: 'var(--color-text-primary)', lineHeight: 1.5 }}>
+          {emailDelivered
+            ? `${createdTenant?.name || 'The client'} is ready. We emailed the invitation to ${invitedEmail}.`
+            : `${createdTenant?.name || 'The client'} is ready, but the invitation email could not be sent. Copy the link below and send it to the client yourself.`}
+        </p>
 
-          {/* Invite email: say what actually happened. */}
-          <div
-            role="status"
-            style={{
-              padding: 'var(--space-3)',
-              borderRadius: 'var(--radius-md)',
-              fontSize: 'var(--font-size-sm)',
-              marginBottom: 'var(--space-3)',
-              wordBreak: 'break-word',
-              backgroundColor: emailDelivered ? 'var(--color-status-done-bg)' : 'var(--color-status-warning-bg)',
-              border: `1px solid ${emailDelivered ? 'var(--color-status-done-border)' : 'var(--color-status-warning-border)'}`,
-              color: emailDelivered ? 'var(--color-status-done-text)' : 'var(--color-status-warning-text)',
-            }}
-          >
-            {emailDelivered
-              ? `Invitation emailed to ${invitedEmail}`
-              : 'The invitation email could not be sent. Copy the link below and send it to the client yourself.'}
-          </div>
+        {sheet && !sheet.ok && (
+          <Notice style={{ marginTop: 'var(--space-3)' }}>
+            The tracking sheet was not created. You can add it later from the client&apos;s page.
+          </Notice>
+        )}
 
-          {/* Tracking sheet */}
-          {sheet && (
-            <div
-              style={{
-                padding: 'var(--space-3)',
-                borderRadius: 'var(--radius-md)',
-                fontSize: 'var(--font-size-sm)',
-                marginBottom: 'var(--space-3)',
-                wordBreak: 'break-word',
-                backgroundColor: sheet.ok ? 'var(--color-status-done-bg)' : 'var(--color-status-warning-bg)',
-                border: `1px solid ${sheet.ok ? 'var(--color-status-done-border)' : 'var(--color-status-warning-border)'}`,
-                color: sheet.ok ? 'var(--color-status-done-text)' : 'var(--color-status-warning-text)',
-              }}
-            >
-              {sheet.ok ? (
-                <>
-                  Tracking sheet created.
-                  {sheet.url && (
-                    <>
-                      {' '}
-                      <a href={sheet.url} target="_blank" rel="noopener noreferrer" style={{ color: 'inherit', textDecoration: 'underline' }}>
-                        Open sheet
-                      </a>
-                    </>
-                  )}
-                </>
-              ) : (
-                `Tracking sheet was not created${sheet.error ? `: ${sheet.error}` : '.'} You can add it later from the client's page.`
-              )}
-            </div>
-          )}
-
+        {!emailDelivered && (
           <div
             style={{
+              marginTop: 'var(--space-3)',
               padding: 'var(--space-3)',
               backgroundColor: 'var(--color-bg-input)',
-              border: '1px solid var(--color-primary-border)',
+              border: '1px solid var(--color-border-default)',
               borderRadius: 'var(--radius-md)',
               fontSize: 'var(--font-size-xs)',
-              marginBottom: 'var(--space-3)',
+              wordBreak: 'break-all',
+              fontFamily: 'var(--font-family-mono)',
+              userSelect: 'all',
             }}
           >
-            <span style={{ display: 'block', color: 'var(--color-text-muted)', marginBottom: '4px' }}>
-              Invitation link (works once, expires in 72 hours):
-            </span>
-            <span style={{ wordBreak: 'break-all', color: 'var(--color-primary-text)', fontFamily: 'var(--font-family-mono)', userSelect: 'all' }}>
-              {magicLink || 'No link was returned. Open the client’s page and use Invite to create one.'}
-            </span>
+            {magicLink || 'No link was returned. Open the client\u2019s page and use Invite to create one.'}
           </div>
-          {copyState === 'failed' && (
-            <Notice style={{ marginBottom: 'var(--space-3)' }}>Could not copy automatically. Select the link above and copy it by hand.</Notice>
-          )}
-
-          <p style={{ fontSize: 'var(--font-size-xs)', color: 'var(--color-text-muted)', margin: 0 }}>
-            {emailDelivered
-              ? 'The same link is in the email. Keep a copy here in case the client cannot find it.'
-              : 'The client opens the link to set up their sign-in.'}
-          </p>
-        </div>
+        )}
+        {copyState === 'failed' && (
+          <Notice style={{ marginTop: 'var(--space-3)' }}>Could not copy automatically. Select the link above and copy it by hand.</Notice>
+        )}
       </Modal>
     </div>
   );

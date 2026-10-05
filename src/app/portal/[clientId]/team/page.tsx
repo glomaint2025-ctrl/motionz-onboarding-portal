@@ -55,13 +55,6 @@ const errorBoxStyle: React.CSSProperties = {
   borderRadius: 'var(--radius-md)',
   fontSize: 'var(--font-size-sm)',
 };
-const successBoxStyle: React.CSSProperties = {
-  padding: 'var(--space-3)',
-  backgroundColor: 'var(--color-status-done-bg)',
-  color: 'var(--color-status-done-text)',
-  borderRadius: 'var(--radius-md)',
-  fontSize: 'var(--font-size-sm)',
-};
 const noteBoxStyle: React.CSSProperties = {
   padding: 'var(--space-3)',
   backgroundColor: 'var(--color-bg-surface)',
@@ -187,9 +180,17 @@ function ModulePicker({
   );
 }
 
-/** The outcome of an invite: says honestly whether the email went out, and offers the link to copy. */
+/** The outcome of an invite: one plain sentence when it was emailed; the link only when the email failed. */
 function InviteResultPanel({ result }: { result: InviteResult }) {
   const [copyState, setCopyState] = useState<'idle' | 'copied' | 'failed'>('idle');
+
+  if (result.emailDelivered) {
+    return (
+      <p role="status" style={{ margin: 0, lineHeight: 1.5 }}>
+        We emailed the invite to <strong>{result.email}</strong>. The link in it works once and expires in 72 hours.
+      </p>
+    );
+  }
 
   const copy = async () => {
     try {
@@ -203,21 +204,12 @@ function InviteResultPanel({ result }: { result: InviteResult }) {
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-3)' }}>
-      {result.emailDelivered ? (
-        <div role="status" style={{ ...successBoxStyle, display: 'flex', gap: 'var(--space-2)', alignItems: 'center' }}>
-          <Icon name="check-circle" size={18} />
-          <span>
-            Invite emailed to <strong>{result.email}</strong>. You can also copy the link below and send it yourself.
-          </span>
-        </div>
-      ) : (
-        <div role="alert" style={{ ...errorBoxStyle, display: 'flex', gap: 'var(--space-2)', alignItems: 'center' }}>
-          <Icon name="alert" size={18} />
-          <span>
-            The email to <strong>{result.email}</strong> could not be sent. Copy this link and send it to them yourself.
-          </span>
-        </div>
-      )}
+      <div role="alert" style={{ ...errorBoxStyle, display: 'flex', gap: 'var(--space-2)', alignItems: 'center' }}>
+        <Icon name="alert" size={18} />
+        <span>
+          The email to <strong>{result.email}</strong> could not be sent. Copy this link and send it to them yourself.
+        </span>
+      </div>
       <div
         style={{
           padding: 'var(--space-3)',
@@ -891,7 +883,7 @@ export default function TeamPage() {
       <Modal
         isOpen={Boolean(resendTarget)}
         onClose={closeResend}
-        title={resendResult ? 'New invite link' : 'Send this invite again?'}
+        title={resendResult ? 'Invite sent again' : 'Send this invite again?'}
         dismissOnOverlay={!resendResult}
         footer={
           <div style={{ display: 'flex', gap: 'var(--space-2)', justifyContent: 'flex-end', width: '100%' }}>

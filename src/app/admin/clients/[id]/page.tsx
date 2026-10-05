@@ -115,6 +115,7 @@ export default function ClientDetailPage() {
   const [generateError, setGenerateError] = useState('');
   const [generatedLink, setGeneratedLink] = useState('');
   const [inviteEmailDelivered, setInviteEmailDelivered] = useState(false);
+  const [resendEmailDelivered, setResendEmailDelivered] = useState(false);
 
   // Member permissions state
   const [permissionTarget, setPermissionTarget] = useState<any | null>(null);
@@ -484,6 +485,7 @@ export default function ClientDetailPage() {
       const data = await res.json();
       if (res.ok) {
         const link = toLocalLink(data.magicLinkUrl || '');
+        setResendEmailDelivered(Boolean(data.emailDelivered));
         setResentLink(link);
         if (data.invitation) {
           setInvitations((prev) => [
@@ -1315,16 +1317,18 @@ export default function ClientDetailPage() {
       <Modal
         isOpen={Boolean(resendTarget)}
         onClose={closeResendModal}
-        title={resentLink ? 'New sign-in link ready' : 'Send invitation again'}
+        title={resentLink ? 'Invitation sent again' : 'Send invitation again'}
         dismissOnOverlay={false}
         footer={
           resentLink ? (
             <div style={modalFooterStyle}>
-              <Button type="button" variant="outline" onClick={closeResendModal}>
-                Close
-              </Button>
-              <Button type="button" variant="primary" onClick={() => handleCopy(resentLink)}>
-                {copyState === 'copied' ? 'Copied' : 'Copy link'}
+              {!resendEmailDelivered && (
+                <Button type="button" variant="outline" onClick={() => handleCopy(resentLink)}>
+                  {copyState === 'copied' ? 'Copied' : 'Copy link'}
+                </Button>
+              )}
+              <Button type="button" variant="primary" onClick={closeResendModal}>
+                Done
               </Button>
             </div>
           ) : (
@@ -1340,16 +1344,19 @@ export default function ClientDetailPage() {
         }
       >
         {resentLink ? (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-3)' }}>
-            <Notice tone="success">
-              A new sign-in link is ready for <strong>{resendTarget?.email}</strong>. The old link no longer works.
-            </Notice>
-            <div style={linkBoxStyle}>{resentLink}</div>
-            {copyState === 'failed' && <Notice>Could not copy automatically. Select the link above and copy it by hand.</Notice>}
-            <p style={{ margin: 0, fontSize: 'var(--font-size-xs)', color: 'var(--color-text-muted)' }}>
-              Send this link to the person. It works once and signs them in to finish setting up their account.
+          resendEmailDelivered ? (
+            <p style={{ margin: 0, lineHeight: 1.5 }}>
+              We emailed a new invitation to <strong>{resendTarget?.email}</strong>. The old link no longer works.
             </p>
-          </div>
+          ) : (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-3)' }}>
+              <Notice>
+                The email to <strong>{resendTarget?.email}</strong> could not be sent. Copy this new link and send it to them yourself. The old link no longer works.
+              </Notice>
+              <div style={linkBoxStyle}>{resentLink}</div>
+              {copyState === 'failed' && <Notice>Could not copy automatically. Select the link above and copy it by hand.</Notice>}
+            </div>
+          )
         ) : (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-3)' }}>
             {resendError && <Notice>{resendError}</Notice>}
@@ -1473,16 +1480,18 @@ export default function ClientDetailPage() {
       <Modal
         isOpen={isGenerateModalOpen}
         onClose={closeInviteModal}
-        title={generatedLink ? 'Invitation ready' : 'Invite to the portal'}
+        title={generatedLink ? 'Invitation sent' : 'Invite to the portal'}
         dismissOnOverlay={false}
         footer={
           generatedLink ? (
             <div style={modalFooterStyle}>
-              <Button type="button" variant="outline" onClick={closeInviteModal}>
-                Close
-              </Button>
-              <Button type="button" variant="primary" onClick={() => handleCopy(generatedLink)}>
-                {copyState === 'copied' ? 'Copied' : 'Copy link'}
+              {!inviteEmailDelivered && (
+                <Button type="button" variant="outline" onClick={() => handleCopy(generatedLink)}>
+                  {copyState === 'copied' ? 'Copied' : 'Copy link'}
+                </Button>
+              )}
+              <Button type="button" variant="primary" onClick={closeInviteModal}>
+                Done
               </Button>
             </div>
           ) : (
@@ -1498,22 +1507,19 @@ export default function ClientDetailPage() {
         }
       >
         {generatedLink ? (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-3)' }}>
-            {inviteEmailDelivered ? (
-              <Notice tone="success">
-                We emailed the invitation to <strong>{generateEmail}</strong>. You can also copy the link below.
-              </Notice>
-            ) : (
-              <Notice tone="info">
-                The invitation for <strong>{generateEmail}</strong> is ready, but the email was not sent. Copy the link below and send it to them yourself.
-              </Notice>
-            )}
-            <div style={linkBoxStyle}>{generatedLink}</div>
-            {copyState === 'failed' && <Notice>Could not copy automatically. Select the link above and copy it by hand.</Notice>}
-            <p style={{ margin: 0, fontSize: 'var(--font-size-xs)', color: 'var(--color-text-muted)' }}>
-              The link works once and signs them in to finish setting up their account.
+          inviteEmailDelivered ? (
+            <p style={{ margin: 0, lineHeight: 1.5 }}>
+              We emailed the invitation to <strong>{generateEmail}</strong>. The link in it works once and expires in 72 hours.
             </p>
-          </div>
+          ) : (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-3)' }}>
+              <Notice>
+                The email to <strong>{generateEmail}</strong> could not be sent. Copy this link and send it to them yourself.
+              </Notice>
+              <div style={linkBoxStyle}>{generatedLink}</div>
+              {copyState === 'failed' && <Notice>Could not copy automatically. Select the link above and copy it by hand.</Notice>}
+            </div>
+          )
         ) : (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-4)' }}>
             {generateError && <Notice>{generateError}</Notice>}

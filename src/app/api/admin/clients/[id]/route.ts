@@ -480,6 +480,7 @@ export async function PATCH(
         message: 'Invitation regenerated and resent successfully.',
         invitation: result.invitation,
         magicLinkUrl: result.magicLinkUrl,
+        emailDelivered: Boolean(result.emailDelivered),
       });
     }
 
