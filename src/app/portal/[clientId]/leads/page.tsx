@@ -35,12 +35,14 @@ interface StageCount {
  * Pipeline order: "New Lead" first, then "Day 1" to "Day 7" by number, then everything else
  * A to Z, with closing stages (won, lost and similar) last.
  */
+const CLOSED_STAGE = /\b(won|lost|closed|sold|dead|disqualified|unqualified|not interested|abandoned)\b/i;
+
 function stageRank(stage: string): [number, number] {
   const name = stage.trim();
   if (/^new(\s+leads?)?$/i.test(name)) return [0, 0];
   const day = name.match(/^day\s*(\d+)/i);
   if (day) return [1, parseInt(day[1], 10)];
-  if (/\b(won|lost|closed|sold|dead|disqualified|unqualified|not interested|abandoned)\b/i.test(name)) {
+  if (CLOSED_STAGE.test(name)) {
     return [3, /\b(won|sold)\b/i.test(name) ? 0 : 1];
   }
   return [2, 0];
@@ -310,7 +312,9 @@ export default function LeadsPage() {
                         <StatusBadge status={l.status || 'New'} variant="progress" />
                       </td>
                       <td style={{ padding: 'var(--space-2)', whiteSpace: 'nowrap' }}>
-                        {followUpDay(l.created_at) > 7 && isEarlyStage(l.status) ? (
+                        {l.status && CLOSED_STAGE.test(l.status) ? (
+                          <span style={{ color: 'var(--color-text-muted)' }} aria-label="No follow-up needed">-</span>
+                        ) : followUpDay(l.created_at) > 7 && isEarlyStage(l.status) ? (
                           <StatusBadge status="Past day 7" variant="warning" />
                         ) : (
                           `Day ${Math.min(followUpDay(l.created_at), 99)}`

@@ -174,8 +174,9 @@ async function handleOnboardingForm(request: NextRequest, p: Payload) {
         onboardingSubmittedEmail({
           to,
           companyName,
-          portalUrl: tenant ? `${baseUrl}/admin/clients/${tenant.id}` : `${baseUrl}/admin`,
-          fields: tenant ? answers : { Note: 'No portal client matches this email yet.', 'Submitted by': email || '', ...answers },
+          portalUrl: tenant ? `${baseUrl}/admin/clients/${tenant.id}` : `${baseUrl}/admin/integrations`,
+          fields: tenant ? answers : { 'Submitted by': email || '', ...answers },
+          matched: Boolean(tenant),
         })
       )
     )

@@ -101,7 +101,15 @@ export function staffLoginCodeEmail(params: { to: string; code: string; expiresI
   return { ...message, html: message.html.replace(plain, () => large) };
 }
 
-export function onboardingSubmittedEmail(params: { to: string; companyName: string; portalUrl: string; fields: Record<string, string> }): EmailMessage {
+export function onboardingSubmittedEmail(params: {
+  to: string;
+  companyName: string;
+  portalUrl: string;
+  fields: Record<string, string>;
+  /** False when the email on the form matches no client in the portal yet. */
+  matched?: boolean;
+}): EmailMessage {
+  const matched = params.matched !== false;
   const lines = Object.entries(params.fields)
     .filter(([, v]) => v)
     .map(([k, v]) => `${k}: ${v}`);
@@ -109,8 +117,13 @@ export function onboardingSubmittedEmail(params: { to: string; companyName: stri
     params.to,
     `Onboarding form submitted: ${params.companyName}`,
     `${params.companyName} submitted their onboarding form`,
-    ['The client has completed their onboarding form. You can start setting up their ads.', ...lines],
-    { label: 'Open client in portal', url: params.portalUrl },
+    [
+      matched
+        ? 'The client has completed their onboarding form. You can start setting up their ads.'
+        : 'The email on this form does not match any client in the portal yet. Link it to the right client in Settings & Integrations, then start their setup.',
+      ...lines,
+    ],
+    { label: matched ? 'Open client in portal' : 'Link it to a client', url: params.portalUrl },
     undefined,
     ['onboarding-submitted']
   );
