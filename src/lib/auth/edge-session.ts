@@ -26,6 +26,13 @@ export function getSessionSecret(): string {
 }
 export const SESSION_COOKIE_NAME = 'motionz_session';
 
+/**
+ * Shown to a person whose own access was turned off. The reason is kept for the owner and staff only
+ * (the Team dialog promises the person will not see it). A whole-client suspension still shows its reason.
+ */
+export const PERSONAL_ACCESS_OFF_MESSAGE =
+  'Your access to this portal has been turned off. Contact your account owner or your Motionz contact if you think this is a mistake.';
+
 export const DEMO_TENANT_UUID = '4f3c7e8a-92b1-4d3a-8f5c-1a2b3c4d5e6f';
 export const LEGACY_DEMO_TENANT_UUID = 'd0000000-0000-0000-0000-000000000001';
 
@@ -186,7 +193,7 @@ export async function checkEdgeUserSuspension(
 
   try {
     const res = await fetch(
-      `${supabaseUrl}/rest/v1/users?id=eq.${userId}&select=status,suspended_reason`,
+      `${supabaseUrl}/rest/v1/users?id=eq.${userId}&select=status`,
       {
         headers: {
           apikey: key,
@@ -201,12 +208,7 @@ export async function checkEdgeUserSuspension(
     if (rows && rows.length > 0) {
       const user = rows[0];
       if (user.status === 'suspended') {
-        return {
-          suspended: true,
-          reason:
-            user.suspended_reason ||
-            'Account has been disabled by an administrator.',
-        };
+        return { suspended: true, reason: PERSONAL_ACCESS_OFF_MESSAGE };
       }
     }
   } catch {

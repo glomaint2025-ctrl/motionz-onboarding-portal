@@ -4,6 +4,7 @@ import { UserRole } from '../db/schema';
 import { Capability, hasPermission, assertTenantAccess } from './permissions';
 import { securityEventRepository, auditLogRepository, userRepository, tenantRepository, csmAssignmentRepository } from '../db/repositories';
 import { AppError } from '../errors';
+import { PERSONAL_ACCESS_OFF_MESSAGE } from './edge-session';
 
 /**
  * Anonymous access to the demo sandbox is a local-development convenience only:
@@ -57,10 +58,8 @@ export async function assertActiveAccount(session: SessionPayload): Promise<void
   // 1. Check user-level suspension
   const user = await userRepository.findById(session.userId);
   if (user && user.status === 'suspended') {
-    const reason = user.suspended_reason || 'Account has been disabled by an administrator.';
-    const byRole = user.suspended_by_role || 'administrator';
     throw new AppError(
-      `Your account has been suspended: ${reason}`,
+      PERSONAL_ACCESS_OFF_MESSAGE,
       403,
       'ACCOUNT_SUSPENDED'
     );

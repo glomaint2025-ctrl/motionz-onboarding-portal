@@ -285,6 +285,9 @@ export default function TeamPage() {
   const [banReason, setBanReason] = useState('');
   const [banError, setBanError] = useState('');
 
+  // One-line confirmation after a change made in a dialog.
+  const [notice, setNotice] = useState('');
+
   // Change what a member can see
   const [accessTarget, setAccessTarget] = useState<Member | null>(null);
   const [accessModules, setAccessModules] = useState<string[]>([]);
@@ -462,6 +465,7 @@ export default function TeamPage() {
       });
       if (res.ok) {
         setInvitations((prev) => prev.filter((i) => i.id !== revokeTarget.id));
+        setNotice(`The invite for ${revokeTarget.email} was cancelled.`);
         setRevokeTarget(null);
       } else {
         const data = await res.json().catch(() => ({}));
@@ -495,6 +499,9 @@ export default function TeamPage() {
       const data = await res.json().catch(() => ({}));
       if (res.ok) {
         setMembers((prev) => prev.map((m) => (m.id === banTarget.id ? { ...m, ...(data.user || {}) } : m)));
+        setNotice(
+          `${banTarget.full_name || banTarget.email} ${action === 'suspend' ? 'can no longer sign in.' : 'can sign in again.'}`
+        );
         setBanTarget(null);
         setBanReason('');
       } else {
@@ -541,6 +548,7 @@ export default function TeamPage() {
       if (res.ok) {
         const saved: string[] = Array.isArray(data.user?.allowed_modules) ? data.user.allowed_modules : accessModules;
         setMembers((prev) => prev.map((m) => (m.id === accessTarget.id ? { ...m, allowed_modules: saved } : m)));
+        setNotice(`Saved what ${accessTarget.full_name || accessTarget.email} can see.`);
         setAccessTarget(null);
       } else {
         setAccessError(data.error || 'The change could not be saved. Please try again.');
@@ -593,6 +601,22 @@ export default function TeamPage() {
         </Card>
       ) : (
         <>
+          {notice && (
+            <p
+              role="status"
+              style={{
+                margin: '0 0 var(--space-4) 0',
+                padding: 'var(--space-3) var(--space-4)',
+                borderRadius: 'var(--radius-md)',
+                backgroundColor: 'var(--color-status-done-bg)',
+                color: 'var(--color-status-done-text)',
+                fontSize: 'var(--font-size-sm)',
+              }}
+            >
+              {notice}
+            </p>
+          )}
+
           {/* People */}
           <Card style={{ marginBottom: 'var(--space-6)' }}>
             <CardHeader

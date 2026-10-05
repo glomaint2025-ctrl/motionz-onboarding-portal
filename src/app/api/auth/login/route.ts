@@ -15,6 +15,7 @@ import {
 } from '@/lib/auth/login-challenge';
 import { enforceRateLimit, getClientIp, sanitizeRedirectUrl } from '@/lib/auth/security-utils';
 import { resolveTenantId } from '@/lib/db/supabase-client';
+import { PERSONAL_ACCESS_OFF_MESSAGE } from '@/lib/auth/edge-session';
 import { canExposeDevLinks } from '@/lib/email';
 import { logAuditEvent } from '@/lib/db';
 
@@ -192,9 +193,8 @@ export async function POST(request: Request) {
 
       // Suspension is only revealed once the caller has proven they own the account.
       if (user.status === 'suspended') {
-        const reason = user.suspended_reason || 'Account has been disabled by an administrator.';
         return NextResponse.json(
-          { error: `Your account has been suspended: ${reason}`, suspended: true, reason },
+          { error: PERSONAL_ACCESS_OFF_MESSAGE, suspended: true, reason: PERSONAL_ACCESS_OFF_MESSAGE },
           { status: 403 }
         );
       }
