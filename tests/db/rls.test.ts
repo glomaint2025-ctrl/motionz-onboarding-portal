@@ -29,8 +29,8 @@ async function runRlsDatabaseTests() {
   const stepsA = await getClientSetupSteps(tenantA.id);
   const stepsB = await getClientSetupSteps(tenantB.id);
 
-  assert.strictEqual(stepsA.length, 5);
-  assert.strictEqual(stepsB.length, 5);
+  assert.strictEqual(stepsA.length, 4);
+  assert.strictEqual(stepsB.length, 4);
   assert.notStrictEqual(stepsA[0].id, stepsB[0].id, 'Cloned step IDs must be unique');
 
   // Test 2: Mutation on Tenant A does not touch Tenant B

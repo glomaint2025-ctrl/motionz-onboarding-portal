@@ -152,8 +152,8 @@ async function runCrudApiTests() {
   assert.strictEqual(getClientRes.status, 200);
   const getClientBody = await getClientRes.json();
   assert.strictEqual(getClientBody.tenant.name, 'Summit Roof Masters');
-  assert.strictEqual(getClientBody.steps.length, 5, 'Must have exactly 5 cloned setup steps');
-  console.log(' PASS: Admin retrieved client details with 5 cloned setup steps.');
+  assert.strictEqual(getClientBody.steps.length, 4, 'Must have exactly 4 cloned setup steps');
+  console.log(' PASS: Admin retrieved client details with 4 cloned setup steps.');
 
   // PUT: Update client
   const updateClientReq = makeJsonRequest(`/api/admin/clients/${createdTenantId}`, 'PUT', {
@@ -197,7 +197,7 @@ async function runCrudApiTests() {
   const csmSetupGetRes = await csmSetupGetHandler(csmSetupGetReq, { params: { id: targetId } });
   assert.strictEqual(csmSetupGetRes.status, 200);
   const csmSetupGetBody = await csmSetupGetRes.json();
-  assert.strictEqual(csmSetupGetBody.steps.length, 5);
+  assert.strictEqual(csmSetupGetBody.steps.length, 4);
   console.log(' PASS: CSM retrieved client setup roadmap.');
 
   // PUT: Update step status & guidance

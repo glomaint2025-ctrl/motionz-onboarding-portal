@@ -29,8 +29,8 @@ async function runRealDatabaseSmokeTest() {
 
     createdTenantId = tenant.id;
     assert(createdTenantId, 'Tenant must have a generated UUID ID');
-    assert.strictEqual(setupStepsCount, 5, 'Must clone all 5 master setup steps');
-    console.log(`  PASS: Provisioned tenant ${createdTenantId} with 5 cloned steps.`);
+    assert.strictEqual(setupStepsCount, 4, 'Must clone all 4 master setup steps');
+    console.log(`  PASS: Provisioned tenant ${createdTenantId} with 4 cloned steps.`);
 
     // 2. Verify Persistence in Real Supabase Database
     console.log(' [2/6] Verifying persistence directly via PostgREST...');
@@ -39,7 +39,7 @@ async function runRealDatabaseSmokeTest() {
     assert.strictEqual(fetchedTenant.slug, testSlug, 'Persisted tenant slug matches');
 
     const fetchedSteps = await clientSetupStepRepository.listByTenant(createdTenantId);
-    assert.strictEqual(fetchedSteps.length, 5, 'All 5 steps persisted in client_setup_steps table');
+    assert.strictEqual(fetchedSteps.length, 4, 'All 4 steps persisted in client_setup_steps table');
     console.log('  PASS: Data persisted and verified in Supabase.');
 
     // 3. Create Invitation

@@ -27,14 +27,14 @@ async function runPortalIntegrationTests() {
   assert.strictEqual(tenant?.name, 'ABC Roofing');
 
   const steps = await getClientSetupSteps(demoTenantId);
-  assert.strictEqual(steps.length, 5, 'Must have 5 onboarding steps');
+  assert.strictEqual(steps.length, 4, 'Must have 4 onboarding steps');
 
   const completedSteps = steps.filter((s) => s.status === 'done');
-  assert.strictEqual(completedSteps.length, 3, 'Must have 3 completed steps initially');
+  assert.strictEqual(completedSteps.length, 2, 'Must have 2 completed steps initially');
 
   const percentage = Math.round((completedSteps.length / steps.length) * 100);
-  assert.strictEqual(percentage, 60, 'Initial percentage is 60%');
-  console.log('PASS: Client setup progress percentage calculated correctly (60%)');
+  assert.strictEqual(percentage, 50, 'Initial percentage is 50%');
+  console.log('PASS: Client setup progress percentage calculated correctly (50%)');
 
   // Test 2: Cross-tenant isolation boundaries
   const clientUser = {

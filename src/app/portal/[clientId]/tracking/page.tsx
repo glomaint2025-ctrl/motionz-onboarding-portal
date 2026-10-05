@@ -4,6 +4,7 @@ import React, { useState, useEffect } from 'react';
 import { useParams } from 'next/navigation';
 import { Card, CardHeader, StatusBadge, Skeleton } from '@/components/ui';
 import { buttonClasses } from '@/components/ui/Button';
+import { PORTAL_LINKS } from '@/lib/portal-links';
 
 interface SheetLinks {
   /** Normal Google Sheets URL, opened in a new tab. */
@@ -45,6 +46,43 @@ function sheetLinks(config: Record<string, string> | undefined): SheetLinks | nu
     openUrl: `${base}${gid ? `#gid=${gid}` : ''}`,
     embedUrl: `${base}?rm=minimal${gid ? `#gid=${gid}` : ''}`,
   };
+}
+
+const CALCULATOR_LINKS = sheetLinks({ sheet_url: PORTAL_LINKS.moneyLeakCalculatorSheet });
+
+function OpenInNewTab({ href, primary }: { href: string; primary?: boolean }) {
+  return (
+    <a
+      href={href}
+      target="_blank"
+      rel="noopener noreferrer"
+      className={buttonClasses({ variant: primary ? 'primary' : 'secondary', size: 'sm' })}
+      style={{ textDecoration: 'none' }}
+    >
+      Open in new tab
+    </a>
+  );
+}
+
+function SheetFrame({ src, title }: { src: string; title: string }) {
+  return (
+    <iframe
+      src={src}
+      title={title}
+      loading="lazy"
+      referrerPolicy="no-referrer"
+      allow="clipboard-read; clipboard-write"
+      style={{
+        display: 'block',
+        width: '100%',
+        height: '75vh',
+        minHeight: '520px',
+        border: '1px solid var(--color-border-default)',
+        borderRadius: 'var(--radius-md)',
+        backgroundColor: 'var(--color-bg-surface)',
+      }}
+    />
+  );
 }
 
 export default function CampaignTrackingPage() {
@@ -103,17 +141,7 @@ export default function CampaignTrackingPage() {
             loading || loadError ? undefined : (
               <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-3)', flexWrap: 'wrap', justifyContent: 'flex-end' }}>
                 <StatusBadge status={links ? 'Ready' : 'Being set up'} variant={links ? 'done' : 'pending'} />
-                {links && (
-                  <a
-                    href={links.openUrl}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className={buttonClasses({ variant: links.embedUrl ? 'secondary' : 'primary', size: 'sm' })}
-                    style={{ textDecoration: 'none' }}
-                  >
-                    Open in new tab
-                  </a>
-                )}
+                {links && <OpenInNewTab href={links.openUrl} primary={!links.embedUrl} />}
               </div>
             )
           }
@@ -131,22 +159,7 @@ export default function CampaignTrackingPage() {
           </p>
         ) : links.embedUrl ? (
           <>
-            <iframe
-              src={links.embedUrl}
-              title="Your tracking sheet (Google Sheets)"
-              loading="lazy"
-              referrerPolicy="no-referrer"
-              allow="clipboard-read; clipboard-write"
-              style={{
-                display: 'block',
-                width: '100%',
-                height: '75vh',
-                minHeight: '520px',
-                border: '1px solid var(--color-border-default)',
-                borderRadius: 'var(--radius-md)',
-                backgroundColor: 'var(--color-bg-surface)',
-              }}
-            />
+            <SheetFrame src={links.embedUrl} title="Your tracking sheet (Google Sheets)" />
             <p style={{ margin: 'var(--space-3) 0 0 0', fontSize: 'var(--font-size-xs)', color: 'var(--color-text-muted)' }}>
               Not loading? Sign in to Google with the email this sheet was shared with, or open it in a new tab.
             </p>
@@ -157,6 +170,17 @@ export default function CampaignTrackingPage() {
           </p>
         )}
       </Card>
+
+      {CALCULATOR_LINKS?.embedUrl && (
+        <Card style={{ marginTop: 'var(--space-6)' }}>
+          <CardHeader
+            title="Money Leak Calculator"
+            subtitle="See where money slips away between leads, booked appointments, shows and closed jobs."
+            action={<OpenInNewTab href={CALCULATOR_LINKS.openUrl} />}
+          />
+          <SheetFrame src={CALCULATOR_LINKS.embedUrl} title="Money Leak Calculator (Google Sheets)" />
+        </Card>
+      )}
     </div>
   );
 }

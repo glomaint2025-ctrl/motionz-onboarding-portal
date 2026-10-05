@@ -330,7 +330,7 @@ export default function ClientOverviewPage() {
             {greetingName ? `Welcome, ${greetingName}.` : 'Welcome.'}
           </h1>
           <p style={{ color: 'var(--color-text-secondary)', fontSize: 'var(--font-size-base)', lineHeight: 1.55, margin: 0, maxWidth: '60ch' }}>
-            Here&apos;s exactly where your business stands. We handle most of it. The steps marked as yours are the quick actions we need from you.
+            Here&apos;s exactly where your business stands. We handle the setup and will let you know if we need anything from you.
           </p>
         </div>
         {showProgress && <SetupProgressRing percentage={setupPercentage} completed={completedSteps} total={totalSteps} />}

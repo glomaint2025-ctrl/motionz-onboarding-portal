@@ -39,7 +39,7 @@ async function runAdminPortalTests() {
     updated_at: now,
   });
 
-  // Clone 5 template steps
+  // Clone the template steps
   const templateSteps = store.templateSteps.filter((ts) => ts.template_id === 'tmpl-master-standard');
   templateSteps.forEach((ts) => {
     store.clientSetupSteps.push({
@@ -78,7 +78,7 @@ async function runAdminPortalTests() {
   assert(magicLinkUrl.includes('/auth/verify?token='), 'Magic link URL format verified');
 
   const steps = store.clientSetupSteps.filter((s) => s.tenant_id === newTenantId);
-  assert.strictEqual(steps.length, 5, 'New client must have all 5 confirmed setup steps cloned');
+  assert.strictEqual(steps.length, 4, 'New client must have all 4 standard setup steps cloned');
   console.log('PASS: Add Client wizard flow and template cloning verified');
 
   // Test 3: Feature Toggle Controls

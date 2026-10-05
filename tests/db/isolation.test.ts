@@ -38,8 +38,8 @@ async function runTenantIsolationTests() {
   const stepsA = await getClientSetupSteps(demoTenant.id);
   const stepsB = await getClientSetupSteps(tenantB.id);
 
-  assert.strictEqual(stepsA.length, 5, 'Tenant A must have 5 setup steps');
-  assert.strictEqual(stepsB.length, 5, 'Tenant B must have 5 setup steps');
+  assert.strictEqual(stepsA.length, 4, 'Tenant A must have 4 setup steps');
+  assert.strictEqual(stepsB.length, 4, 'Tenant B must have 4 setup steps');
   assert.notStrictEqual(stepsA[0].id, stepsB[0].id, 'Step IDs between tenants must be completely distinct');
   console.log('PASS: Setup steps cloned independently per tenant');
 

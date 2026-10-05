@@ -9,9 +9,8 @@ import { A2PFormEmbed } from '@/components/onboarding/A2PFormEmbed';
 import { calculateSetupProgress } from '@/lib/onboarding/progress';
 import { ClientSetupStep } from '@/lib/db/schema';
 
-/** A step still needs attention when it is not done and is either the client's to do or under way. */
-const needsAction = (step: ClientSetupStep) =>
-  step.status !== 'done' && (step.owner === 'client_action' || step.status === 'in_progress');
+/** Steps that are not finished yet. */
+const isOpen = (step: ClientSetupStep) => step.status !== 'done';
 
 export default function SetupProgressPage() {
   const params = useParams();
@@ -23,7 +22,7 @@ export default function SetupProgressPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [loadError, setLoadError] = useState('');
   const [attempt, setAttempt] = useState(0);
-  const [filter, setFilter] = useState<'all' | 'action_required' | 'completed'>('all');
+  const [filter, setFilter] = useState<'all' | 'open' | 'completed'>('all');
   const [isGHLFormOpen, setIsGHLFormOpen] = useState(false);
   const [isA2PFormOpen, setIsA2PFormOpen] = useState(false);
   const [prefillEmail, setPrefillEmail] = useState<string | undefined>(undefined);
@@ -60,11 +59,11 @@ export default function SetupProgressPage() {
   const retry = useCallback(() => setAttempt((n) => n + 1), []);
 
   const progress = calculateSetupProgress(steps);
-  const actionCount = steps.filter(needsAction).length;
+  const openCount = steps.filter(isOpen).length;
   const doneCount = steps.filter((s) => s.status === 'done').length;
 
   const filteredSteps = steps.filter((step) => {
-    if (filter === 'action_required') return needsAction(step);
+    if (filter === 'open') return isOpen(step);
     if (filter === 'completed') return step.status === 'done';
     return true;
   });
@@ -86,7 +85,7 @@ export default function SetupProgressPage() {
     <div style={{ marginBottom: 'var(--space-6)' }}>
       <h1 style={{ marginBottom: 'var(--space-1)' }}>Setup Progress</h1>
       <p style={{ color: 'var(--color-text-secondary)' }}>
-        The steps to get your campaigns live. We handle most of them and tell you when we need something from you.
+        The steps to get your campaigns live. We handle them and tell you if we need anything from you.
       </p>
     </div>
   );
@@ -200,11 +199,11 @@ export default function SetupProgressPage() {
                   All steps ({steps.length})
                 </Button>
                 <Button
-                  variant={filter === 'action_required' ? 'primary' : 'outline'}
+                  variant={filter === 'open' ? 'primary' : 'outline'}
                   size="sm"
-                  onClick={() => setFilter('action_required')}
+                  onClick={() => setFilter('open')}
                 >
-                  Needs action ({actionCount})
+                  Still to do ({openCount})
                 </Button>
                 <Button
                   variant={filter === 'completed' ? 'primary' : 'outline'}
@@ -246,17 +245,17 @@ export default function SetupProgressPage() {
             <p style={{ margin: 0, color: 'var(--color-text-secondary)' }}>
               {steps.length === 0
                 ? 'No setup steps yet. Your Motionz team will add them here.'
-                : filter === 'action_required'
-                  ? 'Nothing needs your attention right now.'
+                : filter === 'open'
+                  ? 'All steps are done.'
                   : 'No steps are done yet.'}
             </p>
           </Card>
         ) : (
-          filteredSteps.map((step, idx) => (
+          filteredSteps.map((step) => (
             <SetupCard
               key={step.step_key}
               step={step}
-              stepNumber={step.sort_order || idx + 1}
+              stepNumber={steps.indexOf(step) + 1}
               onActionClick={handleStepAction}
               showTrackingLink={trackingEnabled}
             />

@@ -77,7 +77,7 @@ async function run20CoreScenariosE2E() {
   // 9. Client sees updated status
   const updatedSteps = await getClientSetupSteps(newTenant.id);
   const updatedProgress = calculateSetupProgress(updatedSteps);
-  assert.strictEqual(updatedProgress.percentage, 40, 'Scenario 9 PASS: Client sees updated status (40%)');
+  assert.strictEqual(updatedProgress.percentage, 50, 'Scenario 9 PASS: Client sees updated status (50%)');
 
   // 10. Client views leads
   store.leads.push({

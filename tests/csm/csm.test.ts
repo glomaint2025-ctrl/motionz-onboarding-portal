@@ -10,14 +10,14 @@ async function runCsmWorkspaceTests() {
 
   // Test 1: CSM fetches assigned client setup steps
   const steps = await getClientSetupSteps(demoTenantId);
-  assert.strictEqual(steps.length, 5, 'Client must have exactly 5 setup steps');
+  assert.strictEqual(steps.length, 4, 'Client must have exactly 4 setup steps');
   console.log('PASS: CSM retrieves assigned client setup steps');
 
   // Test 2: Calculate initial progress percentage
   const completedInitial = steps.filter((s) => s.status === 'done').length;
   const initialPercent = Math.round((completedInitial / steps.length) * 100);
-  assert.strictEqual(initialPercent, 60, 'Initial progress is 60% (3 of 5 done)');
-  console.log('PASS: Initial progress percentage verified (60%)');
+  assert.strictEqual(initialPercent, 50, 'Initial progress is 50% (2 of 4 done)');
+  console.log('PASS: Initial progress percentage verified (50%)');
 
   // Test 3: CSM updates step status and guidance copy
   const updated = await updateClientSetupStep(demoTenantId, 'ghl_a2p', {
@@ -34,9 +34,9 @@ async function runCsmWorkspaceTests() {
   const updatedSteps = await getClientSetupSteps(demoTenantId);
   const completedNew = updatedSteps.filter((s) => s.status === 'done').length;
   const newPercent = Math.round((completedNew / updatedSteps.length) * 100);
-  assert.strictEqual(completedNew, 4, '4 of 5 steps now marked done');
-  assert.strictEqual(newPercent, 80, 'Progress percentage dynamically recalculated to 80%');
-  console.log('PASS: Step status update and dynamic progress recalculation verified (80%)');
+  assert.strictEqual(completedNew, 3, '3 of 4 steps now marked done');
+  assert.strictEqual(newPercent, 75, 'Progress percentage dynamically recalculated to 75%');
+  console.log('PASS: Step status update and dynamic progress recalculation verified (75%)');
 
   // Test 5: Verify CSM Permission Guard Boundaries
   assert.strictEqual(hasPermission('csm', 'onboarding:update_status'), true, 'CSM has permission to update status');

@@ -348,7 +348,7 @@ export default function CSMClientSetupEditorPage() {
                         setEditWeNeed(e.target.value);
                         clearFieldError('we_need_from_you');
                       }}
-                      placeholder="e.g. Please add us as an admin on your Facebook page."
+                      placeholder="e.g. Please fill in the texting form so we can register your number."
                     />
                     {fieldNote('we_need_from_you')}
                   </div>

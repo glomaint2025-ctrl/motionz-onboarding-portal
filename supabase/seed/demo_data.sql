@@ -70,18 +70,6 @@ VALUES
 ),
 (
     '4f3c7e8a-92b1-4d3a-8f5c-1a2b3c4d5e6f',
-    'b0000000-0000-0000-0000-000000000003',
-    'facebook',
-    'Facebook',
-    'client_action',
-    'done',
-    'Connecting your business Facebook page and ad account access for lead generation.',
-    'Business page connected and ad account access verified.',
-    'Targeted paid advertising and lead campaign launch.',
-    3
-),
-(
-    '4f3c7e8a-92b1-4d3a-8f5c-1a2b3c4d5e6f',
     'b0000000-0000-0000-0000-000000000004',
     'domain_web',
     'Domain, email & website',
@@ -90,7 +78,7 @@ VALUES
     'Provisioning your custom domain, business email accounts, and launching your company website.',
     'Domain active and verified with SSL.',
     'Professional online web presence and verified email delivery.',
-    4
+    3
 ),
 (
     '4f3c7e8a-92b1-4d3a-8f5c-1a2b3c4d5e6f',
@@ -102,5 +90,5 @@ VALUES
     'Provisioning your local business phone number and configuring call forwarding and texting.',
     'Queued for phone number selection.',
     'Direct two-way calling and carrier-compliant customer SMS.',
-    5
+    4
 ) ON CONFLICT DO NOTHING;

@@ -35,11 +35,11 @@ async function runRepositoryAndServiceTests() {
 
   assert(provisionResult.tenant.id, 'Provisioned tenant should have an ID');
   assert.strictEqual(provisionResult.tenant.name, 'Pinnacle Roofing Solutions');
-  assert.strictEqual(provisionResult.setupStepsCount, 5, 'Should have cloned all 5 setup steps');
+  assert.strictEqual(provisionResult.setupStepsCount, 4, 'Should have cloned all 4 setup steps');
 
   // Verify setup steps exist in repository
   const steps = await clientSetupStepRepository.listByTenant(provisionResult.tenant.id);
-  assert.strictEqual(steps.length, 5, 'Should find 5 cloned steps in repository');
+  assert.strictEqual(steps.length, 4, 'Should find 4 cloned steps in repository');
 
   // Verify feature toggles
   const toggles = await featureToggleRepository.getTogglesForTenant(provisionResult.tenant.id);
@@ -57,7 +57,7 @@ async function runRepositoryAndServiceTests() {
   });
 
   assert.strictEqual(stepUpdateResult.updatedStep.status, 'done');
-  assert.strictEqual(stepUpdateResult.progressPercent, 20, '1 of 5 steps completed = 20%');
+  assert.strictEqual(stepUpdateResult.progressPercent, 25, '1 of 4 steps completed = 25%');
 
   const stepUpdateResult2 = await onboardingService.updateStepGuidance({
     tenantId: provisionResult.tenant.id,
@@ -65,7 +65,7 @@ async function runRepositoryAndServiceTests() {
     status: 'done',
     right_now: 'A2P verified with carrier.',
   });
-  assert.strictEqual(stepUpdateResult2.progressPercent, 40, '2 of 5 steps completed = 40%');
+  assert.strictEqual(stepUpdateResult2.progressPercent, 50, '2 of 4 steps completed = 50%');
   console.log(' PASS: Onboarding step updating and progress calculation verified.');
 
   // Test 3: User & Invitation Service
