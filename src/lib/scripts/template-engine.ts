@@ -62,7 +62,7 @@ export const DEFAULT_SCRIPT_TEMPLATES = [
     id: 'script-2',
     title: 'Script 2: Service Offer & Preventive Inspection',
     template:
-      'At {{company_name}}, we know your roof is your property first line of defense. My name is {{client_name}}, and we offer comprehensive roof assessments designed to identify issues before they lead to expensive structural damage.',
+      'At {{company_name}}, we know your roof is your property\'s first line of defense. My name is {{client_name}}, and we offer comprehensive roof assessments designed to identify issues before they lead to expensive structural damage.',
   },
   {
     id: 'script-3',

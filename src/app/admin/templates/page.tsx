@@ -324,7 +324,7 @@ export default function TemplatesPage() {
                             {OWNER_LABELS[step.owner] || step.owner}
                           </span>
                           {!isEditing && (
-                            <Button variant="secondary" size="sm" onClick={() => startEdit(step)} disabled={saving || editingKey !== null}>
+                            <Button variant="secondary" size="sm" onClick={() => startEdit(step)} disabled={saving || editingKey !== null} aria-label={`Edit ${step.name}`}>
                               Edit
                             </Button>
                           )}

@@ -353,7 +353,7 @@ export const createInitialStore = (): DatabaseStore => {
       {
         id: 'st-2',
         title: 'Script 2: Service Offer and Customer Value',
-        script_content: 'At {{company_name}}, we know your roof is your property first line of defense. My name is {{client_name}}, and we offer comprehensive roof assessments designed to identify issues before they lead to expensive structural damage.',
+        script_content: 'At {{company_name}}, we know your roof is your property\'s first line of defense. My name is {{client_name}}, and we offer comprehensive roof assessments designed to identify issues before they lead to expensive structural damage.',
         category: 'ai_video',
         sort_order: 2,
         created_at: '2026-09-01T00:00:00Z',

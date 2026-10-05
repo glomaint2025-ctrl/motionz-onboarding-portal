@@ -493,7 +493,7 @@ export default function AdminScriptTemplatesPage() {
                         action={
                           !isEditing ? (
                             <div style={{ display: 'flex', gap: 'var(--space-2)', flexWrap: 'wrap' }}>
-                              <Button variant="secondary" size="sm" onClick={() => handleStartEdit(tpl)} disabled={busy}>
+                              <Button variant="secondary" size="sm" onClick={() => handleStartEdit(tpl)} disabled={busy} aria-label={`Edit ${tpl.title}`}>
                                 Edit
                               </Button>
                               <Button
@@ -504,6 +504,7 @@ export default function AdminScriptTemplatesPage() {
                                   setConfirmDeleteId(tpl.id);
                                 }}
                                 disabled={busy || isConfirmingDelete}
+                                aria-label={`Delete ${tpl.title}`}
                               >
                                 Delete script
                               </Button>
