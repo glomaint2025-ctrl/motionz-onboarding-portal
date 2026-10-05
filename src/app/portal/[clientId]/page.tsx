@@ -4,6 +4,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
 import { Card, CardHeader, Button, Input, Skeleton } from '@/components/ui';
+import { buttonClasses } from '@/components/ui/Button';
 import { formatDateTime } from '@/lib/utils/format';
 import { suspendedPageUrl } from '@/components/portal/suspended';
 
@@ -134,7 +135,10 @@ export default function ClientOverviewPage() {
           const data = await res.json();
           if (isMounted) {
             if (data.tenant?.name) setCompanyName(data.tenant.name);
-            setViewerName(typeof data.viewer?.full_name === 'string' ? data.viewer.full_name : '');
+            // Staff previewing the portal see the greeting the client's main contact sees.
+            const isStaffViewer = data.viewer?.role === 'admin' || data.viewer?.role === 'csm';
+            const name = isStaffViewer ? data.tenant?.primary_contact_name : data.viewer?.full_name;
+            setViewerName(typeof name === 'string' ? name : '');
             if (data.setupSteps) setSteps(data.setupSteps);
             // The real total from the server, not the length of a capped list.
             setLeadCount(typeof data.leadCount === 'number' ? data.leadCount : 0);
@@ -266,7 +270,7 @@ export default function ClientOverviewPage() {
   const showContractCard = featureToggles?.contracts !== false && viewerRole !== 'client_member';
 
   const onboardingEnabled = !featureToggles || featureToggles.onboarding !== false;
-  // Hero: the signed-in person's own first name, else the company name, else no name at all.
+  // Hero: the signed-in person's own first name (the main contact's for staff), else the company name.
   const greetingName = viewerName.trim().split(/\s+/)[0] || companyName.trim();
   const showProgress = onboardingEnabled && totalSteps > 0;
   const pendingIndex = activeSteps.findIndex((s) => s.status !== 'done');
@@ -344,7 +348,7 @@ export default function ClientOverviewPage() {
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', width: '100%', marginBottom: 'var(--space-3)' }}>
               <div>
                 <h2 style={{ fontSize: '1.1rem', fontWeight: 600, color: 'var(--color-text-primary)', margin: 0 }}>
-                  Current Action Step
+                  Current step
                 </h2>
                 <p style={{ fontSize: 'var(--font-size-xs)', color: 'var(--color-primary-text)', margin: '2px 0 0 0', fontWeight: 500 }}>
                   {currentStep?.name || 'No steps yet'}
@@ -379,8 +383,8 @@ export default function ClientOverviewPage() {
             </div>
             )}
 
-            <Link href={`/portal/${clientId}/onboarding`} style={{ textDecoration: 'none' }}>
-              <Button variant="primary">See all steps</Button>
+            <Link href={`/portal/${clientId}/onboarding`} className={buttonClasses({ variant: 'primary' })} style={{ textDecoration: 'none' }}>
+              See all steps
             </Link>
           </div>
         </div>

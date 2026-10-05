@@ -171,7 +171,11 @@ export default function AdminSettingsPage() {
   useEffect(() => setWebhookUrl(`${window.location.origin}/api/webhooks/ghl`), []);
 
   const statusRows = [
-    { label: 'Email delivery', ok: status.email, detail: status.emailSender ? `Sending as ${status.emailSender}` : 'Email sending is not set up yet' },
+    {
+      label: 'Email delivery',
+      ok: status.email,
+      detail: loading ? 'Sends invitations, sign-in codes and notifications' : status.emailSender ? `Sending as ${status.emailSender}` : 'Email sending is not set up yet',
+    },
     { label: 'Client tracking sheets', ok: status.trackingSheets, detail: 'Creates a Google Sheet for each new client' },
     { label: 'GoHighLevel webhooks', ok: status.ghlWebhook, detail: webhookUrl },
   ];

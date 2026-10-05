@@ -136,7 +136,7 @@ export class InvitationService {
     }
 
     if (invitation.revoked_at) {
-      return { valid: false, error: 'This invitation has been revoked.' };
+      return { valid: false, error: 'This invitation was cancelled. Ask for a new invite.' };
     }
 
     if (invitation.accepted_at) {
@@ -175,7 +175,7 @@ export class InvitationService {
         tenant_id: invitation.tenant_id,
         details: { reason: 'Invitation revoked', invitationId: invitation.id },
       });
-      throw new AppError('This invitation has been revoked.', 410, 'INVITATION_REVOKED');
+      throw new AppError('This invitation was cancelled. Ask for a new invite.', 410, 'INVITATION_REVOKED');
     }
 
     if (invitation.accepted_at) {

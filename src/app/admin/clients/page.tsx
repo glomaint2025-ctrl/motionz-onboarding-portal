@@ -93,7 +93,7 @@ export default function ClientsPage() {
 
   // Action menu dropdown state
   const [activeMenuClientId, setActiveMenuClientId] = useState<string | null>(null);
-  const [menuCoords, setMenuCoords] = useState<{ top?: number; bottom?: number; right: number } | null>(null);
+  const [menuCoords, setMenuCoords] = useState<{ top?: number; bottom?: number; left?: number; right?: number } | null>(null);
   const menuRef = useRef<HTMLDivElement | null>(null);
 
   // Modals state
@@ -328,7 +328,7 @@ export default function ClientsPage() {
           </div>
         </div>
 
-        {/* Active Clients (with Circular Gauge) */}
+        {/* Active Clients */}
         <div className="ui-stat-card">
           <div className="ui-stat-card-body">
             <div className="ui-stat-icon-wrapper ui-stat-icon-emerald">
@@ -339,20 +339,6 @@ export default function ClientsPage() {
               <span className="ui-stat-value">{activeClients}</span>
               <span className="ui-stat-meta-text">{activePercent}% of total</span>
             </div>
-          </div>
-          <div className="ui-stat-gauge">
-            <svg viewBox="0 0 44 44">
-              <circle cx="22" cy="22" r="18" className="ui-stat-gauge-circle-bg" />
-              <circle
-                cx="22"
-                cy="22"
-                r="18"
-                className="ui-stat-gauge-circle-val"
-                strokeDasharray="113.1"
-                strokeDashoffset={113.1 - (113.1 * activePercent) / 100}
-              />
-            </svg>
-            <span className="ui-stat-gauge-text">{activePercent}%</span>
           </div>
         </div>
 
@@ -411,7 +397,7 @@ export default function ClientsPage() {
                 type="search"
                 maxLength={120}
                 className="ui-filter-search-input"
-                placeholder="Search by company, contact, email or CSM..."
+                placeholder="Company, contact, email or CSM"
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
               />
@@ -539,7 +525,7 @@ export default function ClientsPage() {
                             </div>
                             <div className="ui-company-info">
                               <span className="ui-company-name">{client.name}</span>
-                              <span className="ui-company-sub">{client.primary_email || client.primary_contact_name || 'No email'}</span>
+                              <span className="ui-company-sub" title={client.primary_email || undefined}>{client.primary_email || client.primary_contact_name || 'No email'}</span>
                               {createdDate && <span className="ui-company-date">Added {createdDate}</span>}
                             </div>
                           </div>
@@ -678,18 +664,24 @@ export default function ClientsPage() {
                                   } else {
                                     const rect = e.currentTarget.getBoundingClientRect();
                                     const spaceBelow = window.innerHeight - rect.bottom;
-                                    const right = Math.max(8, window.innerWidth - rect.right);
+                                    // Line the menu up with the button's right edge, unless that would push it off the
+                                    // left of the screen (phone cards put the button on the left); then open rightwards.
+                                    const MENU_WIDTH = 200;
+                                    const side =
+                                      rect.right - MENU_WIDTH < 8
+                                        ? { left: Math.max(8, rect.left) }
+                                        : { right: Math.max(8, window.innerWidth - rect.right) };
 
                                     // If space below is limited, open upwards above the button
                                     if (spaceBelow < 185) {
                                       setMenuCoords({
                                         bottom: Math.max(8, window.innerHeight - rect.top + 4),
-                                        right,
+                                        ...side,
                                       });
                                     } else {
                                       setMenuCoords({
                                         top: rect.bottom + 4,
-                                        right,
+                                        ...side,
                                       });
                                     }
                                     setActiveMenuClientId(client.id);
@@ -711,7 +703,8 @@ export default function ClientsPage() {
                                     position: 'fixed',
                                     top: menuCoords.top !== undefined ? `${menuCoords.top}px` : 'auto',
                                     bottom: menuCoords.bottom !== undefined ? `${menuCoords.bottom}px` : 'auto',
-                                    right: `${menuCoords.right}px`,
+                                    left: menuCoords.left !== undefined ? `${menuCoords.left}px` : 'auto',
+                                    right: menuCoords.right !== undefined ? `${menuCoords.right}px` : 'auto',
                                     zIndex: 99999,
                                   }}
                                 >
@@ -727,7 +720,7 @@ export default function ClientsPage() {
                                       <circle cx="12" cy="12" r="3" />
                                       <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z" />
                                     </svg>
-                                    Settings
+                                    Manage client
                                   </Link>
 
                                   <div className="ui-action-dropdown-divider" />

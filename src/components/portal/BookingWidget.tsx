@@ -50,7 +50,7 @@ export const BookingWidget: React.FC<BookingWidgetProps> = ({
         </div>
         <a href={bookingUrl} target="_blank" rel="noopener noreferrer">
           <Button variant="outline" size="sm">
-            Open in New Tab
+            Open in new tab
           </Button>
         </a>
       </div>
@@ -89,7 +89,7 @@ export const BookingWidget: React.FC<BookingWidgetProps> = ({
             </div>
             <a href={bookingUrl} target="_blank" rel="noopener noreferrer">
               <Button variant="secondary" size="sm">
-                Open in New Tab
+                Open in new tab
               </Button>
             </a>
           </div>

@@ -239,7 +239,7 @@ export default function StaffPage() {
       </div>
 
       <Card style={{ marginBottom: 'var(--space-6)' }}>
-        <CardHeader title="Add a staff member" subtitle="They receive an email to set their password, then sign in on the Staff tab." />
+        <CardHeader title="Add a staff member" subtitle="They receive an email to set their password, then sign in with their email and password." />
         <form onSubmit={addStaff} style={{ display: 'grid', gap: 'var(--space-3)', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', alignItems: 'end' }}>
           <Input
             label="Full name"
@@ -366,7 +366,12 @@ export default function StaffPage() {
                     Edit
                   </Button>
                   {!m.self && (
-                    <Button variant="outline" size="sm" onClick={() => toggle(m)}>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => toggle(m)}
+                      aria-label={`${m.status === 'suspended' ? 'Enable' : 'Disable'} ${m.name || m.email}`}
+                    >
                       {m.status === 'suspended' ? 'Enable' : 'Disable'}
                     </Button>
                   )}

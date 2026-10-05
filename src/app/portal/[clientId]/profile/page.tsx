@@ -20,6 +20,12 @@ export default function ClientProfilePage() {
   const [isError, setIsError] = useState(false);
   const statusRef = useRef<HTMLDivElement>(null);
 
+  /** Updates a field; an old error no longer applies once the person edits the form. */
+  const edited = (setter: (value: string) => void, value: string) => {
+    setter(value);
+    if (isError) setStatusMessage('');
+  };
+
   // The result appears right above the save button; bring it into view and announce it.
   useEffect(() => {
     if (!statusMessage) return;
@@ -157,7 +163,7 @@ export default function ClientProfilePage() {
               <Input
                 label="Business name"
                 value={name}
-                onChange={(e) => setName(e.target.value)}
+                onChange={(e) => edited(setName, e.target.value)}
                 disabled={readOnly}
                 maxLength={255}
                 required
@@ -165,7 +171,7 @@ export default function ClientProfilePage() {
               <Input
                 label="Main contact name"
                 value={primaryContact}
-                onChange={(e) => setPrimaryContact(e.target.value)}
+                onChange={(e) => edited(setPrimaryContact, e.target.value)}
                 disabled={readOnly}
                 maxLength={255}
                 required
@@ -181,7 +187,7 @@ export default function ClientProfilePage() {
                 label="Phone number"
                 type="tel"
                 value={phone}
-                onChange={(e) => setPhone(e.target.value)}
+                onChange={(e) => edited(setPhone, e.target.value)}
                 disabled={readOnly}
                 maxLength={30}
                 helperText={readOnly ? undefined : 'Leave empty to remove the number.'}

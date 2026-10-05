@@ -187,8 +187,8 @@ async function runDuplicateEmailTests() {
   assert.strictEqual(validationResult.valid, false);
   assert.strictEqual(
     validationResult.error,
-    'This invitation has been revoked.',
-    'Message must be "This invitation has been revoked." without "by an administrator"'
+    'This invitation was cancelled. Ask for a new invite.',
+    'Message must say the invitation was cancelled, without "by an administrator"'
   );
 
   let verifyThrew = false;
@@ -198,8 +198,8 @@ async function runDuplicateEmailTests() {
     verifyThrew = true;
     assert.strictEqual(
       err.message,
-      'This invitation has been revoked.',
-      'verifyAndAccept error must be "This invitation has been revoked."'
+      'This invitation was cancelled. Ask for a new invite.',
+      'verifyAndAccept error must say the invitation was cancelled'
     );
   }
   assert.strictEqual(verifyThrew, true, 'verifyAndAccept on revoked token must throw AppError');

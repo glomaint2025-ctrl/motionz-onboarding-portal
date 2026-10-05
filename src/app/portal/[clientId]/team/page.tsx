@@ -658,12 +658,18 @@ export default function TeamPage() {
                             <td style={{ ...cellStyle, textAlign: 'right' }}>
                               {showActions && (
                                 <div className="team-actions">
-                                  <Button variant="secondary" size="sm" onClick={() => openAccess(member)}>
+                                  <Button
+                                    variant="secondary"
+                                    size="sm"
+                                    onClick={() => openAccess(member)}
+                                    aria-label={`Change access for ${member.full_name || member.email}`}
+                                  >
                                     Change access
                                   </Button>
                                   <Button
                                     variant={isOff ? 'secondary' : 'danger'}
                                     size="sm"
+                                    aria-label={`${isOff ? 'Turn access on' : 'Turn access off'} for ${member.full_name || member.email}`}
                                     onClick={() => {
                                       setBanTarget(member);
                                       setBanReason('');
@@ -719,6 +725,7 @@ export default function TeamPage() {
                       <Button
                         variant="outline"
                         size="sm"
+                        aria-label={`Send the invite to ${inv.email} again`}
                         onClick={() => {
                           setResendTarget(inv);
                           setResendError('');
@@ -730,6 +737,7 @@ export default function TeamPage() {
                       <Button
                         variant="danger"
                         size="sm"
+                        aria-label={`Cancel the invite for ${inv.email}`}
                         onClick={() => {
                           setRevokeTarget(inv);
                           setRevokeError('');

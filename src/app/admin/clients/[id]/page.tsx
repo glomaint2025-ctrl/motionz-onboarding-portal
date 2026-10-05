@@ -1147,6 +1147,7 @@ export default function ClientDetailPage() {
                       variant="outline"
                       size="sm"
                       type="button"
+                      aria-label={`Send the invite to ${inv.email} again`}
                       onClick={() => {
                         setResendTarget(inv);
                         setResendError('');
@@ -1160,6 +1161,7 @@ export default function ClientDetailPage() {
                       variant="danger"
                       size="sm"
                       type="button"
+                      aria-label={`Cancel the invite for ${inv.email}`}
                       onClick={() => {
                         setRevokeTarget(inv);
                         setRevokeError('');

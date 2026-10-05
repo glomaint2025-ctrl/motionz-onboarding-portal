@@ -19,9 +19,17 @@
 }
 
 .ui-clients-table .ui-company-name,
-.ui-clients-table .ui-company-sub,
 .ui-clients-table .ui-csm-name {
   overflow-wrap: anywhere;
+}
+
+/* Emails never break mid-word: they shorten with "…" (full address on hover). */
+.ui-clients-table .ui-company-sub {
+  display: block;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .ui-company-date {

@@ -319,7 +319,7 @@ export default function CSMClientsPage() {
                             </div>
                             <div className="ui-company-info">
                               <span className="ui-company-name">{client.name}</span>
-                              <span className="ui-company-sub">{client.primary_email || client.primary_contact_name || 'No email'}</span>
+                              <span className="ui-company-sub" title={client.primary_email || undefined}>{client.primary_email || client.primary_contact_name || 'No email'}</span>
                             </div>
                           </div>
                         </td>

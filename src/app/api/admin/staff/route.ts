@@ -24,14 +24,14 @@ const SETUP_LINK_MINUTES = 72 * 60;
 function staffWelcomeEmail(to: string, name: string, role: string, url: string) {
   const esc = (v: string) => v.replace(/[&<>"']/g, (c) => `&#${c.charCodeAt(0)};`);
   const roleLabel = role === 'admin' ? 'an Admin' : 'a CSM';
-  const text = `Hi ${name},\n\nYou have been added to the Motionz portal as ${roleLabel}.\nSet your password here (link valid for 72 hours): ${url}\n\nThen sign in on the Staff tab with ${to}.`;
+  const text = `Hi ${name},\n\nYou have been added to the Motionz portal as ${roleLabel}.\nSet your password here (link valid for 72 hours): ${url}\n\nAfter that, sign in with ${to} and your password.`;
   const html = `<!doctype html><html><body style="font-family:Arial,Helvetica,sans-serif;background:#f9fafb;padding:24px;color:#111827">
 <div style="max-width:560px;margin:0 auto;background:#fff;border:1px solid #e5e7eb;border-radius:8px;padding:32px">
 <p style="font-weight:bold;letter-spacing:.04em;margin:0 0 24px">MOTIONZ</p>
 <h1 style="font-size:20px;margin:0 0 16px">Welcome to the Motionz portal</h1>
 <p style="line-height:1.5">Hi ${esc(name)}, you have been added as ${roleLabel}. Set your password to get started.</p>
 <p style="margin:24px 0"><a href="${esc(url)}" style="background:#111827;color:#fff;padding:12px 20px;border-radius:6px;text-decoration:none">Set my password</a></p>
-<p style="font-size:13px;color:#6b7280">This link expires in 72 hours. Afterwards, sign in on the Staff tab with ${esc(to)}.</p>
+<p style="font-size:13px;color:#6b7280">This link expires in 72 hours. After setting your password, sign in with ${esc(to)}.</p>
 </div></body></html>`;
   return { to, subject: 'You have been added to the Motionz portal', html, text, tags: ['staff-invite'] };
 }

@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { useParams, usePathname, useRouter } from 'next/navigation';
 import { AppShell } from '@/components/layout/AppShell';
 import { Button, PortalPreloader } from '@/components/ui';
+import { buttonClasses } from '@/components/ui/Button';
 import { Icon } from '@/components/brand/Icon';
 import { suspendedPageUrl } from '@/components/portal/suspended';
 
@@ -137,8 +138,8 @@ export default function ClientPortalLayout({
           <Button variant="primary" onClick={retry}>
             Try again
           </Button>
-          <Link href="/auth/login" style={{ textDecoration: 'none' }}>
-            <Button variant="outline">Back to sign in</Button>
+          <Link href="/auth/login" className={buttonClasses({ variant: 'outline' })} style={{ textDecoration: 'none' }}>
+            Back to sign in
           </Link>
         </div>
       </div>
