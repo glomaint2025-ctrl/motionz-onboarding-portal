@@ -147,7 +147,7 @@ export default function CSMClientsPage() {
             </div>
             <div className="ui-stat-info">
               <span className="ui-stat-label">Assigned clients</span>
-              <span className="ui-stat-value">{totalClients}</span>
+              <span className="ui-stat-value">{loading ? '–' : totalClients}</span>
               <span className="ui-stat-meta-text">Assigned to you</span>
             </div>
           </div>
@@ -161,7 +161,7 @@ export default function CSMClientsPage() {
             </div>
             <div className="ui-stat-info">
               <span className="ui-stat-label">Average setup progress</span>
-              <span className="ui-stat-value">{avgProgress}%</span>
+              <span className="ui-stat-value">{loading ? '–' : `${avgProgress}%`}</span>
               <span className="ui-stat-meta-text">Across all your clients</span>
             </div>
           </div>
@@ -178,7 +178,7 @@ export default function CSMClientsPage() {
             </div>
             <div className="ui-stat-info">
               <span className="ui-stat-label">In setup</span>
-              <span className="ui-stat-value">{inProgressClients}</span>
+              <span className="ui-stat-value">{loading ? '–' : inProgressClients}</span>
               <span className="ui-stat-meta-text">Setup not finished yet</span>
             </div>
           </div>
@@ -195,7 +195,7 @@ export default function CSMClientsPage() {
             </div>
             <div className="ui-stat-info">
               <span className="ui-stat-label">Setup complete</span>
-              <span className="ui-stat-value">{completedClients}</span>
+              <span className="ui-stat-value">{loading ? '–' : completedClients}</span>
               <span className="ui-stat-meta-text" style={{ color: 'var(--color-status-done-text)' }}>All steps done</span>
             </div>
           </div>

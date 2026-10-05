@@ -45,6 +45,16 @@ function SuspendedContent() {
         : 'general';
   const copy = COPY[kind];
 
+  // The client's own reason comes from the sign-in step in this browser, never from the URL.
+  const [pauseReason, setPauseReason] = React.useState('');
+  React.useEffect(() => {
+    try {
+      setPauseReason(kind === 'portal' ? sessionStorage.getItem('motionz:pause-reason') || '' : '');
+    } catch {
+      setPauseReason('');
+    }
+  }, [kind]);
+
   return (
     <div className="auth-page">
       <div className="auth-container">
@@ -58,6 +68,7 @@ function SuspendedContent() {
           </div>
           <h1 className="auth-title">{copy.title}</h1>
           <p className="auth-subtitle">{copy.message}</p>
+          {pauseReason && <p className="auth-subtitle">Reason: {pauseReason}</p>}
 
           <Link href="/auth/login" className={buttonClasses({ variant: 'secondary', size: 'lg', fullWidth: true })}>
             Back to sign in

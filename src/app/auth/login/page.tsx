@@ -101,6 +101,16 @@ function LoginForm() {
         if (data?.suspended) {
           const reasonQuery =
             data?.code === 'TENANT_ARCHIVED' ? 'archived' : data?.code === 'TENANT_SUSPENDED' ? 'portal' : 'account';
+          // The client's reason travels in this browser session, never in the URL (anyone can craft a URL).
+          try {
+            if (reasonQuery === 'portal' && typeof data?.reason === 'string') {
+              sessionStorage.setItem('motionz:pause-reason', data.reason);
+            } else {
+              sessionStorage.removeItem('motionz:pause-reason');
+            }
+          } catch {
+            // Private mode: the page falls back to its general wording.
+          }
           router.push(`/auth/suspended?reason=${reasonQuery}`);
           return;
         }
