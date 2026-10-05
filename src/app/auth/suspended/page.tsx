@@ -11,7 +11,7 @@ import { MotionzWordmark } from '@/components/brand/MotionzLogo';
  * Fixed wording per reason code. Text from the URL is never shown: anyone can craft a link,
  * so only the short codes below are recognised and everything else gets the general message.
  */
-const COPY: Record<'account' | 'portal' | 'general', { title: string; message: string }> = {
+const COPY: Record<'account' | 'portal' | 'archived' | 'general', { title: string; message: string }> = {
   account: {
     title: 'Account paused',
     message: 'Your access to this portal has been turned off.',
@@ -19,6 +19,10 @@ const COPY: Record<'account' | 'portal' | 'general', { title: string; message: s
   portal: {
     title: 'Portal paused',
     message: 'This portal has been paused by Motionz.',
+  },
+  archived: {
+    title: 'Portal archived',
+    message: 'This portal has been archived by Motionz.',
   },
   general: {
     title: 'Access paused',
@@ -32,9 +36,11 @@ function SuspendedContent() {
   const type = searchParams?.get('type');
 
   const kind: keyof typeof COPY =
-    reason === 'portal' || type === 'tenant'
-      ? 'portal'
-      : reason === 'account' || type === 'account'
+    reason === 'archived' || type === 'archived'
+      ? 'archived'
+      : reason === 'portal' || type === 'tenant'
+        ? 'portal'
+        : reason === 'account' || type === 'account'
         ? 'account'
         : 'general';
   const copy = COPY[kind];

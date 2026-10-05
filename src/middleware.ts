@@ -6,6 +6,7 @@ import {
   resolveTenantId,
   checkEdgeTenantSuspension,
   checkEdgeUserSuspension,
+  PORTAL_ARCHIVED_MESSAGE,
 } from '@/lib/auth/edge-session';
 
 export async function middleware(request: NextRequest) {
@@ -69,7 +70,10 @@ export async function middleware(request: NextRequest) {
           'Client account disabled by Motionz administrator.';
         const suspendedUrl = new URL('/auth/suspended', request.url);
         suspendedUrl.searchParams.set('reason', reason);
-        suspendedUrl.searchParams.set('type', tenantStatus.suspended ? 'tenant' : 'account');
+        suspendedUrl.searchParams.set(
+          'type',
+          tenantStatus.reason === PORTAL_ARCHIVED_MESSAGE ? 'archived' : tenantStatus.suspended ? 'tenant' : 'account'
+        );
         const res = NextResponse.redirect(suspendedUrl);
         res.cookies.set(SESSION_COOKIE_NAME, '', { path: '/', maxAge: 0 });
         return secureResponse(res);
@@ -229,7 +233,10 @@ export async function middleware(request: NextRequest) {
           'Client account disabled by Motionz administrator.';
         const suspendedUrl = new URL('/auth/suspended', request.url);
         suspendedUrl.searchParams.set('reason', reason);
-        suspendedUrl.searchParams.set('type', tenantStatus.suspended ? 'tenant' : 'account');
+        suspendedUrl.searchParams.set(
+          'type',
+          tenantStatus.reason === PORTAL_ARCHIVED_MESSAGE ? 'archived' : tenantStatus.suspended ? 'tenant' : 'account'
+        );
         const res = NextResponse.redirect(suspendedUrl);
         res.cookies.set(SESSION_COOKIE_NAME, '', { path: '/', maxAge: 0 });
         return secureResponse(res);

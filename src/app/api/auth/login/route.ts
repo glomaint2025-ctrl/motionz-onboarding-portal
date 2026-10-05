@@ -197,14 +197,14 @@ export async function POST(request: Request) {
         const tenant = await tenantRepository.findById(user.tenant_id, { includeArchived: true });
         if (isTenantArchived(tenant)) {
           return NextResponse.json(
-            { error: PORTAL_ARCHIVED_MESSAGE, suspended: true, reason: PORTAL_ARCHIVED_MESSAGE },
+            { error: PORTAL_ARCHIVED_MESSAGE, suspended: true, code: 'TENANT_ARCHIVED', reason: PORTAL_ARCHIVED_MESSAGE },
             { status: 403 }
           );
         }
         if (tenant && tenant.status === 'suspended') {
           const reason = tenant.suspended_reason || 'Organization portal has been disabled by an administrator.';
           return NextResponse.json(
-            { error: `Your company's portal has been suspended: ${reason}`, suspended: true, reason },
+            { error: `Your company's portal has been suspended: ${reason}`, suspended: true, code: 'TENANT_SUSPENDED', reason },
             { status: 403 }
           );
         }

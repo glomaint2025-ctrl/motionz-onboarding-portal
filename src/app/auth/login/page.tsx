@@ -99,7 +99,8 @@ function LoginForm() {
 
       if (!res.ok) {
         if (data?.suspended) {
-          const reasonQuery = /organization/i.test(data?.error || '') ? 'portal' : 'account';
+          const reasonQuery =
+            data?.code === 'TENANT_ARCHIVED' ? 'archived' : data?.code === 'TENANT_SUSPENDED' ? 'portal' : 'account';
           router.push(`/auth/suspended?reason=${reasonQuery}`);
           return;
         }
