@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { authenticateStaff } from '@/lib/auth/staff';
+import { authenticateStaff, isStaffEmail } from '@/lib/auth/staff';
 import { createSessionToken, SESSION_COOKIE_NAME } from '@/lib/auth/session';
 import { createInvitation } from '@/lib/auth/invitations';
 import { userRepository, tenantRepository, securityEventRepository, appSettingsRepository } from '@/lib/db/repositories';
@@ -46,7 +46,7 @@ export async function POST(request: Request) {
     const normalizedEmail = email.trim().toLowerCase();
 
     // 1. Staff Sign In (@motionz.ai domain restricted)
-    if (action === 'staff' || normalizedEmail.endsWith('@motionz.ai')) {
+    if (action === 'staff' || isStaffEmail(normalizedEmail)) {
       if (typeof password === 'string' && !password.trim()) {
         const emailCheck = await authenticateStaff(normalizedEmail, undefined, role);
         if (!emailCheck.success) {
@@ -155,7 +155,8 @@ export async function POST(request: Request) {
       }
 
       const user = await userRepository.findByEmail(normalizedEmail);
-      if (!user) {
+      // Staff accounts only sign in through the staff checks above (disabled staff, sign-in codes).
+      if (!user || user.role === 'admin' || user.role === 'csm') {
         return invalidCredentials;
       }
 

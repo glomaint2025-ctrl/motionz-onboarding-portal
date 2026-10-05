@@ -29,6 +29,16 @@ async function runAuthAndRbacTests() {
   assert.strictEqual(isStaffEmail('hacker@abcroofing.com'), false, 'Client email cannot pass staff domain check');
   assert.strictEqual(isStaffEmail('admin@notmotionz.ai'), false, 'Lookalike domain must fail');
 
+  // 1.2b: STAFF_EXTRA_EMAILS allows exact addresses only (staging test staff)
+  const previousExtra = process.env.STAFF_EXTRA_EMAILS;
+  process.env.STAFF_EXTRA_EMAILS = ' Tester+CSM@gmail.com , not-an-email ';
+  assert.strictEqual(isStaffEmail('tester+csm@gmail.com'), true, 'Listed extra address is staff');
+  assert.strictEqual(isStaffEmail('tester@gmail.com'), false, 'Only the exact listed address is staff');
+  assert.strictEqual(isStaffEmail('not-an-email'), false, 'Malformed entries are ignored');
+  if (previousExtra === undefined) delete process.env.STAFF_EXTRA_EMAILS;
+  else process.env.STAFF_EXTRA_EMAILS = previousExtra;
+  assert.strictEqual(isStaffEmail('tester+csm@gmail.com'), false, 'Without the setting, the address is not staff');
+
   // 1.3: Staff authentication: Admin
   const adminAuth = await authenticateStaff('admin@motionz.ai', 'admin');
   assert.strictEqual(adminAuth.success, true, 'Designated admin authentication succeeds');

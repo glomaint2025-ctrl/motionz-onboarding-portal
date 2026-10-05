@@ -8,9 +8,20 @@ export const STAFF_EMAIL_DOMAIN = '@motionz.ai';
 // Bootstrap admin; further admins come from ADMIN_EMAILS or are created in Admin > Staff.
 const DEFAULT_ADMIN_EMAILS = ['admin@motionz.ai'];
 
+/**
+ * Exact addresses allowed as staff besides @motionz.ai, from STAFF_EXTRA_EMAILS (comma-separated).
+ * For staging only, so test staff mail reaches the developer's inbox. Leave unset in production.
+ */
+const extraStaffEmails = (): string[] =>
+  (process.env.STAFF_EXTRA_EMAILS || '')
+    .split(',')
+    .map((e) => e.trim().toLowerCase())
+    .filter((e) => e.includes('@'));
+
 export const isStaffEmail = (email: string): boolean => {
   if (!email || typeof email !== 'string') return false;
-  return email.trim().toLowerCase().endsWith(STAFF_EMAIL_DOMAIN);
+  const normalized = email.trim().toLowerCase();
+  return normalized.endsWith(STAFF_EMAIL_DOMAIN) || extraStaffEmails().includes(normalized);
 };
 
 export const isDesignatedAdminEmail = (email: string): boolean => {
