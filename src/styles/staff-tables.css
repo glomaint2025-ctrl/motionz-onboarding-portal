@@ -18,9 +18,24 @@
   min-width: 0;
 }
 
-.ui-clients-table .ui-company-name,
-.ui-clients-table .ui-csm-name {
+.ui-clients-table .ui-company-name {
   overflow-wrap: anywhere;
+}
+
+/* A CSM's name wraps between words, never inside one: the column keeps room for the longest word. */
+.ui-clients-table .ui-csm-name {
+  overflow-wrap: break-word;
+}
+
+@media (min-width: 641px) {
+  .ui-clients-table td[data-label="CSM"] {
+    min-width: 62px;
+  }
+
+  /* Long emails shorten with "…" here so the table keeps every column on screen. */
+  .ui-modern-table.ui-clients-table .ui-company-sub {
+    max-width: 190px;
+  }
 }
 
 /* Emails never break mid-word: they shorten with "…" (full address on hover). */
