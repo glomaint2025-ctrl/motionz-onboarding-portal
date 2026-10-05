@@ -1,3 +1,43 @@
+# End-to-end test report, 5 Oct 2026 (latest)
+
+Local app (http://localhost:3001, staging database), built-in browser, branch `phase-1-staging`. Type check, all 41 test suites and `next build` pass. Deployed to staging the same day.
+
+## Results
+| Area | Result |
+|---|---|
+| Archived client could still sign in | **Found and fixed**: owner and members are now refused at sign-in and on open pages ("Portal archived"); unarchive restores access. Test added. |
+| Suspended client's sign-in screen | **Fixed**: now shows the reason the admin typed (it travels in the browser session, never the URL). |
+| Sign-in, wrong password, redirect back, forgot/reset password (neutral answer, short and mismatched refused, link works once), invitation accept, sign out, 404 | Pass |
+| Admin: dashboard numbers and links, Clients list, Add client (every validation, CSM by keyboard, one-sentence result, invitation email, sheet created), client detail (validation, sections off hide nav and refuse direct URL and API), invite / send again / cancel (old and cancelled links refused), suspend / reactivate, GHL Connect, Staff (duplicate refused, default calendar bad and valid), Templates, Scripts, Audit Logs, Security Alerts | Pass |
+| CSM: assigned clients only, step edit (blank refused, Done changes %), staff preview bar, admin pages and APIs refused, another CSM's client refused (page and API) | Pass |
+| Client owner: Home, Setup Progress (filters, onboarding form pop-up), Results Tracking (own sheet + calculator), Book a Call, Tools, Contract, Team (invite, no pages refused, send again, cancel) | Pass |
+| Team member: only allowed pages, blocked URLs redirect, blocked APIs 403, password reset | Pass |
+| Phone width (375px): every client and admin page, no sideways scroll | Pass after fixes |
+| 1024 / 1280px: Team, Leads, admin Clients, dashboard, GHL Connect | Pass after fixes |
+| Simulated webhooks: wrong secret 401, missing contact 400, unknown location ignored | Pass |
+| Staging (https://motionz-onboarding-portal.vercel.app): login 200, noindex header, branded 404, webhook secret matches (bad 401, real 200) | Pass |
+
+## Fixed this round
+Archive sign-in bug; suspension reason on sign-in; Leads and Team lists become cards on phones/tablets and emails wrap only at "@" (no mid-word breaks); admin Clients table fits at laptop width and CSM names wrap between words; CSM tiles show a dash while loading; audit log shows step names and which invite was cancelled, hides "auth mode"; re-sending an invite no longer logs a confusing "cancelled".
+
+## Live GoHighLevel test (sub-account "OBrian's Contratcing LLC", location TG1QAGQkANvoJ3UdmZRZ = Zydeco in the portal)
+- Workflow "Sync leads" exists, Published, triggers Opportunity Created and Pipeline Stage Changed, with a Webhook action.
+- Created a test contact "Portal Test" and an opportunity: the lead reached staging within seconds (stage "New Lead", matched to the client, audit entry written). Moving the opportunity to "Discovery Call" updated the same lead (no duplicate).
+- Test opportunity and contact were deleted in GHL; the test lead was removed from the portal database.
+- **Not done:** calendar booking ("Portal: CSM calls") and the real onboarding form submission ("Portal: onboarding form"); they need the Motionz Your Rejuvenation sub-account and were not run.
+
+## Not tested, and why
+- Emailed staff sign-in code settings (CSMs only / All staff): the browser would not allow changing that security setting this round. They passed on 5 Oct earlier in the day.
+- Signing in on the live staging site: the browser would not allow typing a password there. Needs a manual check.
+- Website request with attachments, Roof Measurement, Video Scripts, Company Profile: passed earlier on 5 Oct, not repeated.
+
+## Notes
+- Reactivating a suspended client always sets it to Active, even if it was still Onboarding.
+- Step 1 "Google Sheet" stays "Not started" while Results Tracking says Ready (sheet is created automatically): decide whether to auto-mark Done.
+- Leftover test sheets in the Drive folder: "Dialog Check Roofing (test) - Tracking", "Temp Check Roofing - Tracking".
+
+---
+
 # End-to-end test report — 4 Oct 2026
 
 Tested on the local app (`http://localhost:3000`) against the staging database, in the built-in browser, starting from cleared data. Branch `phase-1-staging`. **Nothing from this round is deployed to staging yet.**

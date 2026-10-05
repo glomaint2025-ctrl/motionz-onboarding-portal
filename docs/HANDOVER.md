@@ -3,6 +3,18 @@
 Read this first, then `docs/FINAL-REPORT.md` (what the portal does), `docs/CLIENT-QUESTIONS.md`
 (open client questions) and `docs/07-integrations/ghl-workflows.md` (GHL setup).
 
+## Current state (6 Oct 2026, read this first)
+- Standard setup has **4 steps**: Google Sheet, GoHighLevel / A2P Verified, Domain/email/website, Phone system & A2P texting (Facebook step removed).
+- Results Tracking also embeds one shared **Money Leak Calculator** sheet (link in `src/lib/portal-links.ts`); per-client copies only if the client asks.
+- Local dev runs on **port 3001** (`.claude/launch.json` "portal-dev"); it uses the staging database, so local and staging share data.
+- Test logins live in `.env.local` (`TEST_CSM_PASSWORD`, `TEST_CLIENT_PASSWORD`, `TEST_MEMBER_PASSWORD`); never commit them. Test CSM `heshantharushka2002+csm@gmail.com` works only because of `STAFF_EXTRA_EMAILS`, which is **staging only: remove it for production**.
+- Supabase GET responses are not cached (`cache: 'no-store'` in `src/lib/db/supabase-client.ts`); Next 14 had cached them for a year.
+- Scripts: `clear-test-clients.mjs [--only=<id>] [--apply]`, `simulate-ghl-webhooks.mjs`, `clear-simulated-ghl-data.mjs`, `remove-facebook-step.mjs`.
+- **Deployed to staging on 5 Oct** with this branch. Vercel production env now has `GOOGLE_SOLAR_API_KEY`, `EMAIL_FROM_ADDRESS`, `EMAIL_FROM_NAME`, `STAFF_EXTRA_EMAILS`, `NEXTAUTH_URL`. Never add `EMAIL_TEST_REDIRECT_TO` or `TEST_*` there.
+- Optional SQL (app works without): `ALTER TABLE user_invitations ADD COLUMN IF NOT EXISTS full_name TEXT; ALTER TABLE user_invitations ADD COLUMN IF NOT EXISTS allowed_modules TEXT[];`
+- Test results: `docs/E2E-TEST-REPORT.md`.
+- **Waiting on the client:** media buyer email(s); second CSM calendar id; contract-signed automation; Discord item 27 ("7 days then delete"); Lead Replacement and Unresponsive Lead forms; CSM account for the client; production accounts; Google API key restriction; per-client calculator?
+
 ## Where things are
 | Item | Value |
 |---|---|
