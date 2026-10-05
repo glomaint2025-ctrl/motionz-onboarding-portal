@@ -107,7 +107,7 @@ async function runAuthAndRbacTests() {
   await revokeInvitation(invToRevoke.id, 'admin@motionz.ai');
   const verifyRevoked = await verifyInvitationToken(tokenToRevoke);
   assert.strictEqual(verifyRevoked.success, false, 'Revoked token must be rejected');
-  assert(verifyRevoked.error?.includes('revoked'), 'Revocation reason reported');
+  assert(verifyRevoked.error?.includes('cancelled'), 'Cancellation reason reported');
 
   // 2.5: Expiration enforcement
   const { rawToken: expiredToken } = await createInvitation({

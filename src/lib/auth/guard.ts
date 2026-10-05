@@ -4,7 +4,7 @@ import { UserRole } from '../db/schema';
 import { Capability, hasPermission, assertTenantAccess } from './permissions';
 import { securityEventRepository, auditLogRepository, userRepository, tenantRepository, csmAssignmentRepository } from '../db/repositories';
 import { AppError } from '../errors';
-import { PERSONAL_ACCESS_OFF_MESSAGE } from './edge-session';
+import { PERSONAL_ACCESS_OFF_MESSAGE, PORTAL_ARCHIVED_MESSAGE, isTenantArchived } from './edge-session';
 
 /**
  * Anonymous access to the demo sandbox is a local-development convenience only:
@@ -57,7 +57,10 @@ export async function assertActiveAccount(session: SessionPayload): Promise<void
 
   // 1. Client-level suspension first: it also suspends every person, and its reason is meant for them.
   if (session.tenantId) {
-    const tenant = await tenantRepository.findById(session.tenantId);
+    const tenant = await tenantRepository.findById(session.tenantId, { includeArchived: true });
+    if (isTenantArchived(tenant)) {
+      throw new AppError(PORTAL_ARCHIVED_MESSAGE, 403, 'TENANT_ARCHIVED');
+    }
     if (tenant && tenant.status === 'suspended') {
       const reason = tenant.suspended_reason || 'Organization portal has been disabled by an administrator.';
       throw new AppError(

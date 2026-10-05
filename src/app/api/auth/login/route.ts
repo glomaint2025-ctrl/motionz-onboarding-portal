@@ -15,7 +15,7 @@ import {
 } from '@/lib/auth/login-challenge';
 import { enforceRateLimit, getClientIp, sanitizeRedirectUrl } from '@/lib/auth/security-utils';
 import { resolveTenantId } from '@/lib/db/supabase-client';
-import { PERSONAL_ACCESS_OFF_MESSAGE } from '@/lib/auth/edge-session';
+import { PERSONAL_ACCESS_OFF_MESSAGE, PORTAL_ARCHIVED_MESSAGE, isTenantArchived } from '@/lib/auth/edge-session';
 import { canExposeDevLinks } from '@/lib/email';
 import { logAuditEvent } from '@/lib/db';
 
@@ -194,7 +194,13 @@ export async function POST(request: Request) {
       // Suspension is only revealed once the caller has proven they own the account.
       // A suspended client comes first: it suspends everyone, and its reason is meant for them.
       if (user.tenant_id) {
-        const tenant = await tenantRepository.findById(user.tenant_id);
+        const tenant = await tenantRepository.findById(user.tenant_id, { includeArchived: true });
+        if (isTenantArchived(tenant)) {
+          return NextResponse.json(
+            { error: PORTAL_ARCHIVED_MESSAGE, suspended: true, reason: PORTAL_ARCHIVED_MESSAGE },
+            { status: 403 }
+          );
+        }
         if (tenant && tenant.status === 'suspended') {
           const reason = tenant.suspended_reason || 'Organization portal has been disabled by an administrator.';
           return NextResponse.json(

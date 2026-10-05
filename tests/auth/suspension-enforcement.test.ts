@@ -1,7 +1,7 @@
 import assert from 'assert';
 import { NextRequest } from 'next/server';
 import { tenantRepository, userRepository } from '../../src/lib/db/repositories';
-import { assertPortalAccess, handleAuthError } from '../../src/lib/auth/guard';
+import { assertActiveAccount, assertPortalAccess, handleAuthError } from '../../src/lib/auth/guard';
 import { createSessionToken, SESSION_COOKIE_NAME } from '../../src/lib/auth/session';
 
 async function runSuspensionTests() {
@@ -67,6 +67,39 @@ async function runSuspensionTests() {
   assert.strictEqual(data.suspended, true);
   assert(data.reason.includes('Violation of terms'));
   console.log(' PASS: handleAuthError returns 403 with suspended: true and clears cookie');
+
+  // 6. Archived client: the owner AND a team member are refused; unarchiving lets them back in
+  await tenantRepository.unarchive(testTenant.id);
+  const member = await userRepository.create({
+    email: `member-${Date.now()}@example.com`,
+    full_name: 'Team Member',
+    role: 'client_member',
+    tenant_id: testTenant.id,
+  });
+  const ownerSession = { userId: testUser.id, email: testUser.email, role: testUser.role, tenantId: testTenant.id } as any;
+  const memberSession = { userId: member.id, email: member.email, role: member.role, tenantId: testTenant.id } as any;
+  await assertActiveAccount(ownerSession);
+  await assertActiveAccount(memberSession);
+
+  await tenantRepository.softDelete(testTenant.id);
+  for (const [who, session] of [['owner', ownerSession], ['member', memberSession]] as const) {
+    let archivedError: any = null;
+    try {
+      await assertActiveAccount(session);
+    } catch (err: any) {
+      archivedError = err;
+    }
+    assert(archivedError, `Expected the ${who} of an archived client to be refused`);
+    assert.strictEqual(archivedError.code, 'TENANT_ARCHIVED');
+    assert.strictEqual(archivedError.statusCode, 403);
+    assert(/archived/i.test(archivedError.message));
+  }
+  console.log(' PASS: owner and member of an archived client are refused');
+
+  await tenantRepository.unarchive(testTenant.id);
+  await assertActiveAccount(ownerSession);
+  await assertActiveAccount(memberSession);
+  console.log(' PASS: unarchiving restores access');
 
   console.log('--- ALL SUSPENSION TESTS PASSED (100%) ---');
 }

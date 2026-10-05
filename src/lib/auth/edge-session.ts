@@ -33,6 +33,15 @@ export const SESSION_COOKIE_NAME = 'motionz_session';
 export const PERSONAL_ACCESS_OFF_MESSAGE =
   'Your access to this portal has been turned off. Contact your account owner or your Motionz contact if you think this is a mistake.';
 
+/** Shown to everyone at a client that Motionz has archived. */
+export const PORTAL_ARCHIVED_MESSAGE =
+  'This portal has been archived by Motionz. Contact your Motionz contact if you think this is a mistake.';
+
+/** An archived client is soft-deleted: deleted_at is set and the status is 'cancelled'. */
+export function isTenantArchived(tenant: { deleted_at?: string | null; status?: string | null } | null | undefined): boolean {
+  return Boolean(tenant && (tenant.deleted_at || tenant.status === 'cancelled'));
+}
+
 export const DEMO_TENANT_UUID = '4f3c7e8a-92b1-4d3a-8f5c-1a2b3c4d5e6f';
 export const LEGACY_DEMO_TENANT_UUID = 'd0000000-0000-0000-0000-000000000001';
 
@@ -149,7 +158,7 @@ export async function checkEdgeTenantSuspension(
       : `slug.eq.${resolvedId}`;
 
     const res = await fetch(
-      `${supabaseUrl}/rest/v1/tenants?${filter}&select=status,settings`,
+      `${supabaseUrl}/rest/v1/tenants?${filter}&select=status,settings,deleted_at`,
       {
         headers: {
           apikey: key,
@@ -164,6 +173,9 @@ export async function checkEdgeTenantSuspension(
     if (rows && rows.length > 0) {
       const tenant = rows[0];
       const suspension = tenant.settings?.suspension;
+      if (isTenantArchived(tenant)) {
+        return { suspended: true, reason: PORTAL_ARCHIVED_MESSAGE };
+      }
       if (tenant.status === 'suspended' || suspension?.suspended_at) {
         return {
           suspended: true,
