@@ -55,7 +55,20 @@ export async function assertActiveAccount(session: SessionPayload): Promise<void
     return;
   }
 
-  // 1. Check user-level suspension
+  // 1. Client-level suspension first: it also suspends every person, and its reason is meant for them.
+  if (session.tenantId) {
+    const tenant = await tenantRepository.findById(session.tenantId);
+    if (tenant && tenant.status === 'suspended') {
+      const reason = tenant.suspended_reason || 'Organization portal has been disabled by an administrator.';
+      throw new AppError(
+        `Your company's portal has been suspended: ${reason}`,
+        403,
+        'TENANT_SUSPENDED'
+      );
+    }
+  }
+
+  // 2. This person's own access turned off (the reason stays private)
   const user = await userRepository.findById(session.userId);
   if (user && user.status === 'suspended') {
     throw new AppError(
@@ -63,19 +76,6 @@ export async function assertActiveAccount(session: SessionPayload): Promise<void
       403,
       'ACCOUNT_SUSPENDED'
     );
-  }
-
-  // 2. Check tenant-level suspension (cascades to all members)
-  if (session.tenantId) {
-    const tenant = await tenantRepository.findById(session.tenantId);
-    if (tenant && tenant.status === 'suspended') {
-      const reason = tenant.suspended_reason || 'Organization portal has been disabled by an administrator.';
-      throw new AppError(
-        `Your organization portal has been suspended: ${reason}`,
-        403,
-        'TENANT_SUSPENDED'
-      );
-    }
   }
 }
 

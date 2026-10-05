@@ -192,22 +192,23 @@ export async function POST(request: Request) {
       }
 
       // Suspension is only revealed once the caller has proven they own the account.
-      if (user.status === 'suspended') {
-        return NextResponse.json(
-          { error: PERSONAL_ACCESS_OFF_MESSAGE, suspended: true, reason: PERSONAL_ACCESS_OFF_MESSAGE },
-          { status: 403 }
-        );
-      }
-
+      // A suspended client comes first: it suspends everyone, and its reason is meant for them.
       if (user.tenant_id) {
         const tenant = await tenantRepository.findById(user.tenant_id);
         if (tenant && tenant.status === 'suspended') {
           const reason = tenant.suspended_reason || 'Organization portal has been disabled by an administrator.';
           return NextResponse.json(
-            { error: `Your organization portal has been suspended: ${reason}`, suspended: true, reason },
+            { error: `Your company's portal has been suspended: ${reason}`, suspended: true, reason },
             { status: 403 }
           );
         }
+      }
+
+      if (user.status === 'suspended') {
+        return NextResponse.json(
+          { error: PERSONAL_ACCESS_OFF_MESSAGE, suspended: true, reason: PERSONAL_ACCESS_OFF_MESSAGE },
+          { status: 403 }
+        );
       }
 
       const resolvedTenantId = resolveTenantId(user.tenant_id || 'demo');
