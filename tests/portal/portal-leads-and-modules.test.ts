@@ -201,6 +201,14 @@ async function run() {
   assert.strictEqual(memberData.leadCount, total);
   assert.deepStrictEqual(memberData.appointments, [], 'appointments need Book a Call, not Leads');
   assert.deepStrictEqual(memberData.contracts, []);
+  assert.deepStrictEqual(memberData.setupSteps, [], 'setup steps need Setup Progress');
+  assert.deepStrictEqual(memberData.invitations, [], 'pending invites need Team');
+  assert(
+    !memberData.integrations.some((i: any) => i.integration_type === 'google_sheets'),
+    'the tracking sheet link needs Results Tracking'
+  );
+  const ownerSteps = (await (await dataGet(req(dataPath, 'GET', undefined, owner), ctx)).json()).setupSteps;
+  assert(ownerSteps.length > 0, 'the owner still gets the setup steps');
 
   memberUser.allowed_modules = ['book_call', 'roof_measurement', 'video_scripts', 'contracts'];
   memberData = await (await dataGet(req(dataPath, 'GET', undefined, member), ctx)).json();

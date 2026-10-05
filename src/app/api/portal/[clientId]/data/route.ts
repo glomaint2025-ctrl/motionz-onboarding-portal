@@ -96,8 +96,10 @@ export async function GET(
     const canSeeContracts =
       canSee('contracts') && (!session || hasPermission(session.role, 'client:view_contract'));
 
-    // Integration credentials (API tokens etc.) never leave the server.
-    const publicIntegrations = integrations.map((i: any) => ({
+    // Integration credentials (API tokens etc.) never leave the server. The sheet link follows Results Tracking.
+    const publicIntegrations = integrations
+      .filter((i: any) => i.integration_type !== 'google_sheets' || canSee('tracking'))
+      .map((i: any) => ({
       id: i.id,
       integration_type: i.integration_type,
       is_active: i.is_active,
@@ -123,7 +125,7 @@ export async function GET(
       tenant: targetTenant
         ? publicTenant(targetTenant)
         : { id: tenantId, name: 'Demo Portal', slug: 'demo', status: 'active' },
-      setupSteps: steps,
+      setupSteps: canSee('onboarding') ? steps : [],
       // The real number of leads. The list itself is served, page by page, by /leads.
       leadCount: canSee('leads') ? leadCount : 0,
       // Appointments are calls between the client and their CSM, so they follow the Book a Call section.
@@ -134,7 +136,7 @@ export async function GET(
       integrations: publicIntegrations,
       ghlConnected,
       teamMembers: visibleTeamMembers.map(publicTeamMember),
-      invitations: invitations.map(publicInvitation),
+      invitations: isMember && effectiveFeatureToggles.team === false ? [] : invitations.map(publicInvitation),
       csm: csmUser ? { name: csmUser.full_name, email: csmUser.email } : null,
       bookingCalendarId,
       viewer: session

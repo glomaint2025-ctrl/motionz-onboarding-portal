@@ -181,7 +181,7 @@ export default function ClientProfilePage() {
                 type="email"
                 value={email}
                 disabled
-                helperText="Your login email. Contact your CSM to change it."
+                helperText={readOnly ? "The main email for this business." : "Your login email. Contact your CSM to change it."}
               />
               <Input
                 label="Phone number"
