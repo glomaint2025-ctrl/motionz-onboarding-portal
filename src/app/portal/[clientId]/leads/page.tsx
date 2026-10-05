@@ -35,6 +35,48 @@ interface StageCount {
  * Pipeline order: "New Lead" first, then "Day 1" to "Day 7" by number, then everything else
  * A to Z, with closing stages (won, lost and similar) last.
  */
+/**
+ * The leads list is a table on wide screens and stacked cards on phones and tablets, so nothing
+ * is cut off or broken mid-word. Emails may wrap only after "@".
+ */
+const LEADS_LAYOUT_CSS = `
+.leads-table { width: 100%; border-collapse: collapse; font-size: var(--font-size-sm); }
+.leads-table th { padding: var(--space-2); text-align: left; color: var(--color-text-muted); font-size: var(--font-size-xs); border-bottom: 1px solid var(--color-border-subtle); }
+.leads-table td { padding: var(--space-2); vertical-align: top; }
+.leads-table tbody tr { border-bottom: 1px solid var(--color-border-subtle); }
+.lead-name { font-weight: var(--font-weight-medium); white-space: nowrap; }
+.lead-phone, .lead-followup, .lead-added { white-space: nowrap; }
+.lead-label { display: none; }
+@media (max-width: 1100px) {
+  .leads-table thead { display: none; }
+  .leads-table, .leads-table tbody { display: block; }
+  .leads-table tbody tr {
+    display: grid;
+    grid-template-columns: 1fr 1fr 1fr;
+    gap: var(--space-1) var(--space-3);
+    padding: var(--space-3);
+    margin-bottom: var(--space-3);
+    border: 1px solid var(--color-border-subtle);
+    border-radius: var(--radius-md);
+    background-color: var(--color-bg-surface);
+  }
+  .leads-table td { display: block; padding: 0; min-width: 0; }
+  .lead-name { grid-area: 1 / 1 / 2 / 3; white-space: normal; }
+  .lead-stage { grid-area: 1 / 3 / 2 / 4; justify-self: end; }
+  .lead-phone { grid-area: 2 / 1 / 3 / 4; }
+  .lead-email { grid-area: 3 / 1 / 4 / 4; }
+  .lead-source { grid-area: 4 / 1 / 5 / 2; }
+  .lead-followup { grid-area: 4 / 2 / 5 / 3; }
+  .lead-added { grid-area: 4 / 3 / 5 / 4; }
+  .lead-label { display: block; font-size: var(--font-size-xs); color: var(--color-text-muted); }
+}
+`;
+
+/** An email may wrap only after "@", never in the middle of a word (a zero-width space marks the spot). */
+function breakableEmail(email: string): string {
+  return email.replace(/@/g, '@​');
+}
+
 const CLOSED_STAGE = /\b(won|lost|closed|sold|dead|disqualified|unqualified|not interested|abandoned)\b/i;
 
 function stageRank(stage: string): [number, number] {
@@ -286,32 +328,31 @@ export default function LeadsPage() {
               {data && data.counts.all === 0 ? 'No leads yet.' : 'No leads match your search.'}
             </p>
           ) : (
-            <div style={{ overflowX: 'auto', opacity: isLoading ? 0.6 : 1, transition: 'opacity var(--transition-normal)' }}>
-              <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 'var(--font-size-sm)' }}>
+            <div style={{ opacity: isLoading ? 0.6 : 1, transition: 'opacity var(--transition-normal)' }}>
+              <style>{LEADS_LAYOUT_CSS}</style>
+              <table className="leads-table">
                 <thead>
-                  <tr style={{ textAlign: 'left', color: 'var(--color-text-muted)', fontSize: 'var(--font-size-xs)' }}>
+                  <tr>
                     {['Name', 'Phone', 'Email', 'Source', 'Stage', 'Follow-up', 'Added'].map((h) => (
-                      <th key={h} style={{ padding: 'var(--space-2)', borderBottom: '1px solid var(--color-border-subtle)' }}>
-                        {h}
-                      </th>
+                      <th key={h}>{h}</th>
                     ))}
                   </tr>
                 </thead>
                 <tbody>
                   {leads.map((l) => (
-                    <tr key={l.id} style={{ borderBottom: '1px solid var(--color-border-subtle)' }}>
-                      <td style={{ padding: 'var(--space-2)', fontWeight: 'var(--font-weight-medium)' }}>
-                        {`${l.first_name || ''} ${l.last_name || ''}`.trim() || 'Unnamed lead'}
+                    <tr key={l.id}>
+                      <td className="lead-name">{`${l.first_name || ''} ${l.last_name || ''}`.trim() || 'Unnamed lead'}</td>
+                      <td className="lead-phone">{l.phone ? <a href={`tel:${l.phone}`}>{l.phone}</a> : '-'}</td>
+                      <td className="lead-email">{l.email ? breakableEmail(l.email) : '-'}</td>
+                      <td className="lead-source">
+                        <span className="lead-label">Source</span>
+                        {l.source || '-'}
                       </td>
-                      <td style={{ padding: 'var(--space-2)' }}>
-                        {l.phone ? <a href={`tel:${l.phone}`}>{l.phone}</a> : '-'}
-                      </td>
-                      <td style={{ padding: 'var(--space-2)', wordBreak: 'break-all' }}>{l.email || '-'}</td>
-                      <td style={{ padding: 'var(--space-2)' }}>{l.source || '-'}</td>
-                      <td style={{ padding: 'var(--space-2)' }}>
+                      <td className="lead-stage">
                         <StatusBadge status={l.status || 'New'} variant="progress" />
                       </td>
-                      <td style={{ padding: 'var(--space-2)', whiteSpace: 'nowrap' }}>
+                      <td className="lead-followup">
+                        <span className="lead-label">Follow-up</span>
                         {l.status && CLOSED_STAGE.test(l.status) ? (
                           <span style={{ color: 'var(--color-text-muted)' }} aria-label="No follow-up needed">-</span>
                         ) : followUpDay(l.created_at) > 7 && isEarlyStage(l.status) ? (
@@ -320,7 +361,10 @@ export default function LeadsPage() {
                           `Day ${Math.min(followUpDay(l.created_at), 99)}`
                         )}
                       </td>
-                      <td style={{ padding: 'var(--space-2)', whiteSpace: 'nowrap' }}>{formatDate(l.created_at)}</td>
+                      <td className="lead-added">
+                        <span className="lead-label">Added</span>
+                        {formatDate(l.created_at)}
+                      </td>
                     </tr>
                   ))}
                 </tbody>

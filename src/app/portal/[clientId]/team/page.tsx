@@ -73,7 +73,7 @@ const NO_PAGES_MESSAGE = 'Choose at least one page this person can see.';
  */
 const TEAM_LAYOUT_CSS = `
 .team-people-table { width: 100%; border-collapse: collapse; font-size: var(--font-size-sm); table-layout: auto; }
-.team-contact { display: block; font-size: var(--font-size-xs); font-weight: var(--font-weight-normal, 400); color: var(--color-text-secondary); overflow-wrap: anywhere; line-height: 1.5; }
+.team-contact { display: block; font-size: var(--font-size-xs); font-weight: var(--font-weight-normal, 400); color: var(--color-text-secondary); line-height: 1.5; }
 .team-actions { display: flex; gap: 8px; justify-content: flex-end; align-items: center; flex-wrap: wrap; }
 .team-cell-label { display: none; }
 @media (max-width: 640px) {
@@ -95,6 +95,11 @@ const TEAM_LAYOUT_CSS = `
 }
 `;
 const headCellStyle: React.CSSProperties = { padding: 'var(--space-2) var(--space-3)', color: 'var(--color-text-muted)' };
+
+/** An email may wrap only after "@" or "+", never in the middle of a word (zero-width spaces mark the spots). */
+function breakableEmail(email: string): string {
+  return email.replace(/([@+])/g, '$1​');
+}
 
 /** Invite links always point at the site the owner is currently on. */
 function toLocalLink(link: string): string {
@@ -655,7 +660,7 @@ export default function TeamPage() {
                           <td style={{ ...cellStyle, fontWeight: 'var(--font-weight-medium)' }}>
                             {member.full_name}
                             {isSelf(member) ? ' (you)' : ''}
-                            <span className="team-contact">{member.email}</span>
+                            <span className="team-contact">{breakableEmail(member.email)}</span>
                             {member.phone && <span className="team-contact">{member.phone}</span>}
                           </td>
                           <td style={{ ...cellStyle, whiteSpace: 'nowrap' }}>{roleLabel(member.role)}</td>

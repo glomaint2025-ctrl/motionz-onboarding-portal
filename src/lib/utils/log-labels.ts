@@ -157,6 +157,8 @@ const DETAIL_LABELS: Record<string, string> = {
   allowed_modules: 'Allowed sections',
   cascadedMembersDisabled: 'Team members locked out',
   unlockedMembersCount: 'Team members unlocked',
+  revokedBy: 'Cancelled by',
+  createdBy: 'Sent by',
   stepKey: 'Step',
   step_key: 'Step',
   status: 'Status',
@@ -183,12 +185,20 @@ export function roleLabel(role: string | null | undefined): string {
 
 const ROLE_FIELDS = new Set(['role', 'userRole', 'resolvedRole', 'currentRole', 'requestedRole', 'attemptedRole', 'requiredRoles']);
 /** Fields whose values are internal keys ("pain_point", "google_sheet"): shown as words ("Pain point"). */
+/** The setup steps, by the names clients see. */
+const STEP_NAMES: Record<string, string> = {
+  google_sheet: 'Google Sheet',
+  ghl_a2p: 'GoHighLevel / A2P Verified',
+  domain_web: 'Domain, email & website',
+  phone_system: 'Phone system & A2P texting',
+};
+
 const WORD_VALUE_FIELDS = new Set(['category', 'step_key', 'stepKey', 'allowed_modules', 'video_preference', 'staff_login_code']);
 
 /** Shown first, in this order, when present. */
 const KEY_FIELDS = ['email', 'attemptedEmail', 'userEmail', 'role', 'userRole', 'resolvedRole', 'requestedRole', 'reason', 'ip', 'ipAddress', 'ip_address'];
 /** Already shown elsewhere on the row, or internal-only (still available under "Show raw"). */
-const HIDDEN_FIELDS = new Set(['timestamp', 'mode', 'event']);
+const HIDDEN_FIELDS = new Set(['timestamp', 'mode', 'event', 'authMode']);
 
 /** Database ids mean nothing to a reader: "invitationId", "invitation_id", "resourceId", "id". */
 const ID_KEY = /(^id$|[a-z]Ids?$|_ids?$)/;
@@ -238,7 +248,7 @@ export function detailChips(details: Record<string, unknown> | null | undefined,
         ? Array.isArray(rawValue)
           ? rawValue.map((v) => titleCaseKey(String(v)))
           : typeof rawValue === 'string'
-            ? titleCaseKey(rawValue)
+            ? ((key === 'step_key' || key === 'stepKey') && STEP_NAMES[rawValue]) || titleCaseKey(rawValue)
             : rawValue
         : rawValue;
     const text = formatDetailValue(value);

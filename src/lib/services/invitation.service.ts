@@ -292,14 +292,24 @@ export class InvitationService {
     return { user, tenantId: invitation.tenant_id };
   }
 
-  async revokeInvitation(invitationId: string, revokedByEmail: string, revokedByRole: string = 'client'): Promise<boolean> {
+  async revokeInvitation(
+    invitationId: string,
+    revokedByEmail: string,
+    revokedByRole: string = 'client',
+    options: { replaced?: boolean } = {}
+  ): Promise<boolean> {
+    const invitation = await invitationRepository.findById(invitationId);
     await invitationRepository.revoke(invitationId);
+    // Sending an invitation again replaces the old one; the log already shows "Invitation re-sent".
+    if (options.replaced) return true;
     await auditLogRepository.create({
+      tenant_id: invitation?.tenant_id,
       actor_email: revokedByEmail,
       actor_role: revokedByRole as any,
       action: 'invitation.revoked',
       resource_type: 'invitation',
       resource_id: invitationId,
+      details: invitation ? { email: invitation.email, role: invitation.role } : undefined,
     });
     await securityEventRepository.create({
       event_type: 'invitation_revoked',
@@ -340,7 +350,7 @@ export class InvitationService {
 
     // Explicitly revoke the old invitation if it wasn't already revoked
     if (!existing.revoked_at) {
-      await this.revokeInvitation(params.invitationId, params.actorEmail, params.actorRole || 'client');
+      await this.revokeInvitation(params.invitationId, params.actorEmail, params.actorRole || 'client', { replaced: true });
     }
 
     // Create fresh invitation (also automatically cleans any pending invitations for this email & tenant)
