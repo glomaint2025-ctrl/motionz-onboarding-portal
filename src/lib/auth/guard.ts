@@ -21,7 +21,7 @@ export async function assertCsmAssigned(session: SessionPayload | null, tenantId
   if (!session || session.role !== 'csm') return;
   const assignment = await csmAssignmentRepository.findByTenant(tenantId);
   if (!assignment || assignment.csm_user_id !== session.userId) {
-    throw new AppError('Forbidden: this client is not assigned to you.', 403, 'CSM_NOT_ASSIGNED');
+    throw new AppError('This client is not assigned to you.', 403, 'CSM_NOT_ASSIGNED');
   }
 }
 

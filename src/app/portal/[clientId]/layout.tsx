@@ -39,6 +39,8 @@ export default function ClientPortalLayout({
   const [featureToggles, setFeatureToggles] = useState<Record<string, boolean>>({});
   const [isLoading, setIsLoading] = useState(true);
   const [loadError, setLoadError] = useState('');
+  // A missing portal or one this person may not open: retrying will not help.
+  const [isNoAccess, setIsNoAccess] = useState(false);
   const [attempt, setAttempt] = useState(0);
 
   // Extract the portal sub-section: /portal/[clientId]/[section]
@@ -65,6 +67,7 @@ export default function ClientPortalLayout({
         if (!isMounted) return;
         if (!res.ok) {
           // Without this we do not know which sections are switched on, so nothing is shown.
+          setIsNoAccess(res.status === 403 || res.status === 404);
           setLoadError(
             res.status === 403
               ? 'You do not have access to this portal.'
@@ -132,15 +135,23 @@ export default function ClientPortalLayout({
         <span style={{ color: 'var(--color-status-danger-text)' }}>
           <Icon name="alert" size={32} />
         </span>
-        <h1 style={{ fontSize: '1.25rem', margin: 0 }}>Something went wrong</h1>
+        <h1 style={{ fontSize: '1.25rem', margin: 0 }}>{isNoAccess ? 'This portal is not available to you' : 'Something went wrong'}</h1>
         <p style={{ margin: 0, color: 'var(--color-text-secondary)', maxWidth: '44ch' }}>{loadError}</p>
         <div style={{ display: 'flex', gap: 'var(--space-3)', flexWrap: 'wrap', justifyContent: 'center' }}>
-          <Button variant="primary" onClick={retry}>
-            Try again
-          </Button>
-          <Link href="/auth/login" className={buttonClasses({ variant: 'outline' })} style={{ textDecoration: 'none' }}>
-            Back to sign in
-          </Link>
+          {isNoAccess ? (
+            <Link href="/" className={buttonClasses({ variant: 'primary' })} style={{ textDecoration: 'none' }}>
+              Go to my home page
+            </Link>
+          ) : (
+            <>
+              <Button variant="primary" onClick={retry}>
+                Try again
+              </Button>
+              <Link href="/auth/login" className={buttonClasses({ variant: 'outline' })} style={{ textDecoration: 'none' }}>
+                Back to sign in
+              </Link>
+            </>
+          )}
         </div>
       </div>
     );

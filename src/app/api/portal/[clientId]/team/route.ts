@@ -382,11 +382,11 @@ export async function PATCH(
       emailDelivered: Boolean(result.emailDelivered),
     });
   } catch (error: any) {
-    if (error.message?.includes('Forbidden') || error.message?.includes('Unauthorized')) {
-      return NextResponse.json({ error: error.message }, { status: 403 });
+    if (error.code || error.message?.includes('Forbidden') || error.message?.includes('Unauthorized')) {
+      return handleAuthError(error);
     }
     return NextResponse.json(
-      { error: error.message || 'Failed to resend invitation' },
+      { error: 'The invite could not be sent again. Please try again.' },
       { status: 500 }
     );
   }

@@ -270,7 +270,7 @@ export default function CSMClientSetupEditorPage() {
                     variant={step.status === 'done' ? 'done' : step.status === 'in_progress' ? 'progress' : 'pending'}
                   />
                   {!isCurrentlyEditing && (
-                    <Button variant="outline" size="sm" disabled={saving} onClick={() => startEditing(step)}>
+                    <Button variant="outline" size="sm" disabled={saving} onClick={() => startEditing(step)} aria-label={`Edit step: ${step.name}`}>
                       Edit step
                     </Button>
                   )}

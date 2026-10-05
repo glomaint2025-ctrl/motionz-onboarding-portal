@@ -165,20 +165,6 @@ export default function CSMClientsPage() {
               <span className="ui-stat-meta-text">Across all your clients</span>
             </div>
           </div>
-          <div className="ui-stat-gauge">
-            <svg viewBox="0 0 44 44">
-              <circle cx="22" cy="22" r="18" className="ui-stat-gauge-circle-bg" />
-              <circle
-                cx="22"
-                cy="22"
-                r="18"
-                className="ui-stat-gauge-circle-val"
-                strokeDasharray="113.1"
-                strokeDashoffset={113.1 - (113.1 * avgProgress) / 100}
-              />
-            </svg>
-            <span className="ui-stat-gauge-text">{avgProgress}%</span>
-          </div>
         </div>
 
         {/* In Progress */}
