@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getSessionFromRequest } from '@/lib/auth/guard';
 import { userRepository } from '@/lib/db/repositories/users.repository';
 import { getAvatarUrl } from '@/lib/storage/avatars';
+import { SESSION_COOKIE_NAME } from '@/lib/auth/session';
 
 export const dynamic = 'force-dynamic';
 
@@ -20,6 +21,16 @@ export async function GET(request: NextRequest) {
     }
 
     const user = (await userRepository.findById(session.userId)) || (await userRepository.findByEmail(session.email));
+
+    // A deleted or disabled staff member is signed out here, so an open tab does not keep showing the app.
+    if ((session.role === 'admin' || session.role === 'csm') && (!user || user.status === 'suspended')) {
+      const gone = NextResponse.json(
+        { error: 'Your staff access has ended. Please sign in again.', code: 'UNAUTHENTICATED' },
+        { status: 401 }
+      );
+      gone.cookies.set(SESSION_COOKIE_NAME, '', { path: '/', maxAge: 0 });
+      return gone;
+    }
 
     return NextResponse.json(
       {

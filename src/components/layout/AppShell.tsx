@@ -65,6 +65,11 @@ export const AppShell: React.FC<AppShellProps> = ({
     fetch('/api/auth/me')
       .then(async (res) => {
         const data = await res.json().catch(() => ({}));
+        // Signed out elsewhere, or the account was removed: go to sign-in instead of showing a half-working page.
+        if (res.status === 401) {
+          window.location.assign('/auth/login');
+          return;
+        }
         if (isMounted && res.ok) {
           setFetchedViewer({ name: data.fullName || '', role: data.role || null, avatarUrl: data.avatarUrl || null });
         }
