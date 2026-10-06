@@ -13,7 +13,7 @@ Every webhook action needs these **Custom Data** entries (GHL's standard Webhook
 | `secret` | the `GHL_WEBHOOK_SECRET` value |
 | `event` | `lead`, `csm_call` or `onboarding_form` (see below) |
 
-Requests with a missing or wrong secret are rejected with 401. Events the portal cannot place (unknown sub-account, unknown email) return 200 and are ignored, so GHL does not retry them forever.
+Requests with a missing or wrong secret are rejected with 401 and recorded under **Admin → Security Events**. Events the portal cannot place (unknown sub-account, unknown email) return 200 and are ignored, so GHL does not retry them forever; each one is recorded under **Admin → Audit Logs** as "GoHighLevel event ignored" with the reason.
 
 ---
 
@@ -32,7 +32,7 @@ Shows each client's leads and their pipeline stage on the client's **Leads** pag
 
 Add this workflow to the **snapshot** used for new clients, so every new sub-account sends leads automatically.
 
-**Routing:** by the sub-account's **Location ID**. An admin pastes it into **Admin → Clients → (client) → GoHighLevel Location ID** (it is the id in the sub-account URL after `/location/`).
+**Routing:** by the sub-account's **Location ID**. An admin pastes it under **Admin → GHL Connect** (it is the id in the sub-account URL after `/location/`). A Location ID can be connected to only one live client; saving one that another client already uses is refused.
 
 ## 2. CSM calls: in Motionz's own sub-account (the one with the CSM booking calendar)
 
@@ -78,4 +78,17 @@ GHL workflows have a **Test Workflow** button. After running it:
 - **CSM call:** the date appears on the client's home page.
 - **Onboarding form:** the answers appear on Admin → Clients → (client) and the notification email arrives.
 
-Every received event is also recorded in **Admin → Audit Logs** (`ghl.webhook.*`).
+Every received event is also recorded in **Admin → Audit Logs** (`ghl.webhook.*`): stored events by type, and events that were not stored as `ghl.webhook.ignored` (could not be placed) or `ghl.webhook.rejected` (malformed), each with the reason and the Location ID or email.
+
+---
+
+## What does NOT sync
+
+The portal only stores what a workflow sends it. It never reads from GHL and never writes to GHL.
+
+- **Deletions in GHL are not mirrored.** A lead, contact or opportunity deleted in GHL stays in the portal. An appointment deleted in GHL also stays (a *cancelled* one is updated and no longer shown as the next call; a deleted one sends nothing).
+- **Contact edits arrive late.** A changed name, email or phone reaches the portal only with that lead's next stage change, because the workflow fires on Opportunity Created and Pipeline Stage Changed, not on contact edits.
+- **Older leads are not imported.** Leads that existed before the workflow was published appear only once their stage changes.
+- **A booking under a different email is ignored.** A CSM call is matched by the booking email. If it matches no portal user and no client's primary email, nothing is shown to the client; the booking email and start time are recorded under **Admin → Audit Logs** ("GoHighLevel event ignored: No client matches this contact email.").
+- **A sub-account with no Location ID in the portal is ignored.** Its leads are recorded in the Audit Logs as ignored (with the Location ID) until an admin connects it; they are not replayed afterwards.
+- **The portal never writes to GHL.** Nothing changed in the portal (client details, team, setup steps) is sent to GHL, and lead stages cannot be changed from the portal.

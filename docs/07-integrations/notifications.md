@@ -1,45 +1,24 @@
-# Phase 7: Multi-Channel Notifications & Push Architecture
+# Notifications
 
-The notification engine delivers timely alerts across Web Push, SMS, and Email to ensure clients stay updated on onboarding progress, leads, and operational milestones.
+What exists today: **email only**. There is no web push, no SMS, no in-app notification centre and
+no Slack alerting.
 
----
+## Emails the portal sends
 
-## 1. Notification Channels & Topology
+Sent through Resend (`RESEND_API_KEY`) or Brevo (`BREVO_API_KEY`); code in `src/lib/email/`.
+Without a provider key, emails are printed to the server console (development only).
 
-```mermaid
-graph TD
-    EVENT["Operational Trigger (e.g. LLC Filed, New Lead, Order Shipped)"]
-    EVENT --> DISPATCH["Unified Notification Dispatcher"]
-    
-    DISPATCH --> PUSH["Web Push Notification (PWA / Browser)"]
-    DISPATCH --> SMS["SMS Alert (Via GoHighLevel / Twilio)"]
-    DISPATCH --> EMAIL["Email Notification (Transactional SMTP)"]
-    DISPATCH --> SLACK["Internal Slack Alert (Ops / CSM)"]
-```
+| Email | Sent when | To |
+|---|---|---|
+| Invitation | An admin, CSM or account owner invites someone | The invited person |
+| Sign-in link | A sign-in link is issued for an existing client user | That user |
+| Staff sign-in code | A staff member signs in (when codes are switched on) | That staff member |
+| Password reset | Someone uses "Forgot password" | That person |
+| Sign-in email changed | A user changes their sign-in email in My profile | The old address |
+| Onboarding form received | GHL sends an `onboarding_form` event (see [ghl-workflows.md](./ghl-workflows.md)) | The list in **Admin → Settings & Integrations → Onboarding form notifications**, plus `MEDIA_BUYER_EMAIL`, plus the client's CSM when that box is ticked |
+| Website change request | A client submits a website change request | Motionz staff |
 
----
+## Not built
 
-## 2. Web Push & PWA Architecture
-
-- **Protocol**: Standard W3C Push API & PushManager using VAPID keys (`NEXT_PUBLIC_VAPID_PUBLIC_KEY` and `VAPID_PRIVATE_KEY`).
-- **Service Worker (`sw.js`)**: Background event listener receives payloads and displays native system notifications:
-  ```javascript
-  self.addEventListener('push', event => {
-    const data = event.data.json();
-    self.registration.showNotification(data.title, {
-      body: data.body,
-      icon: '/icons/icon-192.png',
-      badge: '/icons/badge-72.png',
-      data: { url: data.url }
-    });
-  });
-  ```
-- **Mobile Safari Compatibility**: On iOS 16.4+, web push requires the portal to be added to the user's home screen. The portal automatically guides users through the installation flow before prompting for push permissions.
-
----
-
-## 3. Subscription & Device Management
-
-- Client push subscriptions are stored in the database:
-  `push_subscriptions(id, user_id, tenant_id, endpoint, p256dh, auth, created_at)`.
-- Users can toggle notifications on or off with a single click in their profile.
+Web push (service worker, VAPID keys, `push_subscriptions` table), SMS, and a notification
+dispatcher do not exist. Text messages to homeowners are handled inside GoHighLevel, not by the portal.

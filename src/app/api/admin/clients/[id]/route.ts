@@ -93,6 +93,7 @@ export async function PUT(
     const csmChange = 'csm_user_id' in body;
 
     const updates: any = {};
+    let locationNotice: string | undefined;
     // Validation errors name their field, so the form can mark the right input.
     try {
       if (name !== undefined) updates.name = validateText(name, 'Company name', { required: true, max: 255 });
@@ -128,6 +129,23 @@ export async function PUT(
           { error: 'The GoHighLevel Location ID looks wrong. Copy it from the sub-account URL.', field: 'ghl_location_id' },
           { status: 400 }
         );
+      }
+      // One sub-account feeds one client: leads are routed by this id, so two live clients sharing it
+      // would send every lead to whichever is found first. An archived client holding it does not block.
+      if (loc && loc !== tenant.ghl_location_id) {
+        const holders = (await tenantRepository.list({ includeArchived: true, limit: 1000 })).filter(
+          (t) => t.id !== tenant.id && t.ghl_location_id === loc
+        );
+        const liveHolder = holders.find((t) => !t.deleted_at && t.status !== 'cancelled');
+        if (liveHolder) {
+          return NextResponse.json(
+            { error: `This Location ID is already connected to ${liveHolder.name}.`, field: 'ghl_location_id' },
+            { status: 409 }
+          );
+        }
+        if (holders.length > 0) {
+          locationNotice = `This Location ID was also used by ${holders[0].name}, which is archived. Leads now go to ${tenant.name}.`;
+        }
       }
       updates.ghl_location_id = loc || null;
     }
@@ -177,7 +195,12 @@ export async function PUT(
       if (!renamed.ok) driveWarning = renamed.error || 'Google Drive did not answer.';
     }
 
-    return NextResponse.json({ success: true, tenant: updatedTenant, ...(driveWarning ? { driveWarning } : {}) });
+    return NextResponse.json({
+      success: true,
+      tenant: updatedTenant,
+      ...(driveWarning ? { driveWarning } : {}),
+      ...(locationNotice ? { locationNotice } : {}),
+    });
   } catch (err: any) {
     if (err.statusCode === 401 || err.statusCode === 403) {
       return handleAuthError(err);
@@ -455,7 +478,20 @@ export async function PATCH(
 
     // 6. Unarchive / Restore client portal (must run before the invitation checks below)
     if (action === 'unarchive' || action === 'restore') {
-      const updatedTenant = await tenantRepository.unarchive(tenant.id);
+      let updatedTenant = await tenantRepository.unarchive(tenant.id);
+
+      // While this client was archived its Location ID may have been given to another client.
+      // Two live clients must never share one, so the restored client comes back without it.
+      let locationNotice: string | undefined;
+      if (tenant.ghl_location_id) {
+        const liveHolder = (await tenantRepository.list({ limit: 1000 })).find(
+          (t) => t.id !== tenant.id && t.ghl_location_id === tenant.ghl_location_id && t.status !== 'cancelled'
+        );
+        if (liveHolder) {
+          updatedTenant = await tenantRepository.update(tenant.id, { ghl_location_id: null as any });
+          locationNotice = `The GoHighLevel Location ID was removed from ${tenant.name} because it is now connected to ${liveHolder.name}.`;
+        }
+      }
 
       await auditLogRepository.create({
         tenant_id: tenant.id,
@@ -464,12 +500,14 @@ export async function PATCH(
         action: 'client.unarchived',
         resource_type: 'tenant',
         resource_id: tenant.id,
+        ...(locationNotice ? { details: { ghl_location_removed: true, reason: locationNotice } } : {}),
       });
 
       return NextResponse.json({
         success: true,
-        message: 'Client unarchived.',
+        message: locationNotice ? `Client unarchived. ${locationNotice}` : 'Client unarchived.',
         tenant: updatedTenant,
+        ...(locationNotice ? { locationNotice } : {}),
       });
     }
 

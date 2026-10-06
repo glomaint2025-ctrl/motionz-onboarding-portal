@@ -253,7 +253,7 @@ Before this: accept the TC Roofing Test invite from Gmail (case 4.6) and set a p
 | 16.3 | **Reactivate** > confirm | Active; TC owner can sign in again |
 | 16.4 | **Archive** > confirm | Listed as Archived; TC owner sign-in refused ("Portal archived") |
 | 16.5 | Clients > Status **Archived** > **…** > **Unarchive** > confirm | Active again; TC owner can sign in |
-| 16.6 | When finished, tell Claude to delete TC Roofing Test (`scripts/clear-test-clients.mjs --only=<id>`) and trash its Drive sheet | |
+| 16.6 | When finished, tell Claude to delete TC Roofing Test (`scripts/clear-test-clients.mjs --only=<id> --apply --yes-this-is-staging`) and trash its Drive sheet | |
 
 ---
 

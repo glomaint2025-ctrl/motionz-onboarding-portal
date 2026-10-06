@@ -1,6 +1,8 @@
 // Removes SIMULATED GoHighLevel data (made by scripts/simulate-ghl-webhooks.mjs) from the database in .env.local:
 // leads and calls whose GHL ids start with "sim-", and onboarding forms sent by simulated contacts.
 // Real data is never touched. Usage: node scripts/clear-simulated-ghl-data.mjs [--apply]   (dry run without --apply)
+// Safety: refuses to run when NODE_ENV=production and prints the database host first. It needs no
+// extra confirmation flag because it can only delete rows whose GoHighLevel id starts with "sim-".
 import { readFileSync } from 'node:fs';
 import { createClient } from '@supabase/supabase-js';
 
@@ -10,8 +12,20 @@ const env = Object.fromEntries(
     .filter((l) => /^[A-Z_]+=/.test(l))
     .map((l) => [l.slice(0, l.indexOf('=')), l.slice(l.indexOf('=') + 1).trim()])
 );
-const db = createClient(env.NEXT_PUBLIC_SUPABASE_URL, env.SUPABASE_SERVICE_ROLE_KEY, { auth: { persistSession: false } });
 const apply = process.argv.includes('--apply');
+
+// Simulated data is only ever created on staging or a local portal, so there is nothing to clear in production.
+if (process.env.NODE_ENV === 'production' || env.NODE_ENV === 'production') {
+  console.error('Refusing to run: NODE_ENV is "production". This script is for the staging database only.');
+  process.exit(1);
+}
+try {
+  console.log(`Database: ${new URL(env.NEXT_PUBLIC_SUPABASE_URL).host}`);
+} catch {
+  console.error('No database is configured in .env.local (NEXT_PUBLIC_SUPABASE_URL).');
+  process.exit(1);
+}
+const db = createClient(env.NEXT_PUBLIC_SUPABASE_URL, env.SUPABASE_SERVICE_ROLE_KEY, { auth: { persistSession: false } });
 
 async function must(query) {
   const { data, error } = await query;

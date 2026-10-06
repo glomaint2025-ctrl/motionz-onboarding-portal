@@ -4,6 +4,9 @@ import { getStore } from '../mock-db';
 import { Lead } from '../schema';
 import { DatabaseError } from '../../errors';
 
+/** Postgres error code for "duplicate key value violates unique constraint". */
+const UNIQUE_VIOLATION = '23505';
+
 export interface LeadQuery {
   /** Free-text search over name, email and phone. Every word must match. */
   search?: string;
@@ -196,7 +199,8 @@ export class LeadRepository {
 
   /**
    * Inserts or updates a lead keyed by its GoHighLevel contact id within a tenant,
-   * so repeated ContactCreate/ContactUpdate webhooks never duplicate a lead.
+   * so repeated webhooks never duplicate a lead. Works with or without the unique index on
+   * (tenant_id, ghl_contact_id); only the index makes it safe against two events arriving together.
    */
   async upsertByGhlContactId(
     tenantId: string,
@@ -206,25 +210,56 @@ export class LeadRepository {
     const now = new Date().toISOString();
     const supabase = getSupabaseServiceClient();
     if (supabase) {
-      const { data: existing, error: findError } = await supabase
-        .from('leads')
-        .select('id')
-        .eq('tenant_id', tenantId)
-        .eq('ghl_contact_id', ghlContactId)
-        .maybeSingle();
-      if (findError) throw new DatabaseError(`Failed to look up lead: ${findError.message}`, findError);
-
-      if (existing) {
+      // Never assumes a single row: duplicates made before the unique index existed would make
+      // `.maybeSingle()` fail on every later event. The most recently updated row is the one kept current.
+      const findId = async (): Promise<string | null> => {
+        const { data, error } = await supabase
+          .from('leads')
+          .select('id')
+          .eq('tenant_id', tenantId)
+          .eq('ghl_contact_id', ghlContactId)
+          .order('updated_at', { ascending: false })
+          .order('id', { ascending: true })
+          .limit(1);
+        if (error) throw new DatabaseError(`Failed to look up lead: ${error.message}`, error);
+        return data?.[0]?.id ?? null;
+      };
+      const updateById = async (id: string): Promise<Lead> => {
         const { data, error } = await supabase
           .from('leads')
           .update({ ...fields, updated_at: now })
-          .eq('id', existing.id)
+          .eq('id', id)
           .select('*')
           .single();
         if (error) throw new DatabaseError(`Failed to update lead: ${error.message}`, error);
         return data as Lead;
+      };
+
+      const existingId = await findId();
+      if (existingId) return updateById(existingId);
+
+      const { data, error } = await supabase
+        .from('leads')
+        .insert({
+          tenant_id: tenantId,
+          ghl_contact_id: ghlContactId,
+          status: 'New',
+          ...fields,
+          id: randomUUID(),
+          created_at: now,
+          updated_at: now,
+        })
+        .select('*')
+        .single();
+      if (!error) return data as Lead;
+
+      // With the unique index (migration 20261007000003), two events arriving together cannot both
+      // insert: the loser gets a unique violation and updates the winner's row instead.
+      if ((error as any).code === UNIQUE_VIOLATION) {
+        const winnerId = await findId();
+        if (winnerId) return updateById(winnerId);
       }
-      return this.create({ tenant_id: tenantId, ghl_contact_id: ghlContactId, status: 'New', ...fields });
+      throw new DatabaseError(`Failed to create lead: ${error.message}`, error);
     }
 
     const store = getStore();

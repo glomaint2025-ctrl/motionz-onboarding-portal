@@ -49,7 +49,7 @@ function ClientRow({ client, onSaved }: { client: GhlClient; onSaved: (message: 
         return;
       }
       setEditing(false);
-      onSaved(`Location ID saved for ${client.name}.`);
+      onSaved(`Location ID saved for ${client.name}.${data.locationNotice ? ` ${data.locationNotice}` : ''}`);
     } catch {
       setError('Could not reach the server. Nothing was saved.');
     } finally {

@@ -12,7 +12,6 @@ const validDev = validateEnv({
   NODE_ENV: 'development',
   SESSION_SECRET: 'dev-secret-key-that-is-at-least-32-characters-long',
   NEXTAUTH_URL: process.env.NEXTAUTH_URL || 'https://portal.motionz.ai',
-  GHL_API_BASE_URL: 'https://services.leadconnectorhq.com',
 });
 assert.strictEqual(validDev.valid, true, 'Valid dev config should pass');
 
@@ -21,7 +20,6 @@ const invalidProdSecret = validateEnv({
   NODE_ENV: 'production',
   SESSION_SECRET: 'short',
   NEXTAUTH_URL: 'https://portal.motionz.ai',
-  GHL_API_BASE_URL: 'https://services.leadconnectorhq.com',
 });
 assert.strictEqual(invalidProdSecret.valid, false, 'Short session secret in production should fail');
 assert.ok(invalidProdSecret.errors.some(e => e.includes('at least 32 characters')), 'Error should mention 32 chars');

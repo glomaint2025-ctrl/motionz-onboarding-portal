@@ -41,7 +41,7 @@ export async function GET() {
       environment: {
         nodeEnv: sanitizedEnv.NODE_ENV,
         configuredAdapters: {
-          database: sanitizedEnv.HAS_DATABASE_URL || sanitizedEnv.HAS_SUPABASE_URL ? 'configured' : 'in-memory-mock',
+          database: sanitizedEnv.HAS_SUPABASE_URL ? 'configured' : 'in-memory-mock',
           email: process.env.RESEND_API_KEY || process.env.BREVO_API_KEY ? 'configured' : 'unconfigured',
           trackingSheets: process.env.GOOGLE_SHEETS_SCRIPT_URL ? 'configured' : 'unconfigured',
           ghlWebhooks: process.env.GHL_WEBHOOK_SECRET ? 'configured' : 'unconfigured',

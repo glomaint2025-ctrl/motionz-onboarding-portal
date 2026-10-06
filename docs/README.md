@@ -54,7 +54,7 @@ docs/
 │   ├── video-scripts.md                       # Template-Based Script Engine and Preference
 │   └── profile-and-team.md                    # Company Profile and Team Invitations
 ├── 07-integrations/
-│   ├── gohighlevel.md                         # GoHighLevel API, Leads, and Contracts
+│   ├── gohighlevel.md                         # What the GoHighLevel webhook sync does today
 │   ├── google-sheets.md                       # Google Sheets API Sync
 │   ├── slack.md                               # Slack Community Resource
 │   ├── skool.md                               # Skool Training Resource

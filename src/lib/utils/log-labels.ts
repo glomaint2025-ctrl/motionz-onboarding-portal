@@ -30,6 +30,7 @@ export const SECURITY_EVENT_LABELS: Record<string, string> = {
   account_email_change_wrong_password: 'Wrong password when changing sign-in email',
   account_email_change_out_of_step: 'Sign-in email change did not finish (needs a fix)',
   cross_tenant_access_attempt: "Blocked: tried to open another client's portal",
+  ghl_webhook_invalid_secret: 'Blocked: GoHighLevel message with a wrong or missing secret',
 };
 
 export const AUDIT_ACTION_LABELS: Record<string, string> = {
@@ -63,6 +64,8 @@ export const AUDIT_ACTION_LABELS: Record<string, string> = {
   'ghl.webhook.csm_call': 'Call booking received from GoHighLevel',
   'ghl.webhook.onboarding_form': 'Onboarding form received from GoHighLevel',
   'ghl.webhook.unknown': 'Unrecognised message from GoHighLevel',
+  'ghl.webhook.ignored': 'GoHighLevel event ignored',
+  'ghl.webhook.rejected': 'GoHighLevel event rejected',
   'invitation.created': 'Invitation sent',
   'invitation.resent': 'Invitation re-sent',
   'invitation.accepted': 'Invitation accepted',
@@ -129,7 +132,12 @@ export function securityEventLabel(eventType: string): string {
   return SECURITY_EVENT_LABELS[eventType] || titleCaseKey(eventType);
 }
 
-export function auditActionLabel(action: string): string {
+/** Pass the entry's details so an ignored or rejected GoHighLevel event shows why it was not stored. */
+export function auditActionLabel(action: string, details?: Record<string, unknown> | null): string {
+  if (action === 'ghl.webhook.ignored' || action === 'ghl.webhook.rejected') {
+    const reason = typeof details?.reason === 'string' ? details.reason.trim() : '';
+    return reason ? `${AUDIT_ACTION_LABELS[action]}: ${reason}` : AUDIT_ACTION_LABELS[action];
+  }
   if (AUDIT_ACTION_LABELS[action]) return AUDIT_ACTION_LABELS[action];
   if (action.startsWith('security.')) return securityEventLabel(action.slice('security.'.length));
   if (action.startsWith('ghl.webhook.')) return `Message from GoHighLevel: ${titleCaseKey(action.slice('ghl.webhook.'.length)).toLowerCase()}`;
@@ -158,6 +166,9 @@ const DETAIL_LABELS: Record<string, string> = {
   ip: 'IP',
   ipAddress: 'IP',
   ip_address: 'IP',
+  eventType: 'Event',
+  location: 'Location ID',
+  start_time: 'Booked for',
   emailDelivered: 'Email delivered',
   missingCapability: 'Missing permission',
   changed: 'Changed',

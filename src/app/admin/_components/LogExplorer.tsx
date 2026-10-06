@@ -98,7 +98,7 @@ const chipStyle: React.CSSProperties = {
 
 function LogEntry({ kind, row }: { kind: Kind; row: LogRow }) {
   const [showRaw, setShowRaw] = useState(false);
-  const title = kind === 'security' ? securityEventLabel(row.event_type || '') : auditActionLabel(row.action || '');
+  const title = kind === 'security' ? securityEventLabel(row.event_type || '') : auditActionLabel(row.action || '', row.details);
   // The client comes first, so rows with the same title (e.g. GoHighLevel leads) can be told apart.
   const chips = [
     ...(row.tenant_name ? [{ label: 'Client', value: row.tenant_name }] : []),

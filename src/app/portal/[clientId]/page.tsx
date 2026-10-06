@@ -6,6 +6,7 @@ import { useParams } from 'next/navigation';
 import { Card, CardHeader, Button, Input, Skeleton } from '@/components/ui';
 import { buttonClasses } from '@/components/ui/Button';
 import { formatDateTime } from '@/lib/utils/format';
+import { nextUpcomingCall } from '@/lib/utils/appointments';
 import { suspendedPageUrl } from '@/components/portal/suspended';
 
 interface SetupStep {
@@ -143,11 +144,7 @@ export default function ClientOverviewPage() {
             // The real total from the server, not the length of a capped list.
             setLeadCount(typeof data.leadCount === 'number' ? data.leadCount : 0);
             // Appointments are calls between the client and their CSM (client answer 2.1).
-            const now = Date.now();
-            const upcoming = (data.appointments || [])
-              .filter((a: any) => new Date(a.appointment_time).getTime() > now && !/cancel/i.test(a.status || ''))
-              .sort((a: any, b: any) => new Date(a.appointment_time).getTime() - new Date(b.appointment_time).getTime());
-            setNextCall(upcoming[0]?.appointment_time || null);
+            setNextCall(nextUpcomingCall(data.appointments));
             const sheet = (data.integrations || []).find((i: any) => i.integration_type === 'google_sheets' && i.is_active);
             setSheetReady(Boolean(sheet?.config_data?.sheet_url || sheet?.config_data?.spreadsheet_id));
             setCsm(data.csm || null);

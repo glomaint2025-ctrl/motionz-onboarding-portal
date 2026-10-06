@@ -100,6 +100,7 @@ export default function ClientsPage() {
   const [unarchiveTarget, setUnarchiveTarget] = useState<ClientRecord | null>(null);
   const [isUnarchiving, setIsUnarchiving] = useState(false);
   const [unarchiveError, setUnarchiveError] = useState('');
+  const [restoreNotice, setRestoreNotice] = useState('');
 
   const [archiveTarget, setArchiveTarget] = useState<ClientRecord | null>(null);
   const [isArchiving, setIsArchiving] = useState(false);
@@ -191,6 +192,8 @@ export default function ClientsPage() {
       const data = await res.json();
       if (res.ok && data.success) {
         setUnarchiveTarget(null);
+        // Set only when the restored client lost its GoHighLevel Location ID to another client.
+        setRestoreNotice(data.locationNotice || '');
         fetchClients();
       } else {
         setUnarchiveError(data.error || 'Could not unarchive this client. Please try again.');
@@ -473,6 +476,12 @@ export default function ClientsPage() {
               Show all clients
             </button>
           </span>
+        </Notice>
+      )}
+
+      {restoreNotice && (
+        <Notice tone="info" style={{ marginBottom: 'var(--space-4)' }}>
+          {restoreNotice}
         </Notice>
       )}
 
