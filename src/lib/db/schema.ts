@@ -36,6 +36,8 @@ export interface User {
   tenant_id?: string;
   phone?: string;
   avatar_url?: string;
+  /** Object path of the profile picture in the private "avatars" bucket. Absent on databases without the column. */
+  avatar_path?: string | null;
   two_factor_enabled?: boolean;
   status?: 'active' | 'suspended';
   suspended_at?: string;

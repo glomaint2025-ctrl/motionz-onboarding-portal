@@ -16,6 +16,10 @@ export interface HeaderProps {
   userRole?: string;
   onMenuToggle?: () => void;
   onLogout?: () => void;
+  /** The person's profile picture (a short-lived link). Initials are shown without it. */
+  avatarUrl?: string | null;
+  /** Where "My profile" in the user menu goes. Hidden when not set. */
+  profileHref?: string;
   /** Where "Home" in the user menu goes. */
   homeHref?: string;
   /** Shows a placeholder instead of the company name while it loads. */
@@ -39,6 +43,8 @@ export const Header: React.FC<HeaderProps> = ({
   userRole = '',
   onMenuToggle,
   onLogout,
+  avatarUrl,
+  profileHref,
   homeHref,
   isLoading = false,
   isMenuOpen,
@@ -51,6 +57,17 @@ export const Header: React.FC<HeaderProps> = ({
   const showSkeleton = !displayName && isLoading;
   const personName = userName.trim();
   const avatarText = isUserLoading && !personName ? '' : initialsFrom(personName || userRole || '');
+
+  // A picture that fails to load (e.g. an expired link) falls back to initials.
+  const [brokenAvatarUrl, setBrokenAvatarUrl] = useState<string | null>(null);
+  const pictureUrl = avatarUrl && avatarUrl !== brokenAvatarUrl ? avatarUrl : null;
+  const avatarContent = (iconSize: number) =>
+    pictureUrl ? (
+      // eslint-disable-next-line @next/next/no-img-element
+      <img src={pictureUrl} alt="" onError={() => setBrokenAvatarUrl(pictureUrl)} />
+    ) : (
+      avatarText || <Icon name="user" size={iconSize} />
+    );
 
   // Close the user menu on outside click or Escape.
   useEffect(() => {
@@ -118,7 +135,7 @@ export const Header: React.FC<HeaderProps> = ({
             aria-label={`Account menu${personName ? ` for ${personName}` : ''}`}
           >
             <span className="user-avatar" aria-hidden="true">
-              {avatarText || <Icon name="user" size={16} />}
+              {avatarContent(16)}
             </span>
             <span className="user-menu-meta">
               {personName ? (
@@ -137,13 +154,24 @@ export const Header: React.FC<HeaderProps> = ({
             <div className="user-menu-dropdown" role="menu" aria-label="Account">
               <div className="user-menu-header">
                 <span className="user-avatar user-avatar-lg" aria-hidden="true">
-                  {avatarText || <Icon name="user" size={18} />}
+                  {avatarContent(18)}
                 </span>
                 <span style={{ minWidth: 0 }}>
                   {personName && <span className="user-menu-name" style={{ display: 'block' }}>{personName}</span>}
                   {userRole && <span className="user-menu-role">{userRole}</span>}
                 </span>
               </div>
+              {profileHref && (
+                <Link
+                  href={profileHref}
+                  role="menuitem"
+                  className="user-menu-item"
+                  onClick={() => setIsUserMenuOpen(false)}
+                >
+                  <Icon name="user" size={18} />
+                  My profile
+                </Link>
+              )}
               {homeHref && (
                 <Link
                   href={homeHref}
