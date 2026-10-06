@@ -58,7 +58,7 @@ export async function GET(request: Request) {
       withoutCsm: setup.filter((s) => !s.hasCsm).map(({ id, name }) => ({ id, name })),
       inSetup: setup.filter((s) => !s.done).length,
       stuck: setup
-        .filter((s) => !s.done && s.daysOnStep !== null && s.daysOnStep >= 14)
+        .filter((s) => !s.done && s.daysOnStep !== null && s.daysOnStep >= 7)
         .map(({ id, name, currentStep, daysOnStep }) => ({ id, name, currentStep, daysOnStep })),
       security: {
         last7Days: recentEvents.length,

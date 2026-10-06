@@ -120,7 +120,7 @@ export default function AdminDashboardPage() {
             <Metric
               label="Still in setup"
               value={data.inSetup}
-              hint={`${data.stuck.length} stuck 14+ days on one step`}
+              hint={`${data.stuck.length} stuck 7+ days on one step`}
               href="/admin/clients?setup=in_progress"
             />
             <Metric
@@ -160,7 +160,7 @@ export default function AdminDashboardPage() {
 
           <div style={{ display: 'grid', gap: 'var(--space-4)', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))' }}>
             <Card>
-              <CardHeader title="Stuck in setup" subtitle="On the same setup step for 14 days or more" />
+              <CardHeader title="Stuck in setup" subtitle="On the same setup step for 7 days or more" />
               <ClientList items={data.stuck} empty="No clients are stuck in setup." render={(c) => `${c.currentStep} · ${c.daysOnStep} days`} />
             </Card>
             <Card>
