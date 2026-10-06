@@ -4,13 +4,43 @@ import React, { useState } from 'react';
 import { Card, CardHeader } from '@/components/ui';
 import { formatDateTime } from '@/lib/utils/format';
 import { fieldLabel } from '@/lib/utils/log-labels';
+import { displayAnswers } from '@/lib/onboarding/answers';
+import type { OnboardingFileRef } from '@/lib/onboarding/form-definition';
 
 export interface OnboardingSubmissionView {
   id: string;
   submitter_email?: string;
-  answers: Record<string, string>;
+  /** Text answers, and lists of uploaded files for the upload questions. Anything else is not shown. */
+  answers: Record<string, unknown>;
   submitted_at: string;
 }
+
+function fileSize(bytes: number): string {
+  if (!bytes) return '';
+  return bytes >= 1024 * 1024 ? `${(bytes / (1024 * 1024)).toFixed(1)} MB` : `${Math.max(1, Math.round(bytes / 1024))} KB`;
+}
+
+/**
+ * Uploaded files as download links. The link goes through the portal, which checks who is asking
+ * and then hands out a link that only works for a few minutes. The first part of a file's path is
+ * the client it belongs to.
+ */
+const FileLinks: React.FC<{ files: OnboardingFileRef[] }> = ({ files }) => (
+  <ul style={{ margin: 0, padding: 0, listStyle: 'none', display: 'grid', gap: 'var(--space-1)' }}>
+    {files.map((file) => (
+      <li key={file.path}>
+        <a
+          href={`/api/portal/${encodeURIComponent(file.path.split('/')[0])}/onboarding-files?path=${encodeURIComponent(file.path)}`}
+          target="_blank"
+          rel="noopener noreferrer"
+        >
+          {file.name}
+        </a>
+        {file.size > 0 && <span style={{ color: 'var(--color-text-muted)' }}> · {fileSize(file.size)}</span>}
+      </li>
+    ))}
+  </ul>
+);
 
 /**
  * Shows a client's onboarding form answers, newest submission first.
@@ -25,7 +55,9 @@ export const OnboardingAnswers: React.FC<{ submissions: OnboardingSubmissionView
   // The list can change after a refresh; fall back to the newest one.
   const current = submissions[index] || submissions[0];
   const isClient = audience === 'client';
-  const entries = current ? Object.entries(current.answers) : [];
+  // Text and uploaded files only, in the order of the form. Internal fields and values we cannot
+  // show (for example a file value from an old GoHighLevel submission) are left out.
+  const entries = current ? Object.entries(displayAnswers(current.answers)) : [];
 
   const answers = !current ? (
     <p style={{ color: 'var(--color-text-secondary)', margin: 0 }}>Not submitted yet.</p>
@@ -68,7 +100,9 @@ export const OnboardingAnswers: React.FC<{ submissions: OnboardingSubmissionView
             <div key={question}>
               <dt style={{ fontSize: 'var(--font-size-xs)', color: 'var(--color-text-muted)' }}>{fieldLabel(question)}</dt>
               <dd style={{ margin: 0, fontSize: 'var(--font-size-sm)', whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>
-                {/^https?:\/\//.test(answer) ? (
+                {typeof answer !== 'string' ? (
+                  <FileLinks files={answer} />
+                ) : /^https?:\/\//.test(answer) ? (
                   <a href={answer} target="_blank" rel="noopener noreferrer">
                     {answer}
                   </a>

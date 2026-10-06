@@ -17,8 +17,9 @@ export async function GET(request: Request) {
 }
 
 /**
- * Body: any of the four form fields, each a GoHighLevel form link, embed snippet or bare id.
+ * Body: any of the three form fields, each a GoHighLevel form link, embed snippet or bare id.
  * A field that is left out keeps its saved value. The two Leads forms may be sent empty to hide them.
+ * `onboarding_form_id` is ignored if sent: the onboarding form is built into the portal now.
  */
 export async function PUT(request: Request) {
   try {

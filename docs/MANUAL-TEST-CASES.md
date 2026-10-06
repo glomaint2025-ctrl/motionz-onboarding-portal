@@ -168,10 +168,10 @@ the two IDs shown at the start so you can put them back at the end.
 
 | # | Steps | Expected |
 |---|---|---|
-| 10.9 | Look at the card | Four rows: Onboarding form, Texting registration form, Lead replacement form, Unresponsive lead form. The first two say **Showing on Setup Progress** with a Form ID and a **Preview** link; the last two say **Not set — hidden from clients** (until a link is saved). **Save form links** is greyed out |
-| 10.10 | Click **Preview** on Onboarding form | The GHL form opens in a new tab |
+| 10.9 | Look at the card | A grey line at the top: "The onboarding form is now built into the portal (client → Setup Progress). Its answers are saved here, not in GoHighLevel." Three rows: Texting registration form, Lead replacement form, Unresponsive lead form (there is **no** Onboarding form row). The first says **Showing on Setup Progress** with a Form ID and a **Preview** link; the last two say **Not set — hidden from clients** (until a link is saved). **Save form links** is greyed out |
+| 10.10 | Click **Preview** on Texting registration form | The GHL form opens in a new tab |
 | 10.11 | Lead replacement form: type `hello` > **Save form links** | Under the box: "That does not look like a GoHighLevel form link or ID…". Nothing is saved |
-| 10.12 | Clear the Onboarding form box > Save | Under the box: "This form is always shown to clients, so it cannot be left empty." Put the ID back |
+| 10.12 | Clear the Texting registration form box > Save | Under the box: "This form is always shown to clients, so it cannot be left empty." Put the ID back |
 | 10.13 | Lead replacement form: paste a full form link (`https://api.leadconnectorhq.com/widget/form/…`) | "Form ID: … (not saved yet)" appears under the box, with **Preview** |
 | 10.14 | Unresponsive lead form: paste the whole `<iframe …>` embed code of a form > **Save form links** | "Form links saved. Clients see the change straight away." Both rows now say **Showing on Leads** and each box shows only the ID |
 | 10.15 | Reload the page (F5) | The saved IDs are still there |
@@ -219,7 +219,7 @@ the two IDs shown at the start so you can put them back at the end.
 | 13.6 | Attach a 4th file or a file over 4 MB or a .exe/.zip | Refused with a plain message |
 | 13.7 | Left menu > **Setup Progress** | "n of 4 steps done", filters All steps / Still to do / Done (counts), 4 step cards |
 | 13.8 | Click **Still to do**, then **Done**, then **All steps** | Lists change; empty filter shows a plain sentence |
-| 13.9 | **Open onboarding form** | Pop-up GHL form, your email already filled; clicking outside does NOT close it; **×** or Esc closes it |
+| 13.9 | **Open onboarding form** | A full page opens inside the portal (`…/onboarding/form`), **not** a pop-up and not a GoHighLevel form: title "Onboarding form", **← Back to Setup Progress**, five numbered sections. Full cases in 13c |
 | 13.10 | Step 2 **Open texting form** | Texting form pop-up with your email filled |
 | 13.11 | Left menu > **Leads** | Total leads, New this week, "By stage" chips, table (Name, Phone, Email, Source, Stage, Follow-up, Added) |
 | 13.12 | Search a lead name; click a stage chip | List filters; "x of y match" |
@@ -247,20 +247,39 @@ the two IDs shown at the start so you can put them back at the end.
 | 13.28 | Click **Report an unresponsive lead** | The other form opens the same way |
 | 13.29 | Admin clears the Unresponsive lead form link (10.17) > reload Leads | Only **Request a lead replacement** is left |
 | 13.30 | Admin clears both links (10.18) > reload Leads | The "Need help with a lead?" row is gone completely (no empty box) |
-| 13.31 | Admin points Onboarding form at another form link > as the client open **Setup Progress** > **Open onboarding form** | The pop-up shows the NEW form. Put the original link back afterwards |
+| 13.31 | Admin points Texting registration form at another form link > as the client open **Setup Progress** > **Open texting form** | The pop-up shows the NEW form. Put the original link back afterwards |
 | 13.32 | As admin or CSM open the client's portal ("Viewing as staff") > **Leads** (with a lead form link saved) | The same buttons show; the form opens with the **client's** email filled |
 | 13.33 | Phone width (375px) > **Leads** | The buttons wrap under "Need help with a lead?"; nothing is cut off; the pop-up fits the screen |
 
-### 13c. Your own onboarding answers on Setup Progress
+### 13c. The onboarding form (built into the portal) and your answers on Setup Progress
+
+The form is a page of the portal now. Nothing is sent to GoHighLevel. Have ready: a small PDF, a small
+CSV, a `.exe` or `.mp4` file, and a file larger than 4 MB.
 
 | # | Steps | Expected |
 |---|---|---|
 | 13.34 | As a client who has **never** sent the onboarding form: left menu > **Setup Progress** > look at the "Tell us about your business" card | Button says **Open onboarding form**; under it a grey line "Not submitted yet." with a small **Refresh**. No **View your answers** button |
-| 13.35 | **Open onboarding form** > fill it in (answers start with `TEST`) > Submit > close the pop-up with **×** > wait about 10 seconds > **Refresh** | The card shows "Submitted <date, time>"; the form button now says **Update your answers**; a line says "Sending the form again replaces nothing — your CSM sees the newest answers first." |
-| 13.36 | Click **View your answers** | The answers open inside the same card (question in small grey text, your answer under it), "Sent from <your email>". The button turns into **Hide your answers**; clicking it closes them. The answers match what Admin sees under **Onboarding form answers** (17.5) |
-| 13.37 | **Update your answers** > change one answer > Submit > close > **Refresh** > **View your answers** | Two pills at the top: "Latest · <date, time>" and the older one. Clicking each shows that set of answers; nothing was overwritten |
-| 13.38 | Phone width (375px) on **Setup Progress**, answers open | Buttons wrap under the title, long answers and links wrap, no sideways scrolling |
-| 13.39 | As a team member **without** Setup Progress, open `/api/portal/<client>/onboarding-answers` in the browser | Refused (403) — no answers shown. Signed out: 401 |
+| 13.35 | **Open onboarding form** | The form page opens. A row of five section buttons (1. Business details … 5. Sales refinement) stays at the top while you scroll and jumps to a section when clicked. Each card says "Section n of 5" with its sub-line. Required questions have a red `*` |
+| 13.36 | Look at the first section **before typing** | **Pre-filled:** Full Name (your name), DBA Business Name (the company name), Business Email and Business Phone (from Company Profile), Country = United States. Everything else is empty with a grey example inside |
+| 13.37 | Scroll to the bottom > **Send my answers** with the required boxes empty | Nothing is sent. "Some answers need a second look. We have marked them for you." The page scrolls to the **first** empty required question and puts the cursor in it; each one shows "Please answer this question." in red; the section buttons with problems say "(check)" |
+| 13.38 | Business Email `abc` and Business Phone `call me` > **Send my answers** | "Enter a valid email address…" and "Enter a valid phone number…" under those boxes. Type a correct value: the red message under that box goes away |
+| 13.39 | Type a few answers starting with `TEST`, tick two boxes under "Which of these increase your pricing?", pick **Yes** for the deposit > press **F5** | The page reloads with everything you typed still there and the line "We brought back the answers you had started on this device but not sent yet." **Start again** empties it back to the pre-filled values |
+| 13.40 | "Upload Useful Video / Materials for Marketing": choose the `.exe` or `.mp4` > Send | Red message under the upload: "… is not an allowed file type. Send PDF, PNG, JPG, WEBP, CSV, XLSX, DOCX or TXT files." The help line says videos go to your CSM on Slack. **Remove** takes the file off the list |
+| 13.41 | Choose the file larger than 4 MB > Send | "Your files are larger than 4 MB in total. Remove a file, or send large files to your CSM on Slack." Remove it |
+| 13.42 | Choose 6 small files on one upload question > Send | "You can send up to 5 files here." Remove one |
+| 13.43 | Fill every required question (answers start with `TEST`), attach the small PDF to the marketing upload and the CSV to "Upload A List Of Old Leads to Reactivate" > **Send my answers** | Button shows "Sending..." and cannot be clicked twice. Then: "Thanks — your answers were sent to your Motionz team." with **Back to Setup Progress** |
+| 13.44 | **Back to Setup Progress** | The card shows "Submitted <date, time>"; the button now says **Update your answers**; a line says "Sending the form again replaces nothing — your CSM sees the newest answers first." |
+| 13.45 | Click **View your answers** | The answers open inside the same card in the order of the form (question in small grey text, your answer under it), "Sent from <your email>". The two uploads show the **file names as links** with their size; clicking one downloads that file. The button turns into **Hide your answers** |
+| 13.46 | Gmail | "Onboarding form submitted: <client>" to every address in Settings > Notification emails, plus the client's CSM when **Also email the CSM** is ticked. The email lists the answers (uploads by file name) and **Open client in portal** opens the client on staging |
+| 13.47 | As **admin**: Clients > the client > Manage client > **Onboarding form answers**. As the **CSM**: My Clients > the client > **Update setup** | Both show the same answers, "Submitted <date, time> by <client email>", and the file links download the files |
+| 13.48 | As admin: **Audit Logs** > Today | "Onboarding form sent from the portal", Client: the client, by the client's email |
+| 13.49 | As the client: **Update your answers** | The form opens with **your last answers filled in** and the line "We filled in the answers you sent on <date, time>…". The files you sent are listed as "· sent before" with **Remove** |
+| 13.50 | Change one answer > **Send updated answers** > Back to Setup Progress > **View your answers** | Two pills at the top: "Latest · <date, time>" and the older one. Clicking each shows that set of answers; nothing was overwritten. The newest one still lists the files you kept |
+| 13.51 | **Update your answers** > change nothing > **Send updated answers** (within 10 minutes of 13.50) | "Thanks…" with "We already have these answers. Nothing was sent twice." No new pill on Setup Progress and no new email |
+| 13.52 | As admin or the CSM open the client's portal ("Viewing as staff") > Setup Progress > **Update your answers** > send | Works; the new set says "Submitted … by <your staff email>" |
+| 13.53 | Phone width (375px): open the form, type, tick, upload, send; then Setup Progress with answers open | No sideways scrolling; the section buttons scroll sideways inside their own row; long questions and file names wrap; buttons stay on screen |
+| 13.54 | As a team member **without** Setup Progress: type `…/portal/<client>/onboarding/form` in the address bar; then open `/api/portal/<client>/onboarding-answers` | Sent to Home; the address answers 403 (no answers shown). Signed out: 401 |
+| 13.55 | Copy a file link from 13.45 > sign in as a **different client** (Incognito) > paste it | Refused (403). Signed out: sent to sign-in / 401 |
 
 ## 14. Team (still as the client owner)
 
@@ -310,8 +329,8 @@ GHL: top-left **sub-account switcher**. Only use the sub-account with Location I
 | 17.2 | **Contacts** > Add contact `Portal Test 2`, email `heshantharushka2002+ghl2@gmail.com` > **Opportunities** > add an opportunity for it in the pipeline | Within ~1 min: portal (owner) **Leads** shows Portal Test 2 with that stage; Admin > **GHL Connect** "Last lead received" updates |
 | 17.3 | In GHL drag the opportunity to another stage | Portal Leads shows the new stage, still ONE row |
 | 17.4 | Portal (owner) > **Book a Call** > book any free time | ~1 min: Home **Next CSM Call** shows it. GHL (Motionz Your Rejuvenation) > Calendars > Appointments shows it; Automation > Workflows > Portal: CSM calls > Execution Logs has a run |
-| 17.5 | Portal (owner) > **Setup Progress > Open onboarding form** > fill, every answer starts with `TEST` > Submit | Gmail: 2 emails "Onboarding form submitted: Zydeco Roof Revival" (you + CSM). Admin > Clients > Zydeco > Manage client > **Onboarding form answers** shows them. CSM setup page shows them |
-| 17.6 | Admin > **Audit Logs** > Today | "New lead received from GoHighLevel", "Call booking received…", "Onboarding form received…", all Client: Zydeco Roof Revival |
+| 17.5 | The onboarding form no longer goes through GoHighLevel: it is tested in 13c (13.43 to 13.48). In GHL (Motionz Your Rejuvenation) > Contacts, after sending the form in the portal | **No** contact is created or updated by it, and the workflow `Portal: onboarding form` has no new run |
+| 17.6 | Admin > **Audit Logs** > Today | "New lead received from GoHighLevel", "Call booking received…", and "Onboarding form sent from the portal" (not "…received from GoHighLevel"), all Client: Zydeco Roof Revival |
 | 17.7 | Clean up: GHL delete the test opportunity + contact; cancel the test booking if wanted | Tell Claude to remove the test lead from the portal |
 
 ## 18. Phone check

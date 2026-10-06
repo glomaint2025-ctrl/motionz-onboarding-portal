@@ -1,10 +1,11 @@
 'use client';
 
 import React, { useState, useEffect, useCallback, useRef } from 'react';
+import Link from 'next/link';
 import { useParams, useRouter } from 'next/navigation';
 import { Card, CardHeader, Button, StatusBadge, Skeleton } from '@/components/ui';
+import { buttonClasses } from '@/components/ui/Button';
 import { SetupCard } from '@/components/onboarding/SetupCard';
-import { GHLOnboardingFormEmbed } from '@/components/onboarding/GHLOnboardingFormEmbed';
 import { A2PFormEmbed } from '@/components/onboarding/A2PFormEmbed';
 import { OnboardingAnswers, OnboardingSubmissionView } from '@/components/onboarding/OnboardingAnswers';
 import { calculateSetupProgress } from '@/lib/onboarding/progress';
@@ -25,11 +26,10 @@ export default function SetupProgressPage() {
   const [loadError, setLoadError] = useState('');
   const [attempt, setAttempt] = useState(0);
   const [filter, setFilter] = useState<'all' | 'open' | 'completed'>('all');
-  const [isGHLFormOpen, setIsGHLFormOpen] = useState(false);
   const [isA2PFormOpen, setIsA2PFormOpen] = useState(false);
   const [prefillEmail, setPrefillEmail] = useState<string | undefined>(undefined);
-  // Form ids set by an admin. Empty until loaded; the pop-ups then use the built-in forms.
-  const [formIds, setFormIds] = useState<{ onboarding_form_id?: string; a2p_form_id?: string }>({});
+  // Form id set by an admin. Empty until loaded; the pop-up then uses the built-in texting form.
+  const [formIds, setFormIds] = useState<{ a2p_form_id?: string }>({});
 
   useEffect(() => {
     let isMounted = true;
@@ -101,12 +101,6 @@ export default function SetupProgressPage() {
       // Ignore a reply that arrives after leaving the page.
       answersRequest.current++;
     };
-  }, [loadAnswers]);
-
-  // A sent form reaches us a few seconds later, so look once when the pop-up closes.
-  const closeGHLForm = useCallback(() => {
-    setIsGHLFormOpen(false);
-    loadAnswers();
   }, [loadAnswers]);
 
   const latestSubmission = submissions[0];
@@ -279,9 +273,14 @@ export default function SetupProgressPage() {
           subtitle="We use your answers to build your ads, website and follow-up messages."
           action={
             <div style={{ display: 'flex', gap: 'var(--space-2)', flexWrap: 'wrap', justifyContent: 'flex-end' }}>
-              <Button variant="secondary" size="sm" onClick={() => setIsGHLFormOpen(true)}>
+              {/* The onboarding form is a page of its own inside the portal (it is a long form). */}
+              <Link
+                href={`/portal/${clientId}/onboarding/form`}
+                className={buttonClasses({ variant: 'secondary', size: 'sm' })}
+                style={{ textDecoration: 'none' }}
+              >
                 {hasSubmitted ? 'Update your answers' : 'Open onboarding form'}
-              </Button>
+              </Link>
               {!hasA2PStep && (
                 <Button variant="secondary" size="sm" onClick={() => setIsA2PFormOpen(true)}>
                   Open texting form
@@ -389,14 +388,6 @@ export default function SetupProgressPage() {
           />
         </Card>
       )}
-
-      <GHLOnboardingFormEmbed
-        formId={formIds.onboarding_form_id}
-        isModal={true}
-        isOpen={isGHLFormOpen}
-        onClose={closeGHLForm}
-        prefillEmail={prefillEmail}
-      />
 
       <A2PFormEmbed
         formId={formIds.a2p_form_id}

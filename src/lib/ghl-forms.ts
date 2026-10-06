@@ -4,9 +4,12 @@ import { PORTAL_LINKS } from './portal-links';
  * The GoHighLevel forms shown inside the client portal. Admins paste each form's link on
  * Admin → Settings & Integrations; only the form id is stored (app setting `forms`).
  * This file has no server-only imports, so pages and API routes can both use it.
+ *
+ * The onboarding form is NOT in this list any more: it is built into the portal
+ * (src/lib/onboarding/form-definition.ts). An `onboarding_form_id` left in a saved setting, or sent
+ * by an older page, is simply ignored.
  */
 export interface FormSettings {
-  onboarding_form_id: string;
   a2p_form_id: string;
   lead_replacement_form_id: string;
   unresponsive_lead_form_id: string;
@@ -16,7 +19,6 @@ export type FormSettingKey = keyof FormSettings;
 
 /** Built-in ids. The two Leads forms stay empty (hidden from clients) until an admin adds a link. */
 export const FORM_SETTING_DEFAULTS: FormSettings = {
-  onboarding_form_id: PORTAL_LINKS.onboardingFormId,
   a2p_form_id: PORTAL_LINKS.a2pFormId,
   lead_replacement_form_id: '',
   unresponsive_lead_form_id: '',
@@ -33,7 +35,6 @@ export interface FormSettingField {
 }
 
 export const FORM_SETTING_FIELDS: FormSettingField[] = [
-  { key: 'onboarding_form_id', label: 'Onboarding form', shownOn: 'Setup Progress', required: true },
   { key: 'a2p_form_id', label: 'Texting registration form', shownOn: 'Setup Progress', required: true },
   { key: 'lead_replacement_form_id', label: 'Lead replacement form', shownOn: 'Leads', required: false },
   { key: 'unresponsive_lead_form_id', label: 'Unresponsive lead form', shownOn: 'Leads', required: false },

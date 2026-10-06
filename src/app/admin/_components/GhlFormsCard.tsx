@@ -10,7 +10,6 @@ type FieldText = Record<FormSettingKey, string>;
 type FieldErrors = Partial<Record<FormSettingKey, string>>;
 
 const EMPTY: FieldText = {
-  onboarding_form_id: '',
   a2p_form_id: '',
   lead_replacement_form_id: '',
   unresponsive_lead_form_id: '',
@@ -108,6 +107,10 @@ export function GhlFormsCard() {
           title="GoHighLevel forms"
           subtitle="The forms clients fill in inside their portal. Build or change a form in GoHighLevel, then paste its link here."
         />
+        <p style={{ ...helperLineStyle, fontSize: 'var(--font-size-sm)', marginBottom: 'var(--space-4)' }}>
+          The onboarding form is now built into the portal (client → Setup Progress). Its answers are saved here, not
+          in GoHighLevel.
+        </p>
         {loading ? (
           <Skeleton height="260px" />
         ) : loadError ? (
