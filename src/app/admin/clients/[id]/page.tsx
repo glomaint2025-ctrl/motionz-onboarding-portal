@@ -1066,7 +1066,7 @@ export default function ClientDetailPage() {
       {/* Everything below saves on its own, so it sits outside the settings form. */}
       <OnboardingAnswers submissions={submissions} />
 
-      <ClientRecords clientId={clientId} />
+      <ClientRecords clientId={clientId} clientName={tenant.name} />
 
       {/* Client team */}
       <Card style={{ marginBottom: 'var(--space-6)' }}>

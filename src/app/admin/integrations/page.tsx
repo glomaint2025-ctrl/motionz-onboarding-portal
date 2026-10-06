@@ -26,9 +26,54 @@ const LOGIN_CODE_OPTIONS: { value: LoginCodeMode; label: string; detail: string 
   { value: 'all_staff', label: 'All staff', detail: 'CSMs and admins, including you, enter an emailed code every time they log in.' },
 ];
 
+type ListKey = 'onboarding_form_recipients' | 'website_request_recipients' | 'lead_form_recipients';
+
+/** The three "who gets emailed" boxes on the Notification emails card. */
+const NOTIFICATION_FIELDS: { key: ListKey; label: string; help: string; placeholder: string }[] = [
+  {
+    key: 'onboarding_form_recipients',
+    label: 'Onboarding form',
+    help: 'Emailed the answers when a client sends the onboarding form (for example, the media buyer).',
+    placeholder: 'mediabuyer@motionz.ai, ops@motionz.ai',
+  },
+  {
+    key: 'website_request_recipients',
+    label: 'Website change requests',
+    help: 'Your website team. Emailed every Website Change Request a client sends from their Home page.',
+    placeholder: 'website@motionz.ai',
+  },
+  {
+    key: 'lead_form_recipients',
+    label: 'Lead forms',
+    help: 'Your lead team. Will be used by the Lead Replacement and Unresponsive Lead forms.',
+    placeholder: 'leads@motionz.ai',
+  },
+];
+
+const EMPTY_LISTS: Record<ListKey, string> = { onboarding_form_recipients: '', website_request_recipients: '', lead_form_recipients: '' };
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+const MAX_RECIPIENTS = 20;
+
+/** Saved lists as the comma-separated text shown in each box. */
+function listsAsText(notifications: Partial<Record<ListKey, string[]>> | undefined): Record<ListKey, string> {
+  const text = { ...EMPTY_LISTS };
+  for (const { key } of NOTIFICATION_FIELDS) text[key] = (notifications?.[key] || []).join(', ');
+  return text;
+}
+
+/** The same checks the server makes, so a mistyped address is named under its own box. */
+function recipientsError(text: string): string {
+  const entries = Array.from(new Set(text.split(/[\s,;]+/).map((e) => e.trim().toLowerCase()).filter(Boolean)));
+  const invalid = entries.filter((e) => !EMAIL_RE.test(e));
+  if (invalid.length) return `Invalid email address: ${invalid.join(', ')}`;
+  if (entries.length > MAX_RECIPIENTS) return `Up to ${MAX_RECIPIENTS} recipients are allowed.`;
+  return '';
+}
+
 export default function AdminSettingsPage() {
   const [loading, setLoading] = useState(true);
-  const [recipients, setRecipients] = useState('');
+  const [lists, setLists] = useState<Record<ListKey, string>>(EMPTY_LISTS);
+  const [listErrors, setListErrors] = useState<Partial<Record<ListKey, string>>>({});
   const [notifyCsm, setNotifyCsm] = useState(true);
   const [status, setStatus] = useState<Record<string, any>>({});
   const [unmatched, setUnmatched] = useState<Submission[]>([]);
@@ -67,7 +112,8 @@ export default function AdminSettingsPage() {
         setSecurityMessage({ type: 'error', text: security?.error || 'Could not load sign-in security settings.' });
       }
       if (settings.success) {
-        setRecipients((settings.notifications.onboarding_form_recipients || []).join(', '));
+        setLists(listsAsText(settings.notifications));
+        setListErrors({});
         setNotifyCsm(settings.notifications.notify_assigned_csm !== false);
         setStatus(settings.status || {});
         setUnmatched(settings.unmatchedSubmissions || []);
@@ -96,20 +142,35 @@ export default function AdminSettingsPage() {
   }, []);
 
   const save = async () => {
-    setSaving(true);
     setMessage(null);
+    const errors: Partial<Record<ListKey, string>> = {};
+    for (const field of NOTIFICATION_FIELDS) {
+      const problem = recipientsError(lists[field.key]);
+      if (problem) errors[field.key] = problem;
+    }
+    setListErrors(errors);
+    const firstBad = NOTIFICATION_FIELDS.find((f) => errors[f.key]);
+    if (firstBad) {
+      setMessage({ type: 'error', text: `${firstBad.label}: ${errors[firstBad.key]} Nothing was saved.` });
+      return;
+    }
+
+    setSaving(true);
     try {
       const res = await fetch('/api/admin/settings/notifications', {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ onboarding_form_recipients: recipients, notify_assigned_csm: notifyCsm }),
+        body: JSON.stringify({ ...lists, notify_assigned_csm: notifyCsm }),
       });
       const data = await res.json().catch(() => ({}));
       if (res.ok && data.success) {
-        setRecipients((data.notifications?.onboarding_form_recipients || []).join(', '));
+        setLists(listsAsText(data.notifications));
         setMessage({ type: 'ok', text: 'Notification settings saved.' });
       } else {
-        setMessage({ type: 'error', text: data.error || 'The settings were not saved. Please try again.' });
+        const text = data.error || 'The settings were not saved. Please try again.';
+        // The server names the box the problem is in.
+        if (NOTIFICATION_FIELDS.some((f) => f.key === data.field)) setListErrors({ [data.field as ListKey]: text });
+        setMessage({ type: 'error', text });
       }
     } catch {
       setMessage({ type: 'error', text: 'Could not reach the server. Nothing was saved.' });
@@ -201,8 +262,8 @@ export default function AdminSettingsPage() {
 
       <Card style={{ marginBottom: 'var(--space-6)' }}>
         <CardHeader
-          title="Onboarding form notifications"
-          subtitle="Who gets an email with the answers when a client submits the onboarding form (for example, the media buyer). They do not need a portal account."
+          title="Notification emails"
+          subtitle="Who gets an email when a client sends something in. Each team has its own list, and nobody on a list needs a portal account."
         />
         {loading ? (
           <Skeleton height="90px" />
@@ -210,31 +271,53 @@ export default function AdminSettingsPage() {
           <p style={{ color: 'var(--color-text-secondary)', margin: 0 }}>These settings could not be loaded.</p>
         ) : (
           <>
-            <label htmlFor="onboarding-recipients" style={{ display: 'block', fontSize: 'var(--font-size-sm)', fontWeight: 'var(--font-weight-medium)', marginBottom: 'var(--space-1)' }}>
-              Email addresses (separate with commas)
-            </label>
-            <textarea
-              id="onboarding-recipients"
-              maxLength={2000}
-              value={recipients}
-              onChange={(e) => setRecipients(e.target.value)}
-              rows={2}
-              placeholder="mediabuyer@motionz.ai, ops@motionz.ai"
-              style={{
-                width: '100%',
-                padding: 'var(--space-3)',
-                borderRadius: 'var(--radius-md)',
-                border: '1px solid var(--color-border-subtle)',
-                background: 'var(--color-bg-surface)',
-                color: 'var(--color-text-primary)',
-                fontFamily: 'inherit',
-                marginBottom: 'var(--space-3)',
-              }}
-            />
-            <label style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-2)', fontSize: 'var(--font-size-sm)', marginBottom: 'var(--space-4)' }}>
+            {NOTIFICATION_FIELDS.map((field) => {
+              const id = `notify-${field.key}`;
+              const problem = listErrors[field.key];
+              return (
+                <div key={field.key} style={{ marginBottom: 'var(--space-4)' }}>
+                  <label htmlFor={id} style={{ display: 'block', fontSize: 'var(--font-size-sm)', fontWeight: 'var(--font-weight-medium)', marginBottom: 'var(--space-1)' }}>
+                    {field.label} (separate with commas)
+                  </label>
+                  <textarea
+                    id={id}
+                    className={problem ? 'ui-input-error' : undefined}
+                    maxLength={2000}
+                    value={lists[field.key]}
+                    onChange={(e) => {
+                      setLists((current) => ({ ...current, [field.key]: e.target.value }));
+                      if (problem) setListErrors((current) => ({ ...current, [field.key]: undefined }));
+                    }}
+                    rows={2}
+                    placeholder={field.placeholder}
+                    aria-invalid={problem ? true : undefined}
+                    aria-describedby={`${id}-note`}
+                    style={{
+                      width: '100%',
+                      padding: 'var(--space-3)',
+                      borderRadius: 'var(--radius-md)',
+                      border: '1px solid var(--color-border-subtle)',
+                      background: 'var(--color-bg-surface)',
+                      color: 'var(--color-text-primary)',
+                      fontFamily: 'inherit',
+                      marginBottom: 'var(--space-1)',
+                      ...(problem ? { borderColor: 'var(--color-status-danger-solid)' } : {}),
+                    }}
+                  />
+                  <span id={`${id}-note`} className={problem ? 'ui-error-text' : 'ui-helper-text'} style={{ display: 'block' }}>
+                    {problem || field.help}
+                  </span>
+                </div>
+              );
+            })}
+            <label style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-2)', fontSize: 'var(--font-size-sm)', marginBottom: 'var(--space-1)' }}>
               <input type="checkbox" checked={notifyCsm} onChange={(e) => setNotifyCsm(e.target.checked)} />
               Also email the CSM assigned to that client
             </label>
+            <span className="ui-helper-text" style={{ display: 'block', marginBottom: 'var(--space-4)' }}>
+              Applies to onboarding forms and lead forms. Website change requests always go to the client&rsquo;s CSM (or to every admin when
+              the client has no CSM), as well as the website team above.
+            </span>
             <Button variant="primary" onClick={save} disabled={saving}>
               {saving ? 'Saving...' : 'Save notification settings'}
             </Button>

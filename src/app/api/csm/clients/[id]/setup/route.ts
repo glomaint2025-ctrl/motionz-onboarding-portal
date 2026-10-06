@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { getTenantById, getClientSetupSteps, updateClientSetupStep, logAuditEvent } from '@/lib/db';
 import { requireAuth, handleAuthError, assertCsmAssigned } from '@/lib/auth/guard';
-import { onboardingSubmissionRepository } from '@/lib/db/repositories';
+import { onboardingSubmissionRepository, contractRepository } from '@/lib/db/repositories';
 import { validateText } from '@/lib/validation';
 
 export async function GET(
@@ -17,7 +17,7 @@ export async function GET(
     }
     await assertCsmAssigned(session, tenant.id);
 
-    const steps = await getClientSetupSteps(tenant.id);
+    const [steps, contracts] = await Promise.all([getClientSetupSteps(tenant.id), contractRepository.listByTenant(tenant.id)]);
     const completedCount = steps.filter((s) => s.status === 'done').length;
     const progressPercent = steps.length > 0 ? Math.round((completedCount / steps.length) * 100) : 0;
 
@@ -26,6 +26,8 @@ export async function GET(
       tenant,
       steps,
       progressPercent,
+      // Staff-only reminder. Only an admin can attach the contract (Admin → Clients → the client → Contract).
+      hasContract: contracts.length > 0,
       onboardingSubmissions: await onboardingSubmissionRepository.listByTenant(tenant.id, 10),
     });
   } catch (err: any) {

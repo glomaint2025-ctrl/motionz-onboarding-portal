@@ -16,6 +16,7 @@ interface AssignedClient {
   completed_steps: number;
   ghl_location_id?: string;
   created_at?: string;
+  hasContract?: boolean;
 }
 
 const AVATAR_GRADIENTS = [
@@ -306,6 +307,8 @@ export default function CSMClientsPage() {
                             <div className="ui-company-info">
                               <span className="ui-company-name">{client.name}</span>
                               <span className="ui-company-sub" title={client.primary_email || undefined}>{client.primary_email || client.primary_contact_name || 'No email'}</span>
+                              {/* Staff reminder; a small muted line, so the column width is unchanged. */}
+                              {client.hasContract === false && <span className="ui-company-date">No contract</span>}
                             </div>
                           </div>
                         </td>

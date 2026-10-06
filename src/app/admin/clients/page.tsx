@@ -21,6 +21,7 @@ interface ClientRecord {
   created_at: string;
   deleted_at?: string;
   is_archived?: boolean;
+  hasContract?: boolean;
 }
 
 const AVATAR_GRADIENTS = [
@@ -536,6 +537,8 @@ export default function ClientsPage() {
                               <span className="ui-company-name">{client.name}</span>
                               <span className="ui-company-sub" title={client.primary_email || undefined}>{client.primary_email || client.primary_contact_name || 'No email'}</span>
                               {createdDate && <span className="ui-company-date">Added {createdDate}</span>}
+                              {/* Staff reminder; uses the same small muted line as the date, so the column width is unchanged. */}
+                              {client.hasContract === false && !isArchived && <span className="ui-company-date">No contract</span>}
                             </div>
                           </div>
                         </td>

@@ -19,7 +19,7 @@ interface ContractRow {
 }
 
 /** Admin panel to attach signed contracts for one client. */
-export const ClientRecords: React.FC<{ clientId: string }> = ({ clientId }) => {
+export const ClientRecords: React.FC<{ clientId: string; clientName?: string }> = ({ clientId, clientName }) => {
   const [contracts, setContracts] = useState<ContractRow[]>([]);
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
@@ -121,11 +121,15 @@ export const ClientRecords: React.FC<{ clientId: string }> = ({ clientId }) => {
         </Notice>
       )}
 
+      {/* Staff-only reminder, shown until a contract is attached. */}
+      {!loading && !loadError && contracts.length === 0 && (
+        <Notice tone="info" style={{ marginBottom: 'var(--space-3)' }}>
+          No contract attached yet. Paste the signed contract link below so {clientName || 'the client'} can see it on their Contract page.
+        </Notice>
+      )}
+
       <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-2)', marginBottom: 'var(--space-3)' }}>
         {loading && <span style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-muted)' }}>Loading contracts...</span>}
-        {!loading && !loadError && contracts.length === 0 && (
-          <span style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-muted)' }}>No contract attached yet.</span>
-        )}
         {contracts.map((c) => (
           <div key={c.id} style={rowStyle}>
             <div>

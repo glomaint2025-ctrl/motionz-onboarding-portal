@@ -51,6 +51,8 @@ Tips: use a normal window for one account and an **Incognito window** (Ctrl+Shif
 | 2.1 | Left menu > **Dashboard** | Tiles: Active clients, Still in setup, GHL Connect x / y, Security events (7 days), New clients (30 days). Numbers match the Clients page |
 | 2.2 | Click each tile | Opens the matching page (Clients, GHL Connect, Security Alerts…) |
 | 2.3 | Card "No CSM assigned" (the "Stuck in setup" card was removed at the client's request, 7 Oct) | Plain sentence, no errors |
+| 2.4 | Card "No contract attached", next to "No CSM assigned" | Lists every live client with no contract (archived clients are not listed), or "Every client has a contract attached." Clicking a name opens that client's page |
+| 2.5 | Attach a contract to one listed client (5.8) > back to **Dashboard** | That client is no longer in the card |
 
 ## 3. Admin: Clients list
 
@@ -64,6 +66,7 @@ Tips: use a normal window for one account and an **Incognito window** (Ctrl+Shif
 | 3.6 | **Clear Filters** | Everything back |
 | 3.7 | On a row click **…** | Menu: Manage client, Suspend, Archive. Fully visible on screen |
 | 3.8 | **Open portal** on a row | Client portal opens in a **new tab** with bar "Viewing as staff · <client>" (no "Back to Admin" link); the Clients list is still open in the first tab |
+| 3.9 | Look under the company name of a client with no contract (e.g. TC Roofing Test before 5.8) | Small grey "No contract" under the name. Clients with a contract, and archived clients, do not show it. At 1024px wide the table still fits with no sideways scrolling |
 
 ## 4. Admin: Add client (uses a NEW test client; do not use Zydeco)
 
@@ -92,7 +95,8 @@ Left menu > **Clients** > **Add client**.
 | 5.6 | **Assigned CSM** > Thomas > Save > reload | Shows Thomas. Change back to Heshan (Test CSM) > Save |
 | 5.7 | **Contract**: Title `Test agreement`, Document link `http://example.com/a.pdf` > **Attach contract** | "Document link must be a full https:// link." |
 | 5.8 | Link `https://example.com/a.pdf`, leave Signed on empty > Attach | Listed as "Not signed yet · Open" |
-| 5.9 | **Remove** > confirm **Remove contract** | "No contract attached yet." |
+| 5.9 | **Remove** > confirm **Remove contract** | The blue notice comes back at the top of the Contract card: "No contract attached yet. Paste the signed contract link below so TC Roofing Test can see it on their Contract page." |
+| 5.9a | Attach the contract again (5.8) | The notice is gone as soon as the contract is listed. Sign in as the TC owner: the Contract page shows the contract and no reminder anywhere |
 | 5.10 | **Client team** > **Invitations waiting** > **Send again** > confirm | One sentence "We emailed a new invitation…". Gmail gets a new invite; the old link no longer works |
 | 5.11 | **Invite** button > email `heshantharushka2002+tc2@gmail.com` > send | "We emailed the invitation to …" |
 | 5.12 | On that waiting invite > **Cancel invite** > confirm | It disappears; its Gmail link shows "This link isn't working" |
@@ -152,8 +156,13 @@ To bring **every** older client up to date in one go instead of pressing the but
 
 | # | Steps | Expected |
 |---|---|---|
-| 10.1 | Left menu > **Settings & Integrations** > Notification emails `heshantharushka2002@gmail.com, bad` > Save | "Invalid email address: bad" |
-| 10.2 | Put back `heshantharushka2002@gmail.com`, **Also email the CSM** ticked > Save | Saved |
+| 10.1 | Left menu > **Settings & Integrations** > card **Notification emails** > **Onboarding form** box: `heshantharushka2002@gmail.com, bad` > **Save notification settings** | "Invalid email address: bad" in red under that box and at the top of the page; nothing saved |
+| 10.2 | Put back `heshantharushka2002@gmail.com`, **Also email the CSM** ticked > Save | "Notification settings saved." |
+| 10.2a | The card has three boxes: **Onboarding form**, **Website change requests**, **Lead forms**, each "(separate with commas)" with a grey help line | Lead forms help says "Will be used by the Lead Replacement and Unresponsive Lead forms." Under the tick box: it applies to onboarding and lead forms; website requests always go to the CSM |
+| 10.2b | **Website change requests** box: `nope` > Save. Then **Lead forms** box: `also bad` > Save | Each time the red "Invalid email address: …" is under the box with the mistake, the other boxes are not marked, nothing saved |
+| 10.2c | Website change requests `heshantharushka2002+web@gmail.com`, Lead forms `heshantharushka2002+leads@gmail.com` > Save > reload the page | Saved; all three boxes keep their addresses. Audit Logs: "Notification settings updated" naming the lists that changed |
+| 10.2d | Sign in as the Zydeco owner > Home > **Website Change Request** > send one | Gmail: the request arrives at `+web` AND at the client's CSM (one email each). Nothing arrives at `+leads` |
+| 10.2e | As admin, empty the Website change requests box > Save > send another request as the owner | Only the CSM gets it (same as before this setting existed) |
 | 10.3 | Staff sign-in security > **CSMs only** > Save > sign out > sign in as CSM | "Check your email" step |
 | 10.4 | Type `000000` > Verify | "That code is not correct. You have 4 tries left." |
 | 10.5 | Gmail "Your Motionz sign-in code" > type the code > Verify | Lands on My Clients |
@@ -199,6 +208,8 @@ the two IDs shown at the start so you can put them back at the end.
 | 12.1 | **My Clients** | Only clients assigned to Heshan (Test CSM); tiles show numbers once (no duplicate %) |
 | 12.2 | Search `zydeco`, then the **Show** filter | Works |
 | 12.3 | Zydeco > **Update setup** | Onboarding answers + 4 steps |
+| 12.3a | **My Clients**: a client with no contract | Small grey "No contract" under the company name; not shown for clients that have one |
+| 12.3b | **Update setup** on a client with no contract | Blue notice near the top: "This client has no contract attached yet. Ask an admin to attach it (Admin → Clients → <client> → Contract)." After an admin attaches one and you reload, the notice is gone. The CSM has no way to attach it themselves |
 | 12.4 | **Edit step** on step 2 > clear Right now > Save step | "\"Right now\" cannot be empty…" |
 | 12.5 | Type text, Status **In progress** > Save | Saved; progress unchanged; client Home shows it as current step |
 | 12.6 | **Open portal** | Opens in a **new tab**; staff bar "Viewing as staff · <client>" (no "Back to CSM" link); hero says "Welcome, Heshan." (client's name, not the CSM's) |
