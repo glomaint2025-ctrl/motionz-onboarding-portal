@@ -191,7 +191,7 @@ can put it back at the end.
 | 10.17 | Paste the whole `<iframe …>` embed code of the **original** texting form > Save | Saved; the box shows the original ID again |
 | 10.18 | As the client: **Setup Progress** > **Open texting form** | The original form opens |
 
-### 10c. Automations (same page, card "Automations (optional)")
+### 10c. Automations — HIDDEN for now (7 Oct: the card is not shown until the client asks for it; skip 10.19–10.26)
 
 In GoHighLevel: Automation > Workflows > create a workflow > trigger **Inbound Webhook** > copy its URL.
 For a quick test without GoHighLevel you can use a throw-away link from https://webhook.site.
