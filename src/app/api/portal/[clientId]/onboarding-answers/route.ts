@@ -3,7 +3,7 @@ import { getTenantById, DEMO_TENANT_UUID } from '@/lib/db';
 import { onboardingSubmissionRepository } from '@/lib/db/repositories';
 import { assertPortalAccess, handleAuthError } from '@/lib/auth/guard';
 import { assertModuleEnabled } from '@/lib/auth/modules';
-import { extractAnswers } from '@/lib/onboarding/answers';
+import { displayAnswers } from '@/lib/onboarding/answers';
 
 /**
  * GET /api/portal/[clientId]/onboarding-answers
@@ -36,8 +36,8 @@ export async function GET(
         id: row.id,
         submittedAt: row.submitted_at,
         submitterEmail: row.submitter_email || null,
-        // The same filter the webhook uses when it stores a submission, so nothing internal gets out.
-        answers: extractAnswers(row.answers),
+        // Text answers and uploaded files only, in the order of the form; nothing internal gets out.
+        answers: displayAnswers(row.answers),
       }));
 
     return NextResponse.json(

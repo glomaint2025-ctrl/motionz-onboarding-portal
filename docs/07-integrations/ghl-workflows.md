@@ -55,9 +55,37 @@ Each client's **Book a Call** page shows their assigned CSM's calendar. A CSM wi
 
 The same applies if the default calendar is changed: the new default must also be in the workflow's trigger filters.
 
-## 3. Onboarding form: in the sub-account that owns form `wyM27h1ZCiwGoyXE03oC`
+## 3. Onboarding form: NO LONGER NEEDED (since 7 Oct 2026)
 
-Saves the answers to the client's portal and emails the notification list (client answers 5.2/5.3).
+**The onboarding form is now built into the portal.** Clients fill it in on **Setup Progress → Open
+onboarding form**, and the portal saves the answers and sends the notification emails itself. The
+workflow `Portal: onboarding form` is not needed any more: set it to **Draft** (or delete it). New
+sub-accounts and snapshots do not need it.
+
+**What stops happening in GoHighLevel — check this before switching the workflow off:**
+
+- The GHL form "Onboarding Rejuvenation | Forms" (`wyM27h1ZCiwGoyXE03oC`) is no longer shown to
+  clients, so it receives **no new submissions**.
+- **The contact is not created or updated by this form any more.** The answers (business name,
+  phones, address, the custom fields the form filled) are saved in the portal only; nothing is
+  written to the GHL contact. The portal never writes to GHL.
+- **Any GHL automation that started from that form submission no longer starts.** That includes
+  anything added under step 4 below (Facebook campaign launch steps, the Skool invite) and any other
+  workflow with the trigger **Form Submitted = the onboarding form**: tags, pipeline moves,
+  internal notifications, follow-up messages. Each of these must be **triggered another way**, for
+  example by hand when the "Onboarding form submitted" email arrives, or from a different GHL
+  trigger (a tag added by the team, an opportunity stage, the contract being signed).
+- The notification email itself is **not** affected: the portal sends it to the same list
+  (**Admin → Settings & Integrations → Onboarding form notifications**, plus the client's CSM when
+  that box is ticked).
+
+If the old workflow is left published and someone submits the GHL form directly (an old link or
+bookmark), the portal still accepts it: the `onboarding_form` event below keeps working and the
+answers appear next to the ones sent from the portal.
+
+### The old setup (kept for reference)
+
+Saved the answers to the client's portal and emailed the notification list (client answers 5.2/5.3).
 
 1. Workflow `Portal: onboarding form`.
 2. **Trigger:** **Form Submitted**, filter: form = the onboarding form.
@@ -65,7 +93,7 @@ Saves the answers to the client's portal and emails the notification list (clien
 4. Optional, in the same workflow (handled in GHL, not the portal): the Facebook campaign launch steps and the Skool invite, once the client confirms what they want (see the client questions list).
 5. Publish.
 
-**Routing:** by the submitter's **email**. The portal pre-fills the email on the embedded form. Submissions that match no client appear in **Admin → Settings & Integrations → Unmatched onboarding submissions**, where an admin links them to the right client.
+**Routing:** by the submitter's **email**. Submissions that match no client appear in **Admin → Settings & Integrations → Unmatched onboarding submissions**, where an admin links them to the right client.
 
 **Who is emailed:** the addresses in **Admin → Settings & Integrations → Onboarding form notifications** (e.g. the media buyer), plus the client's CSM if that box is ticked. They do not need portal accounts.
 
@@ -76,7 +104,7 @@ Saves the answers to the client's portal and emails the notification list (clien
 GHL workflows have a **Test Workflow** button. After running it:
 - **Leads:** the lead appears on that client's Leads page.
 - **CSM call:** the date appears on the client's home page.
-- **Onboarding form:** the answers appear on Admin → Clients → (client) and the notification email arrives.
+- **Onboarding form (old workflow only, see section 3):** the answers appear on Admin → Clients → (client) and the notification email arrives.
 
 Every received event is also recorded in **Admin → Audit Logs** (`ghl.webhook.*`): stored events by type, and events that were not stored as `ghl.webhook.ignored` (could not be placed) or `ghl.webhook.rejected` (malformed), each with the reason and the Location ID or email.
 

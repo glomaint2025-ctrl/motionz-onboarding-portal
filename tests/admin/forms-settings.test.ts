@@ -20,10 +20,9 @@ async function run() {
   resetStore();
   const store = getStore();
 
-  const ONBOARDING_DEFAULT = PORTAL_LINKS.onboardingFormId;
+  // The onboarding form is built into the portal now, so it is no longer one of the GoHighLevel forms.
   const A2P_DEFAULT = PORTAL_LINKS.a2pFormId;
   const DEFAULTS = {
-    onboarding_form_id: ONBOARDING_DEFAULT,
     a2p_form_id: A2P_DEFAULT,
     lead_replacement_form_id: '',
     unresponsive_lead_form_id: '',
@@ -121,7 +120,8 @@ async function run() {
   assert.strictEqual(res.status, 200);
   let data = await res.json();
   assert.strictEqual(data.success, true);
-  assert.deepStrictEqual(data.forms, DEFAULTS, 'the two existing forms are the defaults; the two new ones start empty');
+  assert.deepStrictEqual(data.forms, DEFAULTS, 'the texting form is the default; the two Leads forms start empty');
+  assert.ok(!('onboarding_form_id' in data.forms), 'the onboarding form is not a GoHighLevel form any more');
   assert.deepStrictEqual(await resolveFormSettings(), DEFAULTS);
   console.log(' PASS: GET returns the built-in forms by default.');
 
@@ -141,7 +141,7 @@ async function run() {
   const badInputs: [string, unknown, string][] = [
     ['lead_replacement_form_id', 'not a form', 'Lead replacement form'],
     ['unresponsive_lead_form_id', 'https://motionz.ai/contact-us', 'Unresponsive lead form'],
-    ['onboarding_form_id', 'https://api.leadconnectorhq.com/widget/booking/SRn2ONyB295xnnPR5JwR', 'Onboarding form'],
+    ['a2p_form_id', 'https://api.leadconnectorhq.com/widget/booking/SRn2ONyB295xnnPR5JwR', 'Texting registration form'],
     ['a2p_form_id', 12345, 'Texting registration form'],
     ['lead_replacement_form_id', { id: REPLACEMENT }, 'Lead replacement form'],
   ];
@@ -163,7 +163,7 @@ async function run() {
   console.log(' PASS: invalid links are refused with 400 and the form is named.');
 
   // ---------------------------------------------------------------- required forms cannot be emptied
-  for (const [field, label] of [['onboarding_form_id', 'Onboarding form'], ['a2p_form_id', 'Texting registration form']]) {
+  for (const [field, label] of [['a2p_form_id', 'Texting registration form']]) {
     for (const empty of ['', '   ', null]) {
       res = await adminPut({ [field]: empty });
       assert.strictEqual(res.status, 400, `${field} cannot be set to ${JSON.stringify(empty)}`);
@@ -174,11 +174,23 @@ async function run() {
   }
   assert.deepStrictEqual((await (await adminGet()).json()).forms, DEFAULTS);
   assert.strictEqual(formAudits().length, 0, 'refused saves are not audit-logged');
-  console.log(' PASS: the onboarding and texting forms cannot be emptied.');
+  console.log(' PASS: the texting form cannot be emptied.');
+
+  // ---------------------------------------------------------------- the old onboarding field is ignored
+  for (const sent of [NEW_ONBOARDING, '', null, 'not a form', 'javascript:alert(1)']) {
+    res = await adminPut({ onboarding_form_id: sent });
+    assert.strictEqual(res.status, 200, `onboarding_form_id=${JSON.stringify(sent)} is ignored, not an error`);
+    data = await res.json();
+    assert.deepStrictEqual(data.forms, DEFAULTS);
+    assert.deepStrictEqual(data.changed, []);
+  }
+  assert.strictEqual(savedSetting(), undefined, 'an ignored field saves nothing');
+  assert.strictEqual(formAudits().length, 0);
+  console.log(' PASS: an onboarding form link sent by an older page is ignored.');
 
   // ---------------------------------------------------------------- saving
   res = await adminPut({
-    onboarding_form_id: ONBOARDING_DEFAULT,
+    onboarding_form_id: NEW_ONBOARDING,
     a2p_form_id: `https://api.leadconnectorhq.com/widget/form/${A2P_DEFAULT}`,
     lead_replacement_form_id: `  https://link.motionz.ai/widget/form/${REPLACEMENT}?notrack=true  `,
     unresponsive_lead_form_id: `<iframe src="https://api.leadconnectorhq.com/widget/form/${UNRESPONSIVE}" id="inline-${UNRESPONSIVE}" data-form-id="${UNRESPONSIVE}" title="Unresponsive Lead"></iframe>`,
@@ -206,19 +218,20 @@ async function run() {
   assert.deepStrictEqual(data.changed, []);
   assert.strictEqual(formAudits().length, 1);
 
-  // A field that is left out keeps its value; the existing forms can be pointed at new ones.
+  // A field that is left out keeps its value; the texting form can be pointed at a new one.
   res = await adminPut({ onboarding_form_id: `https://api.leadconnectorhq.com/widget/form/${NEW_ONBOARDING}`, a2p_form_id: NEW_A2P });
   assert.strictEqual(res.status, 200);
   data = await res.json();
   assert.deepStrictEqual(data.forms, {
-    onboarding_form_id: NEW_ONBOARDING,
     a2p_form_id: NEW_A2P,
     lead_replacement_form_id: REPLACEMENT,
     unresponsive_lead_form_id: UNRESPONSIVE,
   });
+  assert.deepStrictEqual(data.changed, ['a2p_form_id']);
   assert.strictEqual(formAudits().length, 2);
-  audit = formAudits().find((l) => l.details?.changed?.includes('onboarding_form_id'))!;
-  assert.deepStrictEqual(audit.details?.previous, { onboarding_form_id: ONBOARDING_DEFAULT, a2p_form_id: A2P_DEFAULT });
+  audit = formAudits().find((l) => l.details?.changed?.includes('a2p_form_id'))!;
+  assert.deepStrictEqual(audit.details?.previous, { a2p_form_id: A2P_DEFAULT });
+  assert.ok(!JSON.stringify(savedSetting()!.value).includes(NEW_ONBOARDING), 'the onboarding link is never stored');
   console.log(' PASS: PUT saves the ids from pasted links and embed snippets, and is audit-logged.');
 
   // ---------------------------------------------------------------- portal: data API
@@ -278,7 +291,8 @@ async function run() {
   assert.strictEqual(data.forms.unresponsive_lead_form_id, '');
   data = await (await portalForms(clientA, clientCookie)).json();
   assert.strictEqual(data.forms.lead_replacement_form_id, '', 'a cleared form is hidden from clients');
-  assert.strictEqual(data.forms.onboarding_form_id, NEW_ONBOARDING);
+  assert.strictEqual(data.forms.a2p_form_id, NEW_A2P);
+  assert.strictEqual(data.forms.onboarding_form_id, undefined);
 
   // A malformed stored value is never served: the built-in form is used instead.
   savedSetting()!.value = {

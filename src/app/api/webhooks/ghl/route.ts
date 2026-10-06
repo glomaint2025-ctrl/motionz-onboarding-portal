@@ -5,15 +5,13 @@ import {
   leadRepository,
   appointmentRepository,
   userRepository,
-  csmAssignmentRepository,
   onboardingSubmissionRepository,
-  appSettingsRepository,
   securityEventRepository,
 } from '@/lib/db/repositories';
 import { logAuditEvent } from '@/lib/db';
 import { resolveBaseUrl, enforceRateLimit, getClientIp } from '@/lib/auth/security-utils';
-import { sendEmail, onboardingSubmittedEmail } from '@/lib/email';
 import { extractAnswers } from '@/lib/onboarding/answers';
+import { findRecentDuplicate, notifyOnboardingSubmitted } from '@/lib/onboarding/submissions';
 import type { Tenant } from '@/lib/db/schema';
 
 /**
@@ -22,7 +20,8 @@ import type { Tenant } from '@/lib/db/schema';
  * Events (from `customData.event` on GHL workflow "Webhook" actions, or `type` on marketplace events):
  * - lead            Opportunity created / stage changed in a client's sub-account. Routed by location id.
  * - csm_call        Call booked with a CSM on the Motionz calendar. Routed by the client's email.
- * - onboarding_form Onboarding form submitted. Routed by the submitter's email.
+ * - onboarding_form Onboarding form submitted in GoHighLevel. Routed by the submitter's email.
+ *                   (Clients now fill the form in inside the portal; this stays for an old workflow.)
  * - ContactCreate / ContactUpdate (marketplace format). Other marketplace events are ignored.
  *
  * Authentication: the shared secret GHL_WEBHOOK_SECRET, sent either as the
@@ -89,12 +88,6 @@ async function tenantByEmail(email: string | undefined): Promise<Tenant | null> 
 
 const contactEmail = (p: Payload) => str(p.email) || str(p.contact?.email);
 
-/** Key-order independent JSON: Postgres JSONB does not keep the order answers were sent in. */
-function stableJson(value: Record<string, unknown> | null | undefined): string {
-  const source = value || {};
-  return JSON.stringify(Object.keys(source).sort().map((key) => [key, source[key]]));
-}
-
 async function handleLead(p: Payload): Promise<HandlerResult> {
   const tenant = await tenantByLocation(str(p.location?.id) || str(p.locationId));
   if (!tenant) return { ignored: 'Unknown or missing location id.' };
@@ -146,14 +139,7 @@ async function handleOnboardingForm(request: NextRequest, p: Payload): Promise<H
   const contactId = str(p.contact_id) || str(p.contact?.id);
 
   // GHL retries webhooks; skip an identical submission received in the last 10 minutes.
-  const recent = await onboardingSubmissionRepository.listByTenant(tenant?.id ?? null, 5);
-  const duplicate = recent.find(
-    (r) =>
-      r.submitter_email === email &&
-      Date.now() - new Date(r.submitted_at).getTime() < 10 * 60 * 1000 &&
-      stableJson(r.answers) === stableJson(answers)
-  );
-  if (duplicate) {
+  if (await findRecentDuplicate(tenant?.id ?? null, email, answers)) {
     return { tenant: tenant || undefined, ignored: 'Duplicate submission.', info: { email: clip(email?.toLowerCase(), 255) } };
   }
 
@@ -165,32 +151,15 @@ async function handleOnboardingForm(request: NextRequest, p: Payload): Promise<H
   });
 
   // Notify the media buyer list (and the assigned CSM) immediately (client answers 5.2 / 5.3).
-  const settings = await appSettingsRepository.get('notifications');
-  const recipients = new Set(settings.onboarding_form_recipients.map((r) => r.toLowerCase()));
-  if (process.env.MEDIA_BUYER_EMAIL) recipients.add(process.env.MEDIA_BUYER_EMAIL.toLowerCase());
-  if (tenant && settings.notify_assigned_csm) {
-    const assignment = await csmAssignmentRepository.findByTenant(tenant.id);
-    const csm = assignment ? await userRepository.findById(assignment.csm_user_id) : null;
-    if (csm?.email) recipients.add(csm.email.toLowerCase());
-  }
+  // The portal's own onboarding form sends the same emails through the same helper.
+  const notified = await notifyOnboardingSubmitted({
+    tenant: tenant || null,
+    submitterEmail: email,
+    answers,
+    baseUrl: resolveBaseUrl(request),
+  });
 
-  const baseUrl = resolveBaseUrl(request);
-  const companyName = tenant?.name || answers['DBA Business Name'] || email || 'Unknown client';
-  await Promise.all(
-    Array.from(recipients).map((to) =>
-      sendEmail(
-        onboardingSubmittedEmail({
-          to,
-          companyName,
-          portalUrl: tenant ? `${baseUrl}/admin/clients/${tenant.id}` : `${baseUrl}/admin/integrations`,
-          fields: tenant ? answers : { 'Submitted by': email || '', ...answers },
-          matched: Boolean(tenant),
-        })
-      )
-    )
-  );
-
-  return { tenant: tenant || undefined, notified: recipients.size };
+  return { tenant: tenant || undefined, notified };
 }
 
 async function handleMarketplaceEvent(type: string, p: Payload): Promise<HandlerResult> {

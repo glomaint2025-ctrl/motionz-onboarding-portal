@@ -5,7 +5,6 @@
 export const PORTAL_LINKS = {
   slackInvite: 'https://join.slack.com/t/motionzai/shared_invite/zt-43dl2h1x0-FWRlbT9S7lcXENJhcO4XrQ',
   skoolCommunity: 'https://www.skool.com/motionz-your-clinic-1141/about',
-  onboardingFormId: 'wyM27h1ZCiwGoyXE03oC',
   a2pFormId: 'SH2jCt6DkV69gF6YHPni',
   csmBookingCalendarId: 'SRn2ONyB295xnnPR5JwR',
 } as const;

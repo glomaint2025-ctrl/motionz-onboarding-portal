@@ -79,8 +79,46 @@ Admin → Clients before assuming anything. Old test sheets may remain in the Dr
 | Roof (12.1) | Sent a Google API key (in chat). | Set `GOOGLE_SOLAR_API_KEY` in Vercel (production + preview) and `.env.local`, redeploy, test a real address. Ask him to **restrict the key** in Google Cloud to Geocoding API + Solar API. Key was shared in plain text; consider rotating it later. |
 | Email domain | Resend domain **verified**. | Set `EMAIL_FROM_ADDRESS` (e.g. `portal@mail.motionz.ai`) and `EMAIL_FROM_NAME` in Vercel, redeploy, test an invite to a non-owner address. Optionally add a reply-to address (needs a small code change in `src/lib/email/index.ts`). |
 
-## Decision: forms stay in GHL (supersedes the "native onboarding form" row above)
-All client-facing forms stay **GHL forms embedded in the portal** (iframe, email/name pre-filled via URL
+## Decision reversed on 7 Oct 2026: the onboarding form is native (built into the portal)
+The client asked for it in so many words: *"I meant them filling out the form IN the portal and us
+seeing the answers on the portal, not on GoHighLevel."* So the onboarding form is no longer a GHL
+form in a pop-up. **GoHighLevel no longer receives onboarding answers.** The texting (A2P) form and
+the two Leads forms are unchanged and still follow the section below.
+
+- **Questions:** `src/lib/onboarding/form-definition.ts` is the one place (5 sections, 31 questions,
+  copied from the GHL form "Onboarding Rejuvenation | Forms"; 13 required). The page and the server
+  check both read it. To add, remove or reword a question, edit that file — a developer change now,
+  not a GHL edit. Answers are stored under the question **label**, so old GHL submissions and new
+  ones display the same way; if a label is reworded, add the old wording to that field's `aliases`.
+- **Page:** `/portal/[clientId]/onboarding/form` (Setup Progress → "Open onboarding form" /
+  "Update your answers"). Pre-fills from the client record and from the newest earlier submission;
+  keeps an unsent draft in the browser (`localStorage`, per client; text only, never files).
+- **API:** `POST /api/portal/[clientId]/onboarding-form` (multipart). Checks every answer
+  (`src/lib/onboarding/form-validation.ts`), 10 sends an hour per person, same answers within
+  10 minutes ignored. Creates an `onboarding_submissions` row (`ghl_contact_id` empty, `answers`
+  carries `_source: "portal"`, which is never displayed), writes audit action
+  `onboarding.form_submitted` and sends the same notification emails as before.
+- **Files:** private Supabase Storage bucket **`onboarding-files`**, created by the app on the first
+  upload (`src/lib/storage/onboarding-files.ts`). Path `<tenantId>/<random folder>/<file name>`.
+  PDF, PNG, JPG, WEBP, CSV, XLSX, DOCX, TXT; 5 files per upload question; **4 MB in total** per
+  submission (Vercel's request limit). No video — clients are told to send videos on Slack.
+  `answers` holds `[{ name, path, size }]` per upload question; people open a file through
+  `GET /api/portal/[clientId]/onboarding-files?path=…`, which checks access and redirects to a
+  signed link valid for 5 minutes. No migration and no new env var.
+- **Shared code:** `src/lib/onboarding/submissions.ts` holds the duplicate check and the notification
+  emails; the portal form and the GHL webhook both call it.
+- **GHL side:** the webhook event `onboarding_form` still works, so nothing breaks if the old
+  workflow `Portal: onboarding form` fires, but clients can no longer reach the GHL form from the
+  portal. Set that workflow to Draft. **Any GHL automation that started from that form submission
+  (Skool invite, Facebook launch steps, tags, contact fields) no longer starts** and needs another
+  trigger — see `docs/07-integrations/ghl-workflows.md` section 3. Tell the client.
+- **Admin → Settings & Integrations:** the "GoHighLevel forms" card has no Onboarding form row any
+  more; `onboarding_form_id` and `PORTAL_LINKS.onboardingFormId` were removed (the API ignores the
+  field if an old page sends it). "Onboarding forms without a client" only ever lists GHL
+  submissions; portal submissions always belong to a client.
+
+## Earlier decision (still true for the texting and Leads forms): forms stay in GHL
+All other client-facing forms stay **GHL forms embedded in the portal** (iframe, email/name pre-filled via URL
 params). The client edits forms only in GHL; the GHL "Form Submitted" workflow sends the submission to
 `/api/webhooks/ghl` and the portal stores **every field generically** (`onboarding_submissions.answers`
 JSONB, keyed by GHL field label). New or renamed GHL fields therefore need **no portal code or DB
@@ -90,7 +128,8 @@ change**. Keep this design for any new form (add a new `customData.event` value 
 button becomes **Update your answers**. Data comes from `GET /api/portal/[clientId]/onboarding-answers`
 (needs the Setup Progress module; own client only; newest 10). The list of webhook-only fields that
 are never treated as answers lives in `src/lib/onboarding/answers.ts` and is used both when a
-submission is stored and when it is shown to the client.
+submission is stored and when it is shown (`displayAnswers`, which also orders answers like the form
+and turns uploaded files into download links).
 
 ### Where form links are managed (no developer needed)
 **Admin → Settings & Integrations → "GoHighLevel forms".** An admin pastes a form link, the `<iframe>`
@@ -99,20 +138,19 @@ The portal keeps only the form ID and shows the form straight away:
 
 | Form | Shown on | Can be empty? |
 |---|---|---|
-| Onboarding form | Setup Progress → "Open onboarding form" | No (built-in default) |
 | Texting registration form | Setup Progress → "Open texting form" | No (built-in default) |
 | Lead replacement form | Leads → "Request a lead replacement" | Yes (empty = button hidden) |
 | Unresponsive lead form | Leads → "Report an unresponsive lead" | Yes (empty = button hidden) |
 
 - Stored in `app_settings`, key `forms` (`FormSettings` in `src/lib/ghl-forms.ts`, read through
   `getFormSettings()` / `resolveFormSettings()` in `app-settings.repository.ts`). No migration needed.
-  `PORTAL_LINKS.onboardingFormId` / `a2pFormId` are now only the defaults for that setting.
+  `PORTAL_LINKS.a2pFormId` is now only the default for that setting.
 - `parseGhlFormId()` turns pasted text into an ID. API: `GET/PUT /api/admin/settings/forms` (admin only,
   audit action `settings.forms_updated`).
 - The portal gets the IDs from `forms` in `GET /api/portal/[clientId]/data` (Setup Progress) and from
   `GET /api/portal/[clientId]/forms` (Leads page; also returns the email to pre-fill). The two Leads
   forms are left out for anyone who cannot open the Leads section.
-- Every form pop-up is `src/components/portal/GhlFormModal.tsx`. To add a fifth form: add a key to
+- Every GHL form pop-up is `src/components/portal/GhlFormModal.tsx`. To add another GHL form: add a key to
   `FormSettings` + `FORM_SETTING_FIELDS`, then open it with `GhlFormModal` where it belongs.
 - Saving a link only makes the form **appear**. To get its submissions into the portal, the form still
   needs its own GHL "Form Submitted" workflow → `/api/webhooks/ghl` (see the paragraph above).
