@@ -241,7 +241,7 @@ export async function POST(request: Request) {
       request,
     });
 
-    // Each new client gets their own copy of the tracking sheet (client answer P1.4).
+    // Each new client gets their own Drive folder with a tracking sheet and a Money Leak Calculator copy.
     const sheet = await provisionClientSheet({
       tenantId: newTenant.id,
       clientName: newTenant.name,
@@ -254,7 +254,9 @@ export async function POST(request: Request) {
       magicLinkUrl,
       // Whether the invite email actually went out; the success screen words itself on this.
       emailDelivered: Boolean(emailDelivered),
+      // sheet.ok: the tracking sheet was created. sheet.calculatorOk: the calculator copy was created.
       sheet,
+      googleFiles: { trackingSheet: sheet.ok, calculator: Boolean(sheet.calculatorOk) },
     });
   } catch (err: any) {
     if (err.statusCode === 401 || err.statusCode === 403) {

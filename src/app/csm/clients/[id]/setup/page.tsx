@@ -6,6 +6,7 @@ import Link from 'next/link';
 import { Card, CardHeader, Select, Button, StatusBadge, buttonClasses } from '@/components/ui';
 import { OnboardingAnswers, OnboardingSubmissionView } from '@/components/onboarding/OnboardingAnswers';
 import { Notice, useRevealOnMessage } from '@/components/admin/Notice';
+import { Icon } from '@/components/brand';
 
 const STEP_STATUS_LABELS: Record<string, string> = {
   not_started: 'Not started',
@@ -201,8 +202,15 @@ export default function CSMClientSetupEditorPage() {
           </h1>
           <p>Update each setup step and the wording the client sees for it.</p>
         </div>
-        <Link href={`/portal/${clientId}`} className={buttonClasses({ variant: 'secondary' })}>
+        <Link
+          href={`/portal/${clientId}`}
+          target="_blank"
+          rel="noopener noreferrer"
+          className={buttonClasses({ variant: 'secondary' })}
+        >
           Open portal
+          <Icon name="external" size={16} />
+          <span className="sr-only">(opens in a new tab)</span>
         </Link>
       </div>
 

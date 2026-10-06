@@ -13,7 +13,7 @@ import {
   onboardingSubmissionRepository,
 } from '@/lib/db/repositories';
 import { requireAuth, handleAuthError } from '@/lib/auth/guard';
-import { provisionClientSheet } from '@/lib/integrations/sheets/provision';
+import { provisionClientSheet, renameClientFiles } from '@/lib/integrations/sheets/provision';
 import { createInvitation, resendInvitation, revokeInvitation } from '@/lib/auth/invitations';
 import { PORTAL_MODULES } from '@/lib/portal-modules';
 
@@ -45,6 +45,11 @@ export async function GET(
     ]);
 
     const sheetConfig = integrations.find((i) => i.integration_type === 'google_sheets');
+    const googleFiles = {
+      trackingSheetUrl: sheetConfig?.config_data?.sheet_url || null,
+      calculatorUrl: sheetConfig?.config_data?.calculator_url || null,
+      folderUrl: sheetConfig?.config_data?.folder_url || null,
+    };
 
     const csm = assignment ? await userRepository.findById(assignment.csm_user_id) : null;
     const availableCsms = (await userRepository.listByRole('csm')).map((u) => ({ id: u.id, name: u.full_name, email: u.email }));
@@ -57,7 +62,8 @@ export async function GET(
       features: onlyModules(toggles),
       members,
       invitations,
-      trackingSheetUrl: sheetConfig?.config_data?.sheet_url || null,
+      trackingSheetUrl: googleFiles.trackingSheetUrl,
+      googleFiles,
       onboardingSubmissions,
       availableCsms,
     });
@@ -134,6 +140,8 @@ export async function PUT(
       }
     }
 
+    // Remembered before saving, to tell afterwards whether the company name really changed.
+    const previousName = tenant.name;
     const updatedTenant = Object.keys(updates).length > 0
       ? await tenantRepository.update(tenant.id, updates)
       : tenant;
@@ -161,7 +169,15 @@ export async function PUT(
       details: { updates: body },
     });
 
-    return NextResponse.json({ success: true, tenant: updatedTenant });
+    // A renamed client keeps the same Drive folder and files; only their names follow.
+    // The save above already succeeded, so a Drive problem is only reported, never fatal.
+    let driveWarning: string | undefined;
+    if (updates.name !== undefined && updates.name !== previousName) {
+      const renamed = await renameClientFiles({ tenantId: tenant.id, clientName: updates.name });
+      if (!renamed.ok) driveWarning = renamed.error || 'Google Drive did not answer.';
+    }
+
+    return NextResponse.json({ success: true, tenant: updatedTenant, ...(driveWarning ? { driveWarning } : {}) });
   } catch (err: any) {
     if (err.statusCode === 401 || err.statusCode === 403) {
       return handleAuthError(err);
@@ -219,8 +235,11 @@ export async function PATCH(
     const body = await request.json();
     const { action, invitationId, memberId, reason } = body;
 
-    // Create (or re-link) the client's tracking sheet, e.g. when it failed during client creation.
-    if (action === 'create_sheet') {
+    // Set up (or finish setting up) the client's Google files: Drive folder, tracking sheet and
+    // calculator. Used when it failed during client creation, and to bring a client created before
+    // per-client folders up to date (their sheet is moved into the new folder, not copied).
+    // "create_sheet" is the older name for the same action.
+    if (action === 'setup_google_files' || action === 'create_sheet') {
       const sheet = await provisionClientSheet({
         tenantId: tenant.id,
         clientName: tenant.name,
@@ -233,9 +252,21 @@ export async function PATCH(
         action: 'integration.sheet_created',
         resource_type: 'tenant',
         resource_id: tenant.id,
-        details: { ok: sheet.ok, error: sheet.error },
+        details: { ok: sheet.ok, error: sheet.error, calculator: Boolean(sheet.calculatorOk), warnings: sheet.warnings },
       });
-      return NextResponse.json({ success: sheet.ok, sheet, error: sheet.error }, { status: sheet.ok ? 200 : 502 });
+      return NextResponse.json(
+        {
+          success: sheet.ok,
+          sheet,
+          googleFiles: {
+            trackingSheetUrl: sheet.url || null,
+            calculatorUrl: sheet.calculatorUrl || null,
+            folderUrl: sheet.folderUrl || null,
+          },
+          error: sheet.error,
+        },
+        { status: sheet.ok ? 200 : 502 }
+      );
     }
 
     // 1. Tenant-level suspension (Admin bans whole client company portal + cascades to all members)

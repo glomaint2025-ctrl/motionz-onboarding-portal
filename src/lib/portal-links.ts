@@ -8,8 +8,6 @@ export const PORTAL_LINKS = {
   onboardingFormId: 'wyM27h1ZCiwGoyXE03oC',
   a2pFormId: 'SH2jCt6DkV69gF6YHPni',
   csmBookingCalendarId: 'SRn2ONyB295xnnPR5JwR',
-  /** "Rejuvenation Money Leak Calculator": one view-only sheet shared with every client (client answer, 5 Oct 2026). */
-  moneyLeakCalculatorSheet: 'https://docs.google.com/spreadsheets/d/1pDXSCpnGIJXLnXheL-yQofUWvZ8mSDk-YM6nLl_pZrw/edit#gid=2143281968',
 } as const;
 
 /** GHL form URL, optionally pre-filling the email so the submission can be matched to the client. */

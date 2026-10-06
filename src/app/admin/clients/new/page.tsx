@@ -56,7 +56,7 @@ export default function AddClientPage() {
   const [copyState, setCopyState] = useState<'idle' | 'copied' | 'failed'>('idle');
   const [emailDelivered, setEmailDelivered] = useState(false);
   const [invitedEmail, setInvitedEmail] = useState('');
-  const [sheet, setSheet] = useState<{ ok?: boolean; url?: string; error?: string } | null>(null);
+  const [sheet, setSheet] = useState<{ ok?: boolean; calculatorOk?: boolean; url?: string; error?: string } | null>(null);
 
   const toggleFeature = (key: string) => {
     setFeatures((prev) => ({ ...prev, [key]: prev[key] === false }));
@@ -326,8 +326,8 @@ export default function AddClientPage() {
           }}
         >
           {loading
-            ? 'Setting up the portal, tracking sheet and invitation. Please keep this page open.'
-            : 'Adding a client can take a little while, because the portal, tracking sheet and invitation are all set up together.'}
+            ? 'Setting up the portal, Google files and invitation. Please keep this page open.'
+            : 'Adding a client can take a little while, because the portal, Google files and invitation are all set up together.'}
         </p>
         <div style={{ display: 'flex', gap: 'var(--space-3)', justifyContent: 'flex-end', marginBottom: 'var(--space-8)' }}>
           <Link
@@ -377,9 +377,19 @@ export default function AddClientPage() {
             : `${createdTenant?.name || 'The client'} is ready, but the invitation email could not be sent. Copy the link below and send it to the client yourself.`}
         </p>
 
+        {sheet && sheet.ok && sheet.calculatorOk && (
+          <p style={{ margin: 'var(--space-2) 0 0', color: 'var(--color-text-secondary)', fontSize: 'var(--font-size-sm)' }}>
+            Tracking sheet and calculator created.
+          </p>
+        )}
+        {sheet && sheet.ok && !sheet.calculatorOk && (
+          <Notice style={{ marginTop: 'var(--space-3)' }}>
+            The tracking sheet was created, but the calculator was not. You can finish this later from the client&apos;s page.
+          </Notice>
+        )}
         {sheet && !sheet.ok && (
           <Notice style={{ marginTop: 'var(--space-3)' }}>
-            The tracking sheet was not created. You can add it later from the client&apos;s page.
+            The tracking sheet and calculator were not created. You can add them later from the client&apos;s page.
           </Notice>
         )}
 

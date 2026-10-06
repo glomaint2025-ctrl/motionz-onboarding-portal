@@ -33,7 +33,6 @@ export default function ClientPortalLayout({
 
   const clientId = (params?.clientId as string) || 'demo';
   const [companyName, setCompanyName] = useState<string>('');
-  const [tenantId, setTenantId] = useState<string>('');
   const [viewerRole, setViewerRole] = useState<string | null>(null);
   const [viewerName, setViewerName] = useState<string>('');
   const [featureToggles, setFeatureToggles] = useState<Record<string, boolean>>({});
@@ -78,7 +77,6 @@ export default function ClientPortalLayout({
           return;
         }
         setCompanyName(data.tenant?.name || '');
-        setTenantId(data.tenant?.id || '');
         setViewerRole(data.viewer?.role || null);
         setViewerName(typeof data.viewer?.full_name === 'string' ? data.viewer.full_name : '');
         setFeatureToggles(data.featureToggles || {});
@@ -160,10 +158,6 @@ export default function ClientPortalLayout({
   const isStaffViewer = viewerRole === 'admin' || viewerRole === 'csm';
   // The header shows the signed-in person (staff stay themselves while viewing a client).
   const shellViewer = viewerRole ? { name: viewerName, role: viewerRole } : null;
-  const staffBackHref =
-    viewerRole === 'admin'
-      ? `/admin/clients/${tenantId || clientId}`
-      : `/csm/clients/${tenantId || clientId}/setup`;
 
   const staffBar = isStaffViewer ? (
     <div
@@ -183,14 +177,8 @@ export default function ClientPortalLayout({
         fontWeight: 600,
       }}
     >
+      {/* Staff open a client portal in its own tab, so there is nothing to go back to. */}
       <span>Viewing as staff{companyName ? ` · ${companyName}` : ''}</span>
-      <Link
-        href={staffBackHref}
-        style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', color: 'inherit', textDecoration: 'underline' }}
-      >
-        <Icon name="arrow-left" size={14} />
-        {viewerRole === 'admin' ? 'Back to Admin' : 'Back to CSM'}
-      </Link>
     </div>
   ) : null;
 

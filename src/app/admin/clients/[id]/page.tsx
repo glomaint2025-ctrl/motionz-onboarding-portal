@@ -25,6 +25,14 @@ const linkBoxStyle: React.CSSProperties = {
   userSelect: 'all',
 };
 
+/** The client's Google files: tracking sheet, their own Money Leak Calculator copy, and the Drive folder holding both. */
+interface GoogleFiles {
+  trackingSheetUrl: string | null;
+  calculatorUrl: string | null;
+  folderUrl: string | null;
+}
+const NO_GOOGLE_FILES: GoogleFiles = { trackingSheetUrl: null, calculatorUrl: null, folderUrl: null };
+
 /** Invite links are shown on the address the admin is using, so they can be copied straight from the page. */
 function toLocalLink(link: string): string {
   if (!link || typeof window === 'undefined') return link || '';
@@ -53,9 +61,11 @@ export default function ClientDetailPage() {
   const [companyName, setCompanyName] = useState('');
   const [phone, setPhone] = useState('');
   const [status, setStatus] = useState('active');
-  const [trackingSheetUrl, setTrackingSheetUrl] = useState<string | null>(null);
-  const [sheetBusy, setSheetBusy] = useState(false);
-  const [sheetError, setSheetError] = useState('');
+  const [googleFiles, setGoogleFiles] = useState<GoogleFiles>(NO_GOOGLE_FILES);
+  const [filesBusy, setFilesBusy] = useState(false);
+  const [filesError, setFilesError] = useState('');
+  const [filesNotice, setFilesNotice] = useState('');
+  const [driveWarning, setDriveWarning] = useState('');
   const [submissions, setSubmissions] = useState<OnboardingSubmissionView[]>([]);
   const [csmUserId, setCsmUserId] = useState('');
   const [availableCsms, setAvailableCsms] = useState<{ id: string; name?: string; email: string }[]>([]);
@@ -217,24 +227,57 @@ export default function ClientDetailPage() {
     }
   };
 
-  const handleCreateSheet = async () => {
-    setSheetBusy(true);
-    setSheetError('');
+  // Creates whatever is missing: the Drive folder, the tracking sheet, the calculator copy.
+  // For a client added before folders existed, the existing sheet is moved into the new folder.
+  const handleSetupGoogleFiles = async () => {
+    if (filesBusy) return;
+    setFilesBusy(true);
+    setFilesError('');
+    setFilesNotice('');
     try {
       const res = await fetch(`/api/admin/clients/${clientId}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: 'create_sheet' }),
+        body: JSON.stringify({ action: 'setup_google_files' }),
       });
-      const data = await res.json();
-      if (data.success && data.sheet?.url) setTrackingSheetUrl(data.sheet.url);
-      else setSheetError(data.error || 'Could not create the tracking sheet.');
+      const data = await res.json().catch(() => ({}));
+      const files: GoogleFiles = {
+        trackingSheetUrl: data.googleFiles?.trackingSheetUrl || null,
+        calculatorUrl: data.googleFiles?.calculatorUrl || null,
+        folderUrl: data.googleFiles?.folderUrl || null,
+      };
+      if (res.ok && data.success) {
+        setGoogleFiles(files);
+        const warnings: string[] = Array.isArray(data.sheet?.warnings) ? data.sheet.warnings : [];
+        if (files.trackingSheetUrl && files.calculatorUrl && files.folderUrl && warnings.length === 0) {
+          setFilesNotice('Google files are set up.');
+        } else {
+          setFilesError(
+            warnings.length > 0
+              ? `Set up, with something to check: ${warnings.join(' ')}`
+              : 'The tracking sheet is ready, but the calculator or Drive folder is still missing. Please try again.'
+          );
+        }
+      } else {
+        setFilesError(data.error || 'Could not set up the Google files. Please try again.');
+      }
     } catch {
-      setSheetError('Could not reach the server, so the sheet was not created.');
+      setFilesError('Could not reach the server, so the Google files were not set up.');
     } finally {
-      setSheetBusy(false);
+      setFilesBusy(false);
     }
   };
+
+  const googleFileLinks = [
+    { label: 'Open tracking sheet', href: googleFiles.trackingSheetUrl },
+    { label: 'Open calculator', href: googleFiles.calculatorUrl },
+    { label: 'Open Drive folder', href: googleFiles.folderUrl },
+  ].filter((file): file is { label: string; href: string } => Boolean(file.href));
+  const googleFilesMissing = [
+    !googleFiles.trackingSheetUrl && 'tracking sheet',
+    !googleFiles.calculatorUrl && 'calculator',
+    !googleFiles.folderUrl && 'Drive folder',
+  ].filter((name): name is string => Boolean(name));
 
   const fetchClientDetails = async () => {
     try {
@@ -252,7 +295,11 @@ export default function ClientDetailPage() {
         );
         setInvitations(data.invitations || []);
         setMembers(data.members || []);
-        setTrackingSheetUrl(data.trackingSheetUrl || null);
+        setGoogleFiles({
+          trackingSheetUrl: data.googleFiles?.trackingSheetUrl || data.trackingSheetUrl || null,
+          calculatorUrl: data.googleFiles?.calculatorUrl || null,
+          folderUrl: data.googleFiles?.folderUrl || null,
+        });
         setSubmissions(data.onboardingSubmissions || []);
         setCompanyName(data.tenant.name || '');
         setPhone(data.tenant.phone || '');
@@ -287,6 +334,7 @@ export default function ClientDetailPage() {
     setSaveError('');
     setSaveFieldError(null);
     setSaveSuccess(false);
+    setDriveWarning('');
     const editableStatus = tenant && !tenant.deleted_at && (tenant.status === 'active' || tenant.status === 'onboarding');
     try {
       const res = await fetch(`/api/admin/clients/${clientId}`, {
@@ -304,8 +352,13 @@ export default function ClientDetailPage() {
       const data = await res.json().catch(() => ({}));
       if (res.ok && data.success) {
         if (data.tenant) setTenant(data.tenant);
-        setSaveSuccess(true);
-        setTimeout(() => setSaveSuccess(false), 4000);
+        if (typeof data.driveWarning === 'string' && data.driveWarning) {
+          // Saved, but Google Drive did not follow the new name. Stays on screen until the next save.
+          setDriveWarning(data.driveWarning);
+        } else {
+          setSaveSuccess(true);
+          setTimeout(() => setSaveSuccess(false), 4000);
+        }
       } else {
         const text = data.error || 'Your changes were not saved. Please try again.';
         setSaveError(text);
@@ -705,8 +758,15 @@ export default function ClientDetailPage() {
         </div>
         <div style={{ display: 'flex', gap: 'var(--space-2)', flexWrap: 'wrap' }}>
           {!isArchived && (
-            <Link href={`/portal/${tenant.id}`} className={buttonClasses({ variant: 'secondary' })}>
+            <Link
+              href={`/portal/${tenant.id}`}
+              target="_blank"
+              rel="noopener noreferrer"
+              className={buttonClasses({ variant: 'secondary' })}
+            >
               Open portal
+              <Icon name="external" size={16} />
+              <span className="sr-only">(opens in a new tab)</span>
             </Link>
           )}
           {!isArchived && !isTenantSuspended && (
@@ -859,22 +919,41 @@ export default function ClientDetailPage() {
             </div>
           </div>
           <div style={{ marginBottom: 'var(--space-4)' }}>
-            <span className="ui-label" style={{ display: 'block' }}>Tracking sheet</span>
-            {trackingSheetUrl ? (
-              <a href={trackingSheetUrl} target="_blank" rel="noopener noreferrer" style={{ fontSize: 'var(--font-size-sm)' }}>
-                Open client tracking sheet
-              </a>
-            ) : (
-              <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-3)', flexWrap: 'wrap' }}>
-                <span style={{ fontSize: 'var(--font-size-xs)', color: 'var(--color-text-muted)' }}>No sheet yet.</span>
-                <Button type="button" variant="secondary" size="sm" onClick={handleCreateSheet} disabled={sheetBusy}>
-                  {sheetBusy ? 'Creating...' : 'Create tracking sheet'}
+            <span className="ui-label" style={{ display: 'block' }}>Google files</span>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-3)', flexWrap: 'wrap', fontSize: 'var(--font-size-sm)' }}>
+              {googleFileLinks.map((file) => (
+                <a key={file.label} href={file.href} target="_blank" rel="noopener noreferrer">
+                  {file.label}
+                  <span className="sr-only"> (opens in a new tab)</span>
+                </a>
+              ))}
+              {googleFileLinks.length === 0 && (
+                <span style={{ fontSize: 'var(--font-size-xs)', color: 'var(--color-text-muted)' }}>No Google files yet.</span>
+              )}
+              {googleFilesMissing.length > 0 && (
+                <Button type="button" variant="secondary" size="sm" onClick={handleSetupGoogleFiles} disabled={filesBusy}>
+                  {filesBusy ? 'Setting up...' : googleFileLinks.length === 0 ? 'Set up Google files' : 'Finish Google files setup'}
                 </Button>
-              </div>
+              )}
+            </div>
+            {googleFilesMissing.length > 0 && googleFileLinks.length > 0 && !filesBusy && !filesError && (
+              <span style={{ display: 'block', fontSize: 'var(--font-size-xs)', color: 'var(--color-text-muted)', marginTop: 'var(--space-1)' }}>
+                Still missing: {googleFilesMissing.join(', ')}.
+              </span>
             )}
-            {sheetError && (
-              <span style={{ display: 'block', fontSize: 'var(--font-size-xs)', color: 'var(--color-status-danger-text)', marginTop: 'var(--space-1)' }}>
-                {sheetError}
+            {filesBusy && (
+              <span role="status" style={{ display: 'block', fontSize: 'var(--font-size-xs)', color: 'var(--color-text-muted)', marginTop: 'var(--space-1)' }}>
+                Setting up the Drive folder, tracking sheet and calculator. This can take up to a minute.
+              </span>
+            )}
+            {filesNotice && (
+              <span role="status" style={{ display: 'block', fontSize: 'var(--font-size-xs)', color: 'var(--color-status-done-text)', marginTop: 'var(--space-1)' }}>
+                {filesNotice}
+              </span>
+            )}
+            {filesError && (
+              <span role="alert" style={{ display: 'block', fontSize: 'var(--font-size-xs)', color: 'var(--color-status-danger-text)', marginTop: 'var(--space-1)' }}>
+                {filesError}
               </span>
             )}
           </div>
@@ -955,6 +1034,11 @@ export default function ClientDetailPage() {
         {saveSuccess && (
           <Notice tone="success" style={{ marginBottom: 'var(--space-4)' }}>
             Your changes were saved.
+          </Notice>
+        )}
+        {driveWarning && (
+          <Notice tone="info" style={{ marginBottom: 'var(--space-4)' }}>
+            Saved. The Google Drive folder could not be renamed: {driveWarning}
           </Notice>
         )}
         {saveError && (

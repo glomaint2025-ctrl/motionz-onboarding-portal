@@ -4,7 +4,6 @@ import React, { useState, useEffect } from 'react';
 import { useParams } from 'next/navigation';
 import { Card, CardHeader, StatusBadge, Skeleton } from '@/components/ui';
 import { buttonClasses } from '@/components/ui/Button';
-import { PORTAL_LINKS } from '@/lib/portal-links';
 
 interface SheetLinks {
   /** Normal Google Sheets URL, opened in a new tab. */
@@ -48,8 +47,6 @@ function sheetLinks(config: Record<string, string> | undefined): SheetLinks | nu
   };
 }
 
-const CALCULATOR_LINKS = sheetLinks({ sheet_url: PORTAL_LINKS.moneyLeakCalculatorSheet });
-
 function OpenInNewTab({ href, primary }: { href: string; primary?: boolean }) {
   return (
     <a
@@ -92,6 +89,8 @@ export default function CampaignTrackingPage() {
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState('');
   const [links, setLinks] = useState<SheetLinks | null>(null);
+  // The client's own copy of the Money Leak Calculator (never a sheet shared between clients).
+  const [calculatorLinks, setCalculatorLinks] = useState<SheetLinks | null>(null);
 
   useEffect(() => {
     let isMounted = true;
@@ -109,6 +108,12 @@ export default function CampaignTrackingPage() {
           (i: any) => i.integration_type === 'google_sheets' && i.is_active
         );
         setLinks(sheetLinks(sheet?.config_data));
+        const calculator = sheet?.config_data;
+        setCalculatorLinks(
+          calculator?.calculator_url || calculator?.calculator_id
+            ? sheetLinks({ sheet_url: calculator.calculator_url, spreadsheet_id: calculator.calculator_id })
+            : null
+        );
       })
       .catch((err: any) => {
         if (!isMounted) return;
@@ -171,14 +176,24 @@ export default function CampaignTrackingPage() {
         )}
       </Card>
 
-      {CALCULATOR_LINKS?.embedUrl && (
+      {!loading && !loadError && (
         <Card style={{ marginTop: 'var(--space-6)' }}>
           <CardHeader
             title="Money Leak Calculator"
             subtitle="See where money slips away between leads, booked appointments, shows and closed jobs."
-            action={<OpenInNewTab href={CALCULATOR_LINKS.openUrl} />}
+            action={calculatorLinks ? <OpenInNewTab href={calculatorLinks.openUrl} primary={!calculatorLinks.embedUrl} /> : undefined}
           />
-          <SheetFrame src={CALCULATOR_LINKS.embedUrl} title="Money Leak Calculator (Google Sheets)" />
+          {!calculatorLinks ? (
+            <p style={{ color: 'var(--color-text-secondary)', margin: 0 }}>
+              Your calculator is being set up. It will appear here as soon as it is ready.
+            </p>
+          ) : calculatorLinks.embedUrl ? (
+            <SheetFrame src={calculatorLinks.embedUrl} title="Your Money Leak Calculator (Google Sheets)" />
+          ) : (
+            <p style={{ color: 'var(--color-text-secondary)', margin: 0 }}>
+              This calculator cannot be shown inside the portal. Use &ldquo;Open in new tab&rdquo; to view it.
+            </p>
+          )}
         </Card>
       )}
     </div>

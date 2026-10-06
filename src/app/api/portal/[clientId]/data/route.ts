@@ -21,7 +21,7 @@ import type { UserInvitation } from '@/lib/db/schema';
 import { publicTenant, publicTeamMember, publicInvitation } from '../../public-fields';
 
 /** Non-secret integration fields that the client portal may display. */
-const PUBLIC_INTEGRATION_FIELDS = ['location_id', 'spreadsheet_id', 'sheet_url', 'tab_name'];
+const PUBLIC_INTEGRATION_FIELDS = ['location_id', 'spreadsheet_id', 'sheet_url', 'tab_name', 'calculator_id', 'calculator_url'];
 
 export async function GET(
   request: NextRequest,

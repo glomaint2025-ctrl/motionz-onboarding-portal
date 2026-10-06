@@ -63,7 +63,7 @@ Tips: use a normal window for one account and an **Incognito window** (Ctrl+Shif
 | 3.5 | **CSM** dropdown > pick a CSM | Only that CSM's clients |
 | 3.6 | **Clear Filters** | Everything back |
 | 3.7 | On a row click **…** | Menu: Manage client, Suspend, Archive. Fully visible on screen |
-| 3.8 | **Open portal** on a row | Client portal with bar "Viewing as staff · <client>" and **Back to Admin** |
+| 3.8 | **Open portal** on a row | Client portal opens in a **new tab** with bar "Viewing as staff · <client>" (no "Back to Admin" link); the Clients list is still open in the first tab |
 
 ## 4. Admin: Add client (uses a NEW test client; do not use Zydeco)
 
@@ -75,9 +75,9 @@ Left menu > **Clients** > **Add client**.
 | 4.2 | Contact email `test@` | Browser refuses (incomplete email) |
 | 4.3 | Contact email `someone@motionz.ai` (other fields filled) | "@motionz.ai addresses are for Motionz staff only…" |
 | 4.4 | Business phone `call me 123` | "Enter a valid phone number, for example +1 555 234 5678." |
-| 4.5 | Fill: Company `TC Roofing Test`, Contact `TC Owner`, Email `heshantharushka2002+tc1@gmail.com`, Phone `+1 337 555 0101`; **Assigned CSM** > use keyboard ↓ and Enter to pick **Heshan (Test CSM)**; leave all 9 sections ticked > **Add client** | Waits a few seconds, then dialog "TC Roofing Test is ready. We emailed the invitation to …" and only a **Done** button (no green boxes, no link) |
+| 4.5 | Fill: Company `TC Roofing Test`, Contact `TC Owner`, Email `heshantharushka2002+tc1@gmail.com`, Phone `+1 337 555 0101`; **Assigned CSM** > use keyboard ↓ and Enter to pick **Heshan (Test CSM)**; leave all 9 sections ticked > **Add client** | Waits a few seconds, then dialog "TC Roofing Test is ready. We emailed the invitation to …" the line "Tracking sheet and calculator created." and only a **Done** button (no green boxes, no link) |
 | 4.6 | Gmail: subject "[You're invited to the TC Roofing Test Motionz portal]" | Email with **Activate my access** button |
-| 4.7 | Google Drive folder https://drive.google.com/drive/folders/1rfpLmUMN5AJqjN2oND5eQGeoH1KPmCGZ | New sheet "TC Roofing Test - Tracking" |
+| 4.7 | Google Drive folder https://drive.google.com/drive/folders/1rfpLmUMN5AJqjN2oND5eQGeoH1KPmCGZ | New folder "TC Roofing Test" holding "TC Roofing Test - Tracking" and "TC Roofing Test - Money Leak Calculator", both shared with the client email as editor |
 | 4.8 | **Done** | Back on Clients; TC Roofing Test listed, Onboarding, 0% |
 
 ## 5. Admin: Client detail (Clients > **…** on TC Roofing Test > **Manage client**)
@@ -87,8 +87,8 @@ Left menu > **Clients** > **Add client**.
 | 5.1 | Clear **Company name** > **Save changes** | Refused, field required |
 | 5.2 | Business phone `12` > Save | Phone error, field marked |
 | 5.3 | Fix phone > untick **Roof Measurement** > Save | "Your changes were saved." Reload: still unticked |
-| 5.4 | **Open portal** > left menu / Tools | Roof Measurement is gone; opening `.../roof-measurement` sends you to Home |
-| 5.5 | Back: tick Roof Measurement again > Save | Saved |
+| 5.4 | **Open portal** (opens in a new tab) > left menu / Tools | Roof Measurement is gone; opening `.../roof-measurement` sends you to Home |
+| 5.5 | Back in the first tab: tick Roof Measurement again > Save | Saved |
 | 5.6 | **Assigned CSM** > Thomas > Save > reload | Shows Thomas. Change back to Heshan (Test CSM) > Save |
 | 5.7 | **Contract**: Title `Test agreement`, Document link `http://example.com/a.pdf` > **Attach contract** | "Document link must be a full https:// link." |
 | 5.8 | Link `https://example.com/a.pdf`, leave Signed on empty > Attach | Listed as "Not signed yet · Open" |
@@ -96,6 +96,10 @@ Left menu > **Clients** > **Add client**.
 | 5.10 | **Client team** > **Invitations waiting** > **Send again** > confirm | One sentence "We emailed a new invitation…". Gmail gets a new invite; the old link no longer works |
 | 5.11 | **Invite** button > email `heshantharushka2002+tc2@gmail.com` > send | "We emailed the invitation to …" |
 | 5.12 | On that waiting invite > **Cancel invite** > confirm | It disappears; its Gmail link shows "This link isn't working" |
+| 5.13 | **Company details > Google files** | Links **Open tracking sheet**, **Open calculator**, **Open Drive folder**, each opens the right file in a new tab; no setup button |
+| 5.14 | Change **Company name** to `TC Roofing Test 2` > Save | "Your changes were saved." In Drive the folder and both files now start with "TC Roofing Test 2"; the three links still open the same files. Change the name back > Save |
+| 5.15 | On a client added before per-client folders (e.g. Zydeco): **Google files** | **Open tracking sheet** plus "Still missing: calculator, Drive folder." and a **Finish Google files setup** button |
+| 5.16 | Press **Finish Google files setup** | "Setting up…" then "Google files are set up."; all three links show, the button is gone. In Drive the old tracking sheet has **moved** into the new client folder (not copied) and a calculator copy is next to it |
 
 ## 6. Admin: GHL Connect
 
@@ -173,7 +177,7 @@ Left menu > **Clients** > **Add client**.
 | 12.3 | Zydeco > **Update setup** | Onboarding answers + 4 steps |
 | 12.4 | **Edit step** on step 2 > clear Right now > Save step | "\"Right now\" cannot be empty…" |
 | 12.5 | Type text, Status **In progress** > Save | Saved; progress unchanged; client Home shows it as current step |
-| 12.6 | **Open portal** | Staff bar "Back to CSM"; hero says "Welcome, Heshan." (client's name, not the CSM's) |
+| 12.6 | **Open portal** | Opens in a **new tab**; staff bar "Viewing as staff · <client>" (no "Back to CSM" link); hero says "Welcome, Heshan." (client's name, not the CSM's) |
 | 12.7 | Type `.../admin/clients` in the address bar | Sent to My Clients |
 | 12.8 | Sign out | |
 
@@ -195,7 +199,7 @@ Left menu > **Clients** > **Add client**.
 | 13.10 | Step 2 **Open texting form** | Texting form pop-up with your email filled |
 | 13.11 | Left menu > **Leads** | Total leads, New this week, "By stage" chips, table (Name, Phone, Email, Source, Stage, Follow-up, Added) |
 | 13.12 | Search a lead name; click a stage chip | List filters; "x of y match" |
-| 13.13 | Left menu > **Results Tracking** | Your tracking sheet + **Money Leak Calculator**, both load; **Open in new tab** works for both |
+| 13.13 | Left menu > **Results Tracking** | Your tracking sheet + **Money Leak Calculator**, both load; **Open in new tab** works for both. The calculator is the client's **own copy** (file name "<Client> - Money Leak Calculator", opened on the calculator tab), not a sheet shared with other clients. A client without a copy yet sees "Your calculator is being set up." |
 | 13.14 | Left menu > **Contract** | "No contract yet" (or the attached one) |
 | 13.15 | Left menu > **Tools & Resources** | Join Slack, Join Skool (open in new tab), Measure a roof, View scripts |
 | 13.16 | Left menu > **Video Scripts** > **AI Video** | 3 scripts with your name/company, **Copy script** |
