@@ -117,7 +117,7 @@ export default function ClientProfilePage() {
           Your business name and contact details.
         </p>
         <p style={{ color: 'var(--color-text-secondary)', fontSize: 'var(--font-size-sm)', marginTop: 'var(--space-1)' }}>
-          Looking for your own name, photo or sign-in email? Open{' '}
+          Looking for your own name, photo or phone? Open{' '}
           <Link href={`/portal/${clientId}/my-profile`}>My profile</Link>.
         </p>
       </div>

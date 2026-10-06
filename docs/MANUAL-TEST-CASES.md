@@ -236,6 +236,7 @@ the two IDs shown at the start so you can put them back at the end.
 | 13.23 | Left menu > **Company Profile** > clear Business name > Save | Required |
 | 13.24 | Phone `abc` > Save | "Enter a valid phone number…" |
 | 13.25 | Fix phone > Save > reload (F5) | "Your changes were saved."; reload shows the NEW phone |
+| 13.25b | Click **My profile** (link under the Company Profile heading) > look at **Sign-in email** | Your email is shown as plain text with "This is the email you sign in with. To change it, ask your Motionz contact." There is no box to type in and no **Change email** button (staff see "…ask a Motionz admin.") |
 
 ### 13b. Lead forms on the Leads page (needs 10.13 and 10.14 done first)
 

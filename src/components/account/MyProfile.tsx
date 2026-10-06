@@ -44,7 +44,9 @@ function announceChange() {
 }
 
 /**
- * "My profile": the signed-in person's own picture, name, phone and sign-in email.
+ * "My profile": the signed-in person's own picture, name and phone, plus their sign-in email
+ * shown read-only (it cannot be changed here: sign-in, invitations, notification emails and
+ * GoHighLevel matching all depend on it).
  * The same page for every role; the server always works on whoever is signed in.
  */
 export function MyProfile() {
@@ -64,13 +66,6 @@ export function MyProfile() {
   const [phone, setPhone] = useState('');
   const [detailsBusy, setDetailsBusy] = useState(false);
   const [detailsMessage, setDetailsMessage] = useState<Message>(null);
-
-  // Sign-in email
-  const [isChangingEmail, setIsChangingEmail] = useState(false);
-  const [newEmail, setNewEmail] = useState('');
-  const [currentPassword, setCurrentPassword] = useState('');
-  const [emailBusy, setEmailBusy] = useState(false);
-  const [emailMessage, setEmailMessage] = useState<Message>(null);
 
   useEffect(() => {
     let isMounted = true;
@@ -197,46 +192,6 @@ export function MyProfile() {
     }
   };
 
-  const closeEmailForm = () => {
-    setIsChangingEmail(false);
-    setNewEmail('');
-    setCurrentPassword('');
-  };
-
-  const handleEmailSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!newEmail.trim() || !currentPassword) {
-      setEmailMessage({ type: 'error', text: 'Enter your new email address and your current password.' });
-      return;
-    }
-    setEmailBusy(true);
-    setEmailMessage(null);
-    try {
-      const res = await fetch('/api/account/profile/email', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ newEmail: newEmail.trim(), currentPassword }),
-      });
-      const data = await res.json().catch(() => ({}));
-      if (!res.ok) {
-        setEmailMessage({ type: 'error', text: data.error || 'Your email could not be changed. Please try again.' });
-        return;
-      }
-      setProfile((prev) => (prev ? { ...prev, email: data.email } : prev));
-      closeEmailForm();
-      setEmailMessage({
-        type: 'ok',
-        text: `Your sign-in email is now ${data.email}. Use it the next time you sign in.${
-          data.noticeSent ? ' We sent a notice to your old address.' : ''
-        }`,
-      });
-    } catch {
-      setEmailMessage({ type: 'error', text: 'Could not reach the server. Your email was not changed.' });
-    } finally {
-      setEmailBusy(false);
-    }
-  };
-
   const isStaff = profile?.role === 'admin' || profile?.role === 'csm';
   const showPicture = Boolean(profile?.avatarUrl) && !pictureBroken;
   const initials = initialsFrom(profile?.fullName || profile?.email || '');
@@ -359,80 +314,11 @@ export function MyProfile() {
 
             {/* Sign-in email */}
             <Card>
-              <CardHeader title="Sign-in email" subtitle="The email address you use to sign in." />
-              <p style={{ margin: '0 0 var(--space-3)', fontWeight: 600, wordBreak: 'break-all' }}>{profile.email}</p>
-
-              {!isChangingEmail ? (
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-3)' }}>
-                  <SectionMessage message={emailMessage} />
-                  <div>
-                    <Button
-                      type="button"
-                      variant="outline"
-                      onClick={() => {
-                        setEmailMessage(null);
-                        setIsChangingEmail(true);
-                      }}
-                    >
-                      Change email
-                    </Button>
-                  </div>
-                </div>
-              ) : (
-                <form onSubmit={handleEmailSubmit} style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-4)' }}>
-                  <Input
-                    id="my-profile-new-email"
-                    label="New email address"
-                    type="email"
-                    value={newEmail}
-                    onChange={(e) => {
-                      setNewEmail(e.target.value);
-                      setEmailMessage(null);
-                    }}
-                    maxLength={255}
-                    autoComplete="email"
-                    helperText={
-                      isStaff
-                        ? 'Staff accounts must use an @motionz.ai address.'
-                        : profile.role === 'client'
-                          ? "This only changes the email you sign in with. Your company's contact email stays the same."
-                          : undefined
-                    }
-                    required
-                    autoFocus
-                  />
-                  <Input
-                    id="my-profile-current-password"
-                    label="Current password"
-                    type="password"
-                    value={currentPassword}
-                    onChange={(e) => {
-                      setCurrentPassword(e.target.value);
-                      setEmailMessage(null);
-                    }}
-                    autoComplete="current-password"
-                    helperText="We ask for your password to make sure it is really you."
-                    required
-                  />
-                  <SectionMessage message={emailMessage} />
-                  <div style={{ display: 'flex', gap: 'var(--space-2)', flexWrap: 'wrap' }}>
-                    <Button type="submit" variant="primary" disabled={emailBusy}>
-                      {emailBusy ? 'Changing...' : 'Change email'}
-                    </Button>
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      disabled={emailBusy}
-                      onClick={() => {
-                        closeEmailForm();
-                        setEmailMessage(null);
-                      }}
-                    >
-                      Cancel
-                    </Button>
-                  </div>
-                </form>
-              )}
+              <CardHeader title="Sign-in email" />
+              <p style={{ margin: '0 0 var(--space-2)', fontWeight: 600, wordBreak: 'break-all' }}>{profile.email}</p>
+              <p style={{ margin: 0, color: 'var(--color-text-secondary)', fontSize: 'var(--font-size-sm)' }}>
+                This is the email you sign in with. To change it, ask {isStaff ? 'a Motionz admin' : 'your Motionz contact'}.
+              </p>
             </Card>
           </>
         )}

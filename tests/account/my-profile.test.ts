@@ -1,18 +1,18 @@
 /**
- * "My profile": every signed-in person reads and changes only their own name, phone, picture
- * and sign-in email. The person always comes from the session, never from the request.
+ * "My profile": every signed-in person reads and changes only their own name, phone and picture.
+ * The sign-in email is read-only here (there is no self-service email change).
+ * The person always comes from the session, never from the request.
  */
 import assert from 'node:assert';
 import { NextRequest } from 'next/server';
 import { resetStore, getStore, getTenantById } from '../../src/lib/db';
 import { userRepository } from '../../src/lib/db/repositories';
-import { createSessionToken, verifySession, SESSION_COOKIE_NAME } from '../../src/lib/auth/session';
+import { createSessionToken, SESSION_COOKIE_NAME } from '../../src/lib/auth/session';
 import { GET as profileGet, PUT as profilePut } from '../../src/app/api/account/profile/route';
 import { POST as avatarPost, DELETE as avatarDelete } from '../../src/app/api/account/profile/avatar/route';
-import { POST as emailPost } from '../../src/app/api/account/profile/email/route';
 import { GET as meGet } from '../../src/app/api/auth/me/route';
 import { getMockStoredAvatars, resetMockStoredAvatars, MAX_AVATAR_BYTES } from '../../src/lib/storage';
-import { auditActionLabel, securityEventLabel } from '../../src/lib/utils/log-labels';
+import { auditActionLabel } from '../../src/lib/utils/log-labels';
 import { myProfileHref } from '../../src/lib/account/role-labels';
 
 // Tests must never send real email.
@@ -46,24 +46,6 @@ function avatarReq(session: string | undefined, file?: { name: string; type: str
   return new NextRequest(`${BASE_URL}/api/account/profile/avatar`, { method: 'POST', headers: cookieHeaders(session), body: form });
 }
 
-/** Captures outgoing provider calls by pretending a Resend key is set and stubbing fetch. */
-async function withCapturedEmail<T>(fn: () => Promise<T>): Promise<{ result: T; sent: any[] }> {
-  const sent: any[] = [];
-  const originalFetch = globalThis.fetch;
-  process.env.RESEND_API_KEY = 'test-key-not-real';
-  globalThis.fetch = (async (url: any, init?: any) => {
-    sent.push({ url: String(url), body: JSON.parse(init?.body || '{}') });
-    return new Response(JSON.stringify({ id: `msg-${sent.length}` }), { status: 200 });
-  }) as typeof fetch;
-  try {
-    const result = await fn();
-    return { result, sent };
-  } finally {
-    globalThis.fetch = originalFetch;
-    delete process.env.RESEND_API_KEY;
-  }
-}
-
 const audits = (action: string) => getStore().auditLogs.filter((l) => l.action === action);
 
 async function run() {
@@ -87,10 +69,6 @@ async function run() {
   assert.strictEqual((await profilePut(jsonReq('/api/account/profile', 'PUT', undefined, { fullName: 'X' }))).status, 401);
   assert.strictEqual((await avatarPost(avatarReq(undefined, { name: 'a.png', type: 'image/png', bytes: pngBytes() }))).status, 401);
   assert.strictEqual((await avatarDelete(jsonReq('/api/account/profile/avatar', 'DELETE'))).status, 401);
-  assert.strictEqual(
-    (await emailPost(jsonReq('/api/account/profile/email', 'POST', undefined, { newEmail: 'a@b.co', currentPassword: 'x' }))).status,
-    401
-  );
   assert.strictEqual(getMockStoredAvatars().size, 0);
   console.log(' PASS: signed-out requests get 401 on every My profile route.');
 
@@ -252,95 +230,14 @@ async function run() {
   assert.strictEqual((await noColumnGet.json()).avatarUrl, null, 'no saved picture is shown');
   console.log(' PASS: without the avatar_path column uploads say "not available" and the profile still loads.');
 
-  // 8. Email change: validation and domain rules
-  const emailReq = (session: string, body: unknown) => jsonReq('/api/account/profile/email', 'POST', session, body);
-  const statusOf = async (session: string, body: unknown) => (await emailPost(emailReq(session, body))).status;
-
-  assert.strictEqual(await statusOf(sessions.csm, { newEmail: 'not-an-email', currentPassword: 'password' }), 400, 'bad email format');
-  assert.strictEqual(await statusOf(sessions.csm, { newEmail: 'new.csm@motionz.ai' }), 400, 'password is required');
-  assert.strictEqual(await statusOf(sessions.csm, { newEmail: 'CSM@motionz.ai', currentPassword: 'password' }), 400, 'same email');
-  assert.strictEqual(await statusOf(sessions.csm, { newEmail: 'csm@gmail.com', currentPassword: 'password' }), 400, 'staff must stay on @motionz.ai');
-  assert.strictEqual((await userRepository.findById('user-csm-1'))!.email, 'csm@motionz.ai');
-  assert.strictEqual(await statusOf(sessions.client, { newEmail: 'john@motionz.ai', currentPassword: 'password' }), 400, 'clients cannot use @motionz.ai');
-  assert.strictEqual((await userRepository.findById('user-client-1'))!.email, 'john@abcroofing.com');
-  console.log(' PASS: bad format, missing password, same email, staff off @motionz.ai and client on @motionz.ai are all 400.');
-
-  // 9. Email change: wrong password 403, duplicate 409
-  const wrong = await emailPost(emailReq(sessions.client, { newEmail: 'john.new@abcroofing.com', currentPassword: 'WrongPassword123!' }));
-  assert.strictEqual(wrong.status, 403, 'wrong current password is refused');
-  assert(!wrong.cookies.get(SESSION_COOKIE_NAME), 'no cookie is issued on failure');
-  assert.strictEqual((await userRepository.findById('user-client-1'))!.email, 'john@abcroofing.com');
-  assert(getStore().securityEvents.some((e) => e.event_type === 'account_email_change_wrong_password'));
-
-  const duplicate = await emailPost(emailReq(sessions.client, { newEmail: ' Sarah@ABCroofing.com ', currentPassword: 'password' }));
-  assert.strictEqual(duplicate.status, 409, 'an email used by another user is refused (case-insensitive)');
-  assert(/already uses/i.test((await duplicate.json()).error));
-  assert.strictEqual((await userRepository.findById('user-client-1'))!.email, 'john@abcroofing.com');
-  assert.strictEqual(audits('account.email_changed').length, 0);
-  console.log(' PASS: wrong password is 403 and an email already in use is 409; nothing changes.');
-
-  // 10. Email change: success (client owner). Only the login changes; the company record does not.
-  const tenantBefore = { ...(await getTenantById('abc-roofing'))! };
-  const { result: okRes, sent } = await withCapturedEmail(() =>
-    emailPost(emailReq(sessions.client, { newEmail: 'John.New@ABCroofing.com', currentPassword: 'password' }))
-  );
-  assert.strictEqual(okRes.status, 200);
-  const ok = await okRes.json();
-  assert.strictEqual(ok.email, 'john.new@abcroofing.com');
-  assert.strictEqual(ok.noticeSent, true);
-  assert.strictEqual((await userRepository.findById('user-client-1'))!.email, 'john.new@abcroofing.com', 'the user row is updated');
-  assert.strictEqual(await userRepository.findByEmail('john@abcroofing.com'), null, 'the old email no longer signs in');
-
-  const newCookie = okRes.cookies.get(SESSION_COOKIE_NAME);
-  assert(newCookie?.value, 'a new session cookie is issued');
-  assert.strictEqual(newCookie!.httpOnly, true);
-  assert.strictEqual(newCookie!.sameSite, 'lax');
-  assert.strictEqual(newCookie!.path, '/');
-  const newSession = verifySession(newCookie!.value)!;
-  assert.strictEqual(newSession.email, 'john.new@abcroofing.com');
-  assert.strictEqual(newSession.userId, 'user-client-1');
-  assert.strictEqual(newSession.role, 'client');
-  assert.strictEqual(newSession.tenantId, tenantId);
-  const afterGet = await profileGet(jsonReq('/api/account/profile', 'GET', newCookie!.value));
-  assert.strictEqual((await afterGet.json()).email, 'john.new@abcroofing.com', 'the person stays signed in');
-
-  assert.strictEqual(sent.length, 1, 'one notice is sent');
-  assert.deepStrictEqual(sent[0].body.to, ['john@abcroofing.com'], 'the notice goes to the OLD address');
-  assert(sent[0].body.text.includes('Your Motionz sign-in email was changed to john.new@abcroofing.com.'));
-  assert(sent[0].body.text.includes("If this wasn't you, contact your Motionz team."));
-
-  const changeLog = audits('account.email_changed');
-  assert.strictEqual(changeLog.length, 1);
-  assert.deepStrictEqual(changeLog[0].details, { previousEmail: 'john@abcroofing.com', email: 'john.new@abcroofing.com' });
-  assert(getStore().securityEvents.some((e) => e.event_type === 'account_email_changed'));
-
-  const tenantNow = (await getTenantById('abc-roofing'))!;
-  assert.strictEqual(tenantNow.primary_email, tenantBefore.primary_email, "the company's main email is not changed");
-  assert.strictEqual(tenantNow.primary_contact_name, tenantBefore.primary_contact_name);
-  assert.strictEqual(tenantNow.phone, tenantBefore.phone);
-  console.log(' PASS: a successful change updates the user, re-issues the cookie, emails the old address, and logs it; the company record is untouched.');
-
-  // 11. Email change: staff can move to another @motionz.ai address and keep their role
-  const staffRes = await emailPost(emailReq(sessions.csm, { newEmail: 'csm.renamed@motionz.ai', currentPassword: 'password' }));
-  assert.strictEqual(staffRes.status, 200);
-  const staffSession = verifySession(staffRes.cookies.get(SESSION_COOKIE_NAME)!.value)!;
-  assert.strictEqual(staffSession.email, 'csm.renamed@motionz.ai');
-  assert.strictEqual(staffSession.role, 'csm');
-  assert.strictEqual((await userRepository.findById('user-csm-1'))!.email, 'csm.renamed@motionz.ai');
-  console.log(' PASS: staff can change to another @motionz.ai address and stay signed in as the same role.');
-
-  // 12. Suspended people are refused on every route
-  await userRepository.suspendUser('user-member-1', 'Left the company', 'john.new@abcroofing.com', 'client');
+  // 8. Suspended people are refused on every route
+  await userRepository.suspendUser('user-member-1', 'Left the company', 'john@abcroofing.com', 'client');
   const suspendedGet = await profileGet(jsonReq('/api/account/profile', 'GET', sessions.member));
   assert.strictEqual(suspendedGet.status, 403);
   assert.strictEqual((await suspendedGet.json()).suspended, true);
   assert.strictEqual((await profilePut(jsonReq('/api/account/profile', 'PUT', sessions.member, { fullName: 'Still Here' }))).status, 403);
   assert.strictEqual((await avatarPost(avatarReq(sessions.member, { name: 'a.png', type: 'image/png', bytes: pngBytes() }))).status, 403);
   assert.strictEqual((await avatarDelete(jsonReq('/api/account/profile/avatar', 'DELETE', sessions.member))).status, 403);
-  assert.strictEqual(
-    await statusOf(sessions.member, { newEmail: 'sarah.new@abcroofing.com', currentPassword: 'password' }),
-    403
-  );
   assert.strictEqual((await userRepository.findById('user-member-1'))!.full_name, 'Changed By Member');
   assert.strictEqual(getMockStoredAvatars().size, 0);
 
@@ -350,23 +247,10 @@ async function run() {
   assert.strictEqual((await profileGet(jsonReq('/api/account/profile', 'GET', sessions.admin))).status, 200);
   console.log(' PASS: suspended team members and disabled staff are refused on every My profile route.');
 
-  // 13. The email change is rate limited per person
-  let limited = 0;
-  for (let i = 0; i < 7; i++) {
-    const status = await statusOf(sessions.admin, { newEmail: 'admin2@motionz.ai', currentPassword: 'wrong' });
-    if (status === 429) limited++;
-    else assert.strictEqual(status, 403);
-  }
-  assert(limited >= 2, 'repeated attempts are slowed down with 429');
-  assert.strictEqual((await userRepository.findById('user-admin-1'))!.email, 'admin@motionz.ai');
-  console.log(' PASS: repeated email-change attempts are rate limited.');
-
-  // 14. Friendly log labels and the right page for each role
+  // 9. Friendly log labels and the right page for each role
   assert.strictEqual(auditActionLabel('account.profile_updated'), 'Own name or phone updated (My profile)');
   assert.strictEqual(auditActionLabel('account.avatar_updated'), 'Profile picture updated');
   assert.strictEqual(auditActionLabel('account.avatar_removed'), 'Profile picture removed');
-  assert.strictEqual(auditActionLabel('account.email_changed'), 'Sign-in email changed (My profile)');
-  assert.strictEqual(securityEventLabel('account_email_changed'), 'Sign-in email changed (My profile)');
   assert.strictEqual(myProfileHref('admin', 'abc'), '/admin/profile');
   assert.strictEqual(myProfileHref('csm', 'abc'), '/csm/profile', 'staff viewing a client still go to their staff profile');
   assert.strictEqual(myProfileHref('client', 'abc'), '/portal/abc/my-profile');

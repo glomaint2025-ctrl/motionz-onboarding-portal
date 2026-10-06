@@ -14,7 +14,6 @@ Without a provider key, emails are printed to the server console (development on
 | Sign-in link | A sign-in link is issued for an existing client user | That user |
 | Staff sign-in code | A staff member signs in (when codes are switched on) | That staff member |
 | Password reset | Someone uses "Forgot password" | That person |
-| Sign-in email changed | A user changes their sign-in email in My profile | The old address |
 | Onboarding form received | GHL sends an `onboarding_form` event (see [ghl-workflows.md](./ghl-workflows.md)) | The list in **Admin → Settings & Integrations → Onboarding form notifications**, plus `MEDIA_BUYER_EMAIL`, plus the client's CSM when that box is ticked |
 | Website change request | A client submits a website change request | Motionz staff |
 
