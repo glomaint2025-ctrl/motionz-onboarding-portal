@@ -72,6 +72,19 @@ export class LeadRepository {
     return { leads: matching.slice(offset, offset + limit), total: matching.length };
   }
 
+  /** One lead of this client, or null (also when the id belongs to another client). */
+  async findById(tenantId: string, id: string): Promise<Lead | null> {
+    const supabase = getSupabaseServiceClient();
+    if (supabase) {
+      // Anything that is not a UUID cannot be a lead id; asking the database would be an error.
+      if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id)) return null;
+      const { data, error } = await supabase.from('leads').select('*').eq('tenant_id', tenantId).eq('id', id).maybeSingle();
+      if (error) throw new DatabaseError(`Failed to fetch lead: ${error.message}`, error);
+      return (data as Lead) || null;
+    }
+    return getStore().leads.find((l) => l.tenant_id === tenantId && l.id === id) || null;
+  }
+
   /** Number of leads matching a search and stage, without fetching them. */
   private async countMatching(tenantId: string, options: LeadQuery): Promise<number> {
     const supabase = getSupabaseServiceClient();

@@ -5,23 +5,21 @@ import { PORTAL_LINKS } from './portal-links';
  * Admin → Settings & Integrations; only the form id is stored (app setting `forms`).
  * This file has no server-only imports, so pages and API routes can both use it.
  *
- * The onboarding form is NOT in this list any more: it is built into the portal
- * (src/lib/onboarding/form-definition.ts). An `onboarding_form_id` left in a saved setting, or sent
- * by an older page, is simply ignored.
+ * Only the Texting registration form is left here. The onboarding form and the two lead forms
+ * (Lead Replacement, Unresponsive Lead) are built into the portal now
+ * (src/lib/onboarding/form-definition.ts, src/lib/lead-requests/). An `onboarding_form_id`,
+ * `lead_replacement_form_id` or `unresponsive_lead_form_id` left in a saved setting, or sent by an
+ * older page, is simply ignored.
  */
 export interface FormSettings {
   a2p_form_id: string;
-  lead_replacement_form_id: string;
-  unresponsive_lead_form_id: string;
 }
 
 export type FormSettingKey = keyof FormSettings;
 
-/** Built-in ids. The two Leads forms stay empty (hidden from clients) until an admin adds a link. */
+/** Built-in ids. */
 export const FORM_SETTING_DEFAULTS: FormSettings = {
   a2p_form_id: PORTAL_LINKS.a2pFormId,
-  lead_replacement_form_id: '',
-  unresponsive_lead_form_id: '',
 };
 
 export interface FormSettingField {
@@ -29,15 +27,13 @@ export interface FormSettingField {
   /** Name shown to admins. */
   label: string;
   /** Portal page the form appears on. */
-  shownOn: 'Setup Progress' | 'Leads';
+  shownOn: 'Setup Progress';
   /** Required forms can be changed but never emptied. */
   required: boolean;
 }
 
 export const FORM_SETTING_FIELDS: FormSettingField[] = [
   { key: 'a2p_form_id', label: 'Texting registration form', shownOn: 'Setup Progress', required: true },
-  { key: 'lead_replacement_form_id', label: 'Lead replacement form', shownOn: 'Leads', required: false },
-  { key: 'unresponsive_lead_form_id', label: 'Unresponsive lead form', shownOn: 'Leads', required: false },
 ];
 
 /** A GHL form id: letters, digits, "-" and "_", 10 to 40 characters. */

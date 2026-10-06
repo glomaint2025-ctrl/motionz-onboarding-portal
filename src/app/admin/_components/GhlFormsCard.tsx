@@ -11,8 +11,6 @@ type FieldErrors = Partial<Record<FormSettingKey, string>>;
 
 const EMPTY: FieldText = {
   a2p_form_id: '',
-  lead_replacement_form_id: '',
-  unresponsive_lead_form_id: '',
 };
 
 const helperLineStyle: React.CSSProperties = {
@@ -22,9 +20,9 @@ const helperLineStyle: React.CSSProperties = {
 };
 
 /**
- * Admin → Settings & Integrations: the GoHighLevel forms shown in the client portal.
- * An admin pastes a form link (or its ID); the portal keeps only the ID and shows the form
- * on Setup Progress or Leads straight away.
+ * Admin → Settings & Integrations: the GoHighLevel form shown in the client portal (the Texting
+ * registration form). An admin pastes a form link (or its ID); the portal keeps only the ID and
+ * shows the form on Setup Progress straight away. Every other form is built into the portal.
  */
 export function GhlFormsCard() {
   const [loading, setLoading] = useState(true);
@@ -36,7 +34,7 @@ export function GhlFormsCard() {
   const [message, setMessage] = useState<{ type: 'ok' | 'error'; text: string } | null>(null);
 
   const apply = (forms: FormSettings) => {
-    const next = { ...EMPTY, ...forms };
+    const next: FieldText = { a2p_form_id: forms?.a2p_form_id || '' };
     setSaved(next);
     setText(next);
   };
@@ -82,7 +80,7 @@ export function GhlFormsCard() {
       const res = await fetch('/api/admin/settings/forms', {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(text),
+        body: JSON.stringify({ a2p_form_id: text.a2p_form_id }),
       });
       const data = await res.json().catch(() => ({}));
       if (res.ok && data.success) {
@@ -105,14 +103,14 @@ export function GhlFormsCard() {
       <Card style={{ marginBottom: 'var(--space-3)' }}>
         <CardHeader
           title="GoHighLevel forms"
-          subtitle="The forms clients fill in inside their portal. Build or change a form in GoHighLevel, then paste its link here."
+          subtitle="The GoHighLevel form clients fill in inside their portal. Build or change it in GoHighLevel, then paste its link here."
         />
         <p style={{ ...helperLineStyle, fontSize: 'var(--font-size-sm)', marginBottom: 'var(--space-4)' }}>
-          The onboarding form is now built into the portal (client → Setup Progress). Its answers are saved here, not
-          in GoHighLevel.
+          The onboarding form (client → Setup Progress) and the two lead forms, Lead Replacement and Unresponsive Lead
+          (client → Leads), are built into the portal. Their answers are saved here, not in GoHighLevel.
         </p>
         {loading ? (
-          <Skeleton height="260px" />
+          <Skeleton height="120px" />
         ) : loadError ? (
           <Notice onRetry={load}>{loadError}</Notice>
         ) : (

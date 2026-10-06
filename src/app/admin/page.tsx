@@ -18,6 +18,7 @@ interface Dashboard {
   inSetup: number;
   security: { last7Days: number; highSeverity: number };
   unmatchedSubmissions: number;
+  leadRequests?: { open: number; clients: (ClientRef & { open: number })[] };
 }
 
 function Metric({ label, value, hint, href }: { label: string; value: React.ReactNode; hint?: string; href?: string }) {
@@ -166,6 +167,19 @@ export default function AdminDashboardPage() {
             <Card>
               <CardHeader title="No contract attached" />
               <ClientList items={data.withoutContract || []} empty="Every client has a contract attached." />
+            </Card>
+            <Card>
+              <CardHeader
+                title="Lead requests to handle"
+                action={
+                  data.leadRequests?.open ? <StatusBadge status={`${data.leadRequests.open} open`} variant="warning" /> : undefined
+                }
+              />
+              <ClientList
+                items={data.leadRequests?.clients || []}
+                empty="No open lead replacement or unresponsive lead requests."
+                render={(c) => `${c.open} open`}
+              />
             </Card>
           </div>
         </>

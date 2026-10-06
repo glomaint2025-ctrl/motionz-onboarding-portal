@@ -20,13 +20,13 @@ async function run() {
   resetStore();
   const store = getStore();
 
-  // The onboarding form is built into the portal now, so it is no longer one of the GoHighLevel forms.
+  // The onboarding form and the two lead forms are built into the portal now, so the Texting
+  // registration form is the only GoHighLevel form left.
   const A2P_DEFAULT = PORTAL_LINKS.a2pFormId;
   const DEFAULTS = {
     a2p_form_id: A2P_DEFAULT,
-    lead_replacement_form_id: '',
-    unresponsive_lead_form_id: '',
   };
+  const BUILT_IN_KEYS = ['onboarding_form_id', 'lead_replacement_form_id', 'unresponsive_lead_form_id'];
   const NEW_ONBOARDING = 'NewOnboard1ngFormAbc';
   const NEW_A2P = 'NewTexting_Form-12345';
   const REPLACEMENT = 'LeadReplace9FormXyZ01';
@@ -120,8 +120,8 @@ async function run() {
   assert.strictEqual(res.status, 200);
   let data = await res.json();
   assert.strictEqual(data.success, true);
-  assert.deepStrictEqual(data.forms, DEFAULTS, 'the texting form is the default; the two Leads forms start empty');
-  assert.ok(!('onboarding_form_id' in data.forms), 'the onboarding form is not a GoHighLevel form any more');
+  assert.deepStrictEqual(data.forms, DEFAULTS, 'the texting form is the only GoHighLevel form');
+  for (const key of BUILT_IN_KEYS) assert.ok(!(key in data.forms), `${key} is not a GoHighLevel form any more`);
   assert.deepStrictEqual(await resolveFormSettings(), DEFAULTS);
   console.log(' PASS: GET returns the built-in forms by default.');
 
@@ -129,21 +129,21 @@ async function run() {
   assert.strictEqual((await adminGet(null)).status, 401);
   assert.strictEqual((await adminGet(csmCookie)).status, 403);
   assert.strictEqual((await adminGet(clientCookie)).status, 403);
-  assert.strictEqual((await adminPut({ lead_replacement_form_id: REPLACEMENT }, null)).status, 401);
-  assert.strictEqual((await adminPut({ lead_replacement_form_id: REPLACEMENT }, csmCookie)).status, 403);
-  assert.strictEqual((await adminPut({ lead_replacement_form_id: REPLACEMENT }, clientCookie)).status, 403);
-  assert.strictEqual((await adminPut({ lead_replacement_form_id: REPLACEMENT }, memberCookie)).status, 403);
+  assert.strictEqual((await adminPut({ a2p_form_id: NEW_A2P }, null)).status, 401);
+  assert.strictEqual((await adminPut({ a2p_form_id: NEW_A2P }, csmCookie)).status, 403);
+  assert.strictEqual((await adminPut({ a2p_form_id: NEW_A2P }, clientCookie)).status, 403);
+  assert.strictEqual((await adminPut({ a2p_form_id: NEW_A2P }, memberCookie)).status, 403);
   assert.strictEqual(savedSetting(), undefined, 'refused requests save nothing');
   assert.strictEqual(formAudits().length, 0);
-  console.log(' PASS: only admins can read or change the form links.');
+  console.log(' PASS: only admins can read or change the form link.');
 
   // ---------------------------------------------------------------- invalid input
   const badInputs: [string, unknown, string][] = [
-    ['lead_replacement_form_id', 'not a form', 'Lead replacement form'],
-    ['unresponsive_lead_form_id', 'https://motionz.ai/contact-us', 'Unresponsive lead form'],
+    ['a2p_form_id', 'not a form', 'Texting registration form'],
+    ['a2p_form_id', 'https://motionz.ai/contact-us', 'Texting registration form'],
     ['a2p_form_id', 'https://api.leadconnectorhq.com/widget/booking/SRn2ONyB295xnnPR5JwR', 'Texting registration form'],
     ['a2p_form_id', 12345, 'Texting registration form'],
-    ['lead_replacement_form_id', { id: REPLACEMENT }, 'Lead replacement form'],
+    ['a2p_form_id', { id: NEW_A2P }, 'Texting registration form'],
   ];
   for (const [field, value, label] of badInputs) {
     res = await adminPut({ [field]: value });
@@ -153,13 +153,13 @@ async function run() {
     assert.deepStrictEqual(Object.keys(data.fields), [field], 'only the bad field is reported');
   }
 
-  // One bad field stops the whole save, and every bad field is reported.
+  // A bad texting link is refused even when the old lead fields come along with it.
   res = await adminPut({ lead_replacement_form_id: REPLACEMENT, unresponsive_lead_form_id: 'nope', a2p_form_id: 'x y' });
   assert.strictEqual(res.status, 400);
   data = await res.json();
-  assert.deepStrictEqual(Object.keys(data.fields).sort(), ['a2p_form_id', 'unresponsive_lead_form_id']);
-  assert.ok(data.error.includes('Unresponsive lead form') && data.error.includes('Texting registration form'));
-  assert.strictEqual(savedSetting(), undefined, 'nothing is saved when any field is invalid');
+  assert.deepStrictEqual(Object.keys(data.fields), ['a2p_form_id'], 'the removed lead fields are not checked at all');
+  assert.ok(data.error.includes('Texting registration form'));
+  assert.strictEqual(savedSetting(), undefined, 'nothing is saved when the link is invalid');
   console.log(' PASS: invalid links are refused with 400 and the form is named.');
 
   // ---------------------------------------------------------------- required forms cannot be emptied
@@ -176,72 +176,77 @@ async function run() {
   assert.strictEqual(formAudits().length, 0, 'refused saves are not audit-logged');
   console.log(' PASS: the texting form cannot be emptied.');
 
-  // ---------------------------------------------------------------- the old onboarding field is ignored
-  for (const sent of [NEW_ONBOARDING, '', null, 'not a form', 'javascript:alert(1)']) {
-    res = await adminPut({ onboarding_form_id: sent });
-    assert.strictEqual(res.status, 200, `onboarding_form_id=${JSON.stringify(sent)} is ignored, not an error`);
-    data = await res.json();
-    assert.deepStrictEqual(data.forms, DEFAULTS);
-    assert.deepStrictEqual(data.changed, []);
+  // ---------------------------------------------------------------- the built-in forms' old fields are ignored
+  for (const key of BUILT_IN_KEYS) {
+    for (const sent of [NEW_ONBOARDING, REPLACEMENT, '', null, 'not a form', 'javascript:alert(1)']) {
+      res = await adminPut({ [key]: sent });
+      assert.strictEqual(res.status, 200, `${key}=${JSON.stringify(sent)} is ignored, not an error`);
+      data = await res.json();
+      assert.deepStrictEqual(data.forms, DEFAULTS);
+      assert.deepStrictEqual(data.changed, []);
+    }
   }
   assert.strictEqual(savedSetting(), undefined, 'an ignored field saves nothing');
   assert.strictEqual(formAudits().length, 0);
-  console.log(' PASS: an onboarding form link sent by an older page is ignored.');
+  console.log(' PASS: onboarding and lead form links sent by an older page are ignored.');
 
   // ---------------------------------------------------------------- saving
+  // The same texting form pasted as a link, with the old fields alongside: nothing changes.
   res = await adminPut({
     onboarding_form_id: NEW_ONBOARDING,
     a2p_form_id: `https://api.leadconnectorhq.com/widget/form/${A2P_DEFAULT}`,
     lead_replacement_form_id: `  https://link.motionz.ai/widget/form/${REPLACEMENT}?notrack=true  `,
-    unresponsive_lead_form_id: `<iframe src="https://api.leadconnectorhq.com/widget/form/${UNRESPONSIVE}" id="inline-${UNRESPONSIVE}" data-form-id="${UNRESPONSIVE}" title="Unresponsive Lead"></iframe>`,
+    unresponsive_lead_form_id: `<iframe src="https://api.leadconnectorhq.com/widget/form/${UNRESPONSIVE}" data-form-id="${UNRESPONSIVE}"></iframe>`,
   });
   assert.strictEqual(res.status, 200);
   data = await res.json();
   assert.strictEqual(data.success, true);
-  assert.deepStrictEqual(data.forms, { ...DEFAULTS, lead_replacement_form_id: REPLACEMENT, unresponsive_lead_form_id: UNRESPONSIVE });
-  assert.deepStrictEqual(data.changed, ['lead_replacement_form_id', 'unresponsive_lead_form_id']);
-  assert.deepStrictEqual(savedSetting()!.value, data.forms, 'only ids are stored, never the pasted text');
+  assert.deepStrictEqual(data.forms, DEFAULTS);
+  assert.deepStrictEqual(data.changed, []);
+  assert.strictEqual(savedSetting(), undefined);
+  assert.strictEqual(formAudits().length, 0);
+
+  // The texting form can be pointed at a new one, pasted as an embed snippet.
+  res = await adminPut({
+    a2p_form_id: `<iframe src="https://api.leadconnectorhq.com/widget/form/${NEW_A2P}" id="inline-${NEW_A2P}" data-form-id="${NEW_A2P}" title="Texting"></iframe>`,
+    lead_replacement_form_id: REPLACEMENT,
+  });
+  assert.strictEqual(res.status, 200);
+  data = await res.json();
+  assert.deepStrictEqual(data.forms, { a2p_form_id: NEW_A2P });
+  assert.deepStrictEqual(data.changed, ['a2p_form_id']);
+  assert.deepStrictEqual(savedSetting()!.value, data.forms, 'only the id is stored, never the pasted text or a removed form');
   assert.strictEqual(savedSetting()!.updated_by, 'admin@motionz.ai');
   assert.deepStrictEqual((await (await adminGet()).json()).forms, data.forms);
 
   assert.strictEqual(formAudits().length, 1);
-  let audit = formAudits()[0];
+  const audit = formAudits()[0];
   assert.strictEqual(audit.actor_email, 'admin@motionz.ai');
   assert.strictEqual(audit.resource_id, 'forms');
-  assert.deepStrictEqual(audit.details?.changed, ['lead_replacement_form_id', 'unresponsive_lead_form_id']);
-  assert.deepStrictEqual(audit.details?.forms, ['Lead replacement form', 'Unresponsive lead form']);
-  assert.deepStrictEqual(audit.details?.previous, { lead_replacement_form_id: '', unresponsive_lead_form_id: '' });
-  assert.deepStrictEqual(audit.details?.current, { lead_replacement_form_id: REPLACEMENT, unresponsive_lead_form_id: UNRESPONSIVE });
+  assert.deepStrictEqual(audit.details?.changed, ['a2p_form_id']);
+  assert.deepStrictEqual(audit.details?.forms, ['Texting registration form']);
+  assert.deepStrictEqual(audit.details?.previous, { a2p_form_id: A2P_DEFAULT });
+  assert.deepStrictEqual(audit.details?.current, { a2p_form_id: NEW_A2P });
 
-  // Saving the same values again changes nothing and writes no second audit entry.
-  data = await (await adminPut({ lead_replacement_form_id: REPLACEMENT })).json();
+  // Saving the same value again, or leaving the field out, changes nothing and writes no second audit entry.
+  data = await (await adminPut({ a2p_form_id: NEW_A2P })).json();
+  assert.deepStrictEqual(data.changed, []);
+  data = await (await adminPut({})).json();
+  assert.deepStrictEqual(data.forms, { a2p_form_id: NEW_A2P });
   assert.deepStrictEqual(data.changed, []);
   assert.strictEqual(formAudits().length, 1);
-
-  // A field that is left out keeps its value; the texting form can be pointed at a new one.
-  res = await adminPut({ onboarding_form_id: `https://api.leadconnectorhq.com/widget/form/${NEW_ONBOARDING}`, a2p_form_id: NEW_A2P });
-  assert.strictEqual(res.status, 200);
-  data = await res.json();
-  assert.deepStrictEqual(data.forms, {
-    a2p_form_id: NEW_A2P,
-    lead_replacement_form_id: REPLACEMENT,
-    unresponsive_lead_form_id: UNRESPONSIVE,
-  });
-  assert.deepStrictEqual(data.changed, ['a2p_form_id']);
-  assert.strictEqual(formAudits().length, 2);
-  audit = formAudits().find((l) => l.details?.changed?.includes('a2p_form_id'))!;
-  assert.deepStrictEqual(audit.details?.previous, { a2p_form_id: A2P_DEFAULT });
-  assert.ok(!JSON.stringify(savedSetting()!.value).includes(NEW_ONBOARDING), 'the onboarding link is never stored');
-  console.log(' PASS: PUT saves the ids from pasted links and embed snippets, and is audit-logged.');
+  const stored = JSON.stringify(savedSetting()!.value);
+  assert.ok(!stored.includes(NEW_ONBOARDING) && !stored.includes(REPLACEMENT), 'links of built-in forms are never stored');
+  console.log(' PASS: PUT saves the id from a pasted link or embed snippet, and is audit-logged.');
 
   // ---------------------------------------------------------------- portal: data API
   const ALL_SAVED = data.forms;
   for (const [who, cookie] of [['admin', adminCookie], ['CSM', csmCookie], ['client owner', clientCookie]] as const) {
     res = await portalData(clientA, cookie);
     assert.strictEqual(res.status, 200, `portal data loads for the ${who}`);
-    assert.deepStrictEqual((await res.json()).forms, ALL_SAVED, `the ${who} gets the saved form ids`);
+    assert.deepStrictEqual((await res.json()).forms, ALL_SAVED, `the ${who} gets the saved form id`);
   }
-  assert.deepStrictEqual((await (await portalData(clientB, adminCookie)).json()).forms, ALL_SAVED, 'the ids are the same for every client');
+  assert.deepStrictEqual((await (await portalData(clientB, adminCookie)).json()).forms, ALL_SAVED, 'the id is the same for every client');
 
   res = await portalData(clientA);
   assert.strictEqual(res.status, 401, 'a signed-out caller is refused');
@@ -249,7 +254,7 @@ async function run() {
   res = await portalData(clientB, clientCookie);
   assert.strictEqual(res.status, 403, "a client cannot read another client's portal data");
   assert.strictEqual((await res.json()).forms, undefined);
-  console.log(' PASS: the portal data API carries the saved form ids, to signed-in people only.');
+  console.log(' PASS: the portal data API carries the saved form id, to signed-in people only.');
 
   // ---------------------------------------------------------------- portal: forms API
   res = await portalForms(clientA, clientCookie);
@@ -259,7 +264,7 @@ async function run() {
   assert.strictEqual(data.prefillEmail, 'john@abcroofing.com', 'a client fills the form in as themselves');
 
   data = await (await portalForms(clientA, adminCookie)).json();
-  assert.deepStrictEqual(data.forms, ALL_SAVED, 'staff viewing the portal get the forms too');
+  assert.deepStrictEqual(data.forms, ALL_SAVED, 'staff viewing the portal get the form too');
   assert.strictEqual(data.prefillEmail, store.tenants.find((t) => t.id === clientA)!.primary_email, "staff use the client's email");
   assert.deepStrictEqual((await (await portalForms(clientA, csmCookie)).json()).forms, ALL_SAVED);
 
@@ -267,34 +272,20 @@ async function run() {
   assert.strictEqual((await portalForms(clientB, clientCookie)).status, 403, "a client cannot read another client's forms");
   assert.strictEqual((await portalForms('00000000-0000-4000-8000-00000000dead', adminCookie)).status, 404);
 
-  // The two Leads forms follow the Leads section; the Setup Progress forms do not.
-  const HIDDEN_LEAD_FORMS = { ...ALL_SAVED, lead_replacement_form_id: '', unresponsive_lead_form_id: '' };
+  // The texting form belongs to Setup Progress, so it does not depend on the Leads section.
   const memberUser = store.users.find((u) => u.id === 'user-member-1')!;
   const originalModules = memberUser.allowed_modules;
   memberUser.allowed_modules = ['onboarding'];
-  assert.deepStrictEqual((await (await portalForms(clientA, memberCookie)).json()).forms, HIDDEN_LEAD_FORMS, 'a team member without Leads gets no lead forms');
-  assert.deepStrictEqual((await (await portalData(clientA, memberCookie)).json()).forms, HIDDEN_LEAD_FORMS);
-  memberUser.allowed_modules = ['onboarding', 'leads'];
   data = await (await portalForms(clientA, memberCookie)).json();
-  assert.deepStrictEqual(data.forms, ALL_SAVED, 'a team member with Leads gets them');
+  assert.deepStrictEqual(data.forms, ALL_SAVED, 'a team member without Leads still gets the texting form');
   assert.strictEqual(data.prefillEmail, 'sarah@abcroofing.com');
   assert.deepStrictEqual((await (await portalData(clientA, memberCookie)).json()).forms, ALL_SAVED);
   memberUser.allowed_modules = originalModules;
-  console.log(' PASS: the portal forms API respects sign-in, tenant isolation and the Leads section.');
+  console.log(' PASS: the portal forms API respects sign-in and tenant isolation.');
 
-  // ---------------------------------------------------------------- clearing and bad stored values
-  res = await adminPut({ lead_replacement_form_id: '', unresponsive_lead_form_id: null });
-  assert.strictEqual(res.status, 200);
-  data = await res.json();
-  assert.deepStrictEqual(data.changed, ['lead_replacement_form_id', 'unresponsive_lead_form_id']);
-  assert.strictEqual(data.forms.lead_replacement_form_id, '');
-  assert.strictEqual(data.forms.unresponsive_lead_form_id, '');
-  data = await (await portalForms(clientA, clientCookie)).json();
-  assert.strictEqual(data.forms.lead_replacement_form_id, '', 'a cleared form is hidden from clients');
-  assert.strictEqual(data.forms.a2p_form_id, NEW_A2P);
-  assert.strictEqual(data.forms.onboarding_form_id, undefined);
-
-  // A malformed stored value is never served: the built-in form is used instead.
+  // ---------------------------------------------------------------- bad or old stored values
+  // A malformed stored value is never served, and form ids left over from before the lead forms
+  // were built into the portal are dropped.
   savedSetting()!.value = {
     onboarding_form_id: 'javascript:alert(1)',
     a2p_form_id: '',
@@ -302,14 +293,15 @@ async function run() {
     unresponsive_lead_form_id: UNRESPONSIVE,
   };
   data = await (await portalData(clientA, clientCookie)).json();
-  assert.deepStrictEqual(data.forms, { ...DEFAULTS, unresponsive_lead_form_id: UNRESPONSIVE });
-  assert.deepStrictEqual((await (await adminGet()).json()).forms, data.forms);
+  assert.deepStrictEqual(data.forms, DEFAULTS);
+  assert.deepStrictEqual((await (await adminGet()).json()).forms, DEFAULTS);
+  assert.deepStrictEqual((await (await portalForms(clientA, clientCookie)).json()).forms, DEFAULTS);
 
   // The form address only ever carries the id and the email to pre-fill.
-  const url = new URL(ghlFormUrl(UNRESPONSIVE, 'john@abcroofing.com'));
-  assert.strictEqual(url.origin + url.pathname, `https://api.leadconnectorhq.com/widget/form/${UNRESPONSIVE}`);
+  const url = new URL(ghlFormUrl(NEW_A2P, 'john@abcroofing.com'));
+  assert.strictEqual(url.origin + url.pathname, `https://api.leadconnectorhq.com/widget/form/${NEW_A2P}`);
   assert.strictEqual(url.searchParams.get('email'), 'john@abcroofing.com');
-  console.log(' PASS: clearing a Leads form hides it; bad stored values fall back to the built-in forms.');
+  console.log(' PASS: bad or left-over stored values fall back to the built-in texting form.');
 
   console.log('GoHighLevel Form Settings Tests passed.');
 }

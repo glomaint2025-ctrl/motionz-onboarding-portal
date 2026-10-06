@@ -5,6 +5,7 @@ import { Card, CardHeader, Button, StatusBadge, Skeleton, Select } from '@/compo
 import { Notice } from '@/components/admin/Notice';
 import { formatDateTime } from '@/lib/utils/format';
 import { GhlFormsCard } from '../_components/GhlFormsCard';
+import { AutomationCard } from '../_components/AutomationCard';
 
 interface Submission {
   id: string;
@@ -45,7 +46,7 @@ const NOTIFICATION_FIELDS: { key: ListKey; label: string; help: string; placehol
   {
     key: 'lead_form_recipients',
     label: 'Lead forms',
-    help: 'Your lead team. Will be used by the Lead Replacement and Unresponsive Lead forms.',
+    help: 'Your lead team. Used by the Lead Replacement and Unresponsive Lead forms.',
     placeholder: 'leads@motionz.ai',
   },
 ];
@@ -326,6 +327,8 @@ export default function AdminSettingsPage() {
       </Card>
 
       <GhlFormsCard />
+
+      <AutomationCard />
 
       <Card style={{ marginBottom: 'var(--space-6)' }}>
         <CardHeader

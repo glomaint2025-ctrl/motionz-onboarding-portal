@@ -181,3 +181,39 @@ export function websiteChangeRequestEmail(params: {
   }
   return params.toName ? { ...message, toName: params.toName } : message;
 }
+
+/** A Lead Replacement or Unresponsive Lead form sent from the portal, for the lead review team. */
+export function leadRequestEmail(params: {
+  to: string;
+  type: 'replacement' | 'unresponsive';
+  companyName: string;
+  leadName: string;
+  leadPhone: string;
+  /** The outcome in words, e.g. "Approved", "Not replaceable", "Needs review", "Sent to the marketing team". */
+  outcome: string;
+  outcomeReason: string;
+  /** The answers as label and text, in form order. */
+  fields: [string, string][];
+  submittedBy: string;
+  portalUrl: string;
+}): EmailMessage {
+  const isReplacement = params.type === 'replacement';
+  const subject = isReplacement
+    ? `Lead replacement request (${params.outcome}): ${params.leadName} — ${params.companyName}`
+    : `Unresponsive lead: ${params.leadName} — ${params.companyName}`;
+  const heading = isReplacement
+    ? `${params.companyName} asked for a lead replacement`
+    : `${params.companyName} reported an unresponsive lead`;
+  const paragraphs = [
+    `${params.submittedBy} sent this from the client portal.`,
+    `Lead: ${params.leadName}`,
+    `Lead phone: ${params.leadPhone}`,
+    ...params.fields.filter(([, value]) => value).map(([label, value]) => `${label}: ${value}`),
+    `Outcome: ${params.outcome}`,
+    ...(params.outcomeReason ? [`Reason: ${params.outcomeReason}`] : []),
+  ];
+  const footer = isReplacement
+    ? 'The outcome above was worked out by the portal from the replacement rules and shown to the client. Mark the request done in the portal once it is handled.'
+    : 'Run your follow-ups with this lead, then mark the request done in the portal.';
+  return build(params.to, subject, heading, paragraphs, { label: 'Open client in portal', url: params.portalUrl }, footer, ['lead-request']);
+}

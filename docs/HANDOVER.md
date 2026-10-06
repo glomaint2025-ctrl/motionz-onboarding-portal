@@ -13,9 +13,10 @@ Read this first, then `docs/FINAL-REPORT.md` (what the portal does), `docs/CLIEN
 - **Deployed to staging on 5 Oct** with this branch. Vercel production env now has `GOOGLE_SOLAR_API_KEY`, `EMAIL_FROM_ADDRESS`, `EMAIL_FROM_NAME`, `STAFF_EXTRA_EMAILS`, `NEXTAUTH_URL`. Never add `EMAIL_TEST_REDIRECT_TO` or `TEST_*` there.
 - Optional SQL (app works without): `ALTER TABLE user_invitations ADD COLUMN IF NOT EXISTS full_name TEXT; ALTER TABLE user_invitations ADD COLUMN IF NOT EXISTS allowed_modules TEXT[];`
 - **Contract reminder (staff only):** while a client has no contract, admins see a notice on the client's Contract card, a "No contract attached" dashboard card and a "No contract" tag in the Clients list; CSMs see the tag and an "ask an admin" notice on the setup page (`hasContract` in the staff APIs, one query via `contractRepository.listTenantIdsWithContract()`; never sent to clients).
-- **Notification emails per team:** the `notifications` setting has three lists (onboarding form, `website_request_recipients`, `lead_form_recipients`) edited on Settings & Integrations; website change requests go to the CSM (or all admins if none) plus the website list; the lead list is stored but unused until the lead forms exist (`leadFormRecipients()` in `src/lib/onboarding/submissions.ts`).
+- **Notification emails per team:** the `notifications` setting has three lists (onboarding form, `website_request_recipients`, `lead_form_recipients`) edited on Settings & Integrations; website change requests go to the CSM (or all admins if none) plus the website list; the lead list (`leadFormRecipients()` in `src/lib/onboarding/submissions.ts`) is emailed every Lead Replacement and Unresponsive Lead form.
+- **Lead Replacement and Unresponsive Lead forms are built into the portal (7 Oct)**, on the client's Leads page; see the section "Lead Replacement and Unresponsive Lead forms" below. **The database owner must run `supabase/migrations/20261007000004_lead_requests.sql` first**; until then the forms say "This form is not available yet. Please tell your CSM." and staff lists are empty (nothing crashes). The dropdown options are a **first proposal awaiting the client's confirmation**.
 - Test results: `docs/E2E-TEST-REPORT.md`.
-- **Waiting on the client:** media buyer email(s); second CSM calendar id; contract-signed automation; Discord item 27 ("7 days then delete"); Lead Replacement and Unresponsive Lead forms; CSM account for the client; production accounts; Google API key restriction; production Google account for the Apps Script.
+- **Waiting on the client:** media buyer email(s); second CSM calendar id; contract-signed automation; Discord item 27 ("7 days then delete"); confirmation of the Lead Replacement dropdown options and rules (built as a first proposal); the GoHighLevel Inbound Webhook link for the lead-form automation; CSM account for the client; production accounts; Google API key restriction; production Google account for the Apps Script.
 
 ## Where things are
 | Item | Value |
@@ -119,8 +120,119 @@ the two Leads forms are unchanged and still follow the section below.
   field if an old page sends it). "Onboarding forms without a client" only ever lists GHL
   submissions; portal submissions always belong to a client.
 
-## Earlier decision (still true for the texting and Leads forms): forms stay in GHL
-All other client-facing forms stay **GHL forms embedded in the portal** (iframe, email/name pre-filled via URL
+## Lead Replacement and Unresponsive Lead forms (built 7 Oct 2026, native)
+The client asked for these two forms inside the portal instead of GoHighLevel forms. Clients (the
+"dealers" of his old tool) open them from **Leads**; every submission is saved, emailed to the lead
+review team and shown to staff.
+
+**To switch it on, run this SQL once** (Supabase → SQL editor; it is the whole of
+`supabase/migrations/20261007000004_lead_requests.sql` and is safe to run twice):
+
+```sql
+-- Lead Replacement and Unresponsive Lead forms sent from the client portal (Leads page).
+-- Safe to run more than once.
+CREATE TABLE IF NOT EXISTS lead_requests (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    tenant_id UUID NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+    lead_id UUID NULL REFERENCES leads(id) ON DELETE SET NULL,
+    type TEXT NOT NULL CHECK (type IN ('replacement', 'unresponsive')),
+    lead_name TEXT NOT NULL,
+    lead_phone TEXT NOT NULL,
+    details JSONB NOT NULL DEFAULT '{}'::jsonb,
+    decision TEXT NOT NULL CHECK (decision IN ('approved', 'not_replaceable', 'needs_review', 'sent')),
+    decision_reason TEXT,
+    status TEXT NOT NULL DEFAULT 'open' CHECK (status IN ('open', 'done')),
+    submitted_by UUID NULL REFERENCES users(id) ON DELETE SET NULL,
+    submitter_email TEXT,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    resolved_at TIMESTAMPTZ,
+    resolved_by UUID NULL REFERENCES users(id) ON DELETE SET NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_lead_requests_tenant ON lead_requests (tenant_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_lead_requests_open ON lead_requests (created_at DESC) WHERE status = 'open';
+
+ALTER TABLE lead_requests ENABLE ROW LEVEL SECURITY;
+
+-- Same style as the other tenant tables (20260922000002_rls_policies.sql): staff manage every row,
+-- a client reads only their own. The portal itself writes with the service role.
+DROP POLICY IF EXISTS admin_lead_requests_all ON lead_requests;
+CREATE POLICY admin_lead_requests_all ON lead_requests
+    FOR ALL
+    TO authenticated
+    USING (current_user_role() = 'admin');
+
+DROP POLICY IF EXISTS csm_lead_requests_all ON lead_requests;
+CREATE POLICY csm_lead_requests_all ON lead_requests
+    FOR ALL
+    TO authenticated
+    USING (current_user_role() = 'csm');
+
+DROP POLICY IF EXISTS client_lead_requests_select ON lead_requests;
+CREATE POLICY client_lead_requests_select ON lead_requests
+    FOR SELECT
+    TO authenticated
+    USING (tenant_id = current_user_tenant_id());
+```
+
+Until it is run nothing breaks: both forms show "This form is not available yet. Please tell your
+CSM.", "Your requests" is hidden, and the staff cards and the dashboard card are empty
+(`LeadRequestsUnavailableError` in `lead-requests.repository.ts`).
+
+**What was built**
+- **Client:** Leads → "Request a lead replacement" / "Report an unresponsive lead" (always shown, no
+  setting) open the pages `/portal/[clientId]/leads/replacement` and `/leads/unresponsive` (both
+  follow the `leads` module). Each lead row has **Replace** / **Not responding**, which open the same
+  pages with that lead picked (`?lead=<id>`). "Pick from your leads" searches the client's own leads
+  and fills name and phone; typing by hand is allowed too. Under the leads table, **Your requests**
+  lists their own submissions (20 at a time, "Show more"). One component for both forms:
+  `src/components/portal/LeadRequestForm.tsx`; the list is `LeadRequestList.tsx`.
+- **One place for the questions, checks and rules:** `src/lib/lead-requests/` —
+  `definition.ts` (options, limits, labels), `validation.ts` (used by the page and the API),
+  `decision.ts` (the instant decision, one pure function), `submissions.ts` (duplicate check, email,
+  webhook), `automation.ts` (the link check).
+- **The instant decision (Lead Replacement)**, in this order:
+  1. reason "I inspected the roof and they didn't buy" → **Not replaceable**
+  2. reason "Something else" → **Needs review**
+  3. appointment "Yes, and I inspected the roof" with any reason except "Roof doesn't qualify…" → **Not replaceable**
+  4. any of the six replaceable reasons → **Approved**
+
+  All three outcomes are saved and emailed; the client sees the outcome and its reason straight away.
+  **Unresponsive Lead:** fewer than 4 days → refused with "Submit this lead from day 4. Keep calling
+  twice a day until then." and **not saved**; otherwise saved as "Sent to the marketing team".
+- **The dropdown options are a first proposal awaiting the client's confirmation.** To change the
+  wording, edit the `label`s in `definition.ts` (keep the `key`s: they are what is stored and what the
+  decision uses). A new reason needs a key there and a line in `decision.ts` if it should not be
+  "Approved". Stored rows keep the label that was shown at the time (`details.reason_label`).
+- **API:** `GET/POST /api/portal/[clientId]/lead-requests` (signed in, own client only, `leads`
+  module, 30 an hour per person; the same form for the same lead with the same answers within 10
+  minutes returns the earlier result). Staff may submit for a client they can open; whoever is signed
+  in is stored as the submitter. Staff: `GET/PATCH /api/csm/clients/[id]/lead-requests` (admins every
+  client, CSMs only assigned clients) for the list and **Mark done / Reopen**.
+- **Emails:** template `leadRequestEmail`; recipients are the **Lead forms** list on Settings &
+  Integrations plus the client's CSM when that box is ticked; if that is nobody, the assigned CSM;
+  with no CSM, every admin (`resolveLeadRequestRecipients`).
+- **Staff:** a **Lead requests** card on the admin client page and the CSM setup page
+  (`src/components/admin/LeadRequestsCard.tsx`), and a dashboard card "Lead requests to handle"
+  (open requests per client).
+- **Automations (optional):** Settings & Integrations → "Automations (optional)". An admin pastes a
+  GoHighLevel **Inbound Webhook** link (app setting `automation.lead_request_webhook_url`, API
+  `GET/PUT /api/admin/settings/automation`). After every saved submission the portal POSTs JSON
+  `{ type, decision, decision_reason, lead: { name, phone, ghl_contact_id? }, details, client: { id,
+  name, ghl_location_id }, submitted_by_email, submitted_at }` with a 5 second limit. Only public
+  https links are accepted (no IP addresses, localhost or private names; redirects are not followed).
+  A failure never fails the client's request; it is written to the audit log
+  (`lead_request.webhook_failed`). No retry is attempted.
+- **Audit log:** `lead_request.submitted`, `lead_request.status_changed`,
+  `lead_request.webhook_failed`, `settings.automation_updated`.
+- **Removed:** the "Lead replacement form" and "Unresponsive lead form" rows of the GoHighLevel forms
+  card, their keys in the `forms` setting and `LeadHelpForms.tsx`. A saved `forms` value that still
+  has those keys is simply ignored.
+- **Tests:** `tests/portal/lead-requests.test.ts` (in `npm test`). Manual cases: 10c, 13b and 13b-2
+  in `docs/MANUAL-TEST-CASES.md`.
+
+## Earlier decision (still true for the texting form only): forms stay in GHL
+The Texting registration form stays a **GHL form embedded in the portal** (iframe, email/name pre-filled via URL
 params). The client edits forms only in GHL; the GHL "Form Submitted" workflow sends the submission to
 `/api/webhooks/ghl` and the portal stores **every field generically** (`onboarding_submissions.answers`
 JSONB, keyed by GHL field label). New or renamed GHL fields therefore need **no portal code or DB
@@ -141,17 +253,15 @@ The portal keeps only the form ID and shows the form straight away:
 | Form | Shown on | Can be empty? |
 |---|---|---|
 | Texting registration form | Setup Progress → "Open texting form" | No (built-in default) |
-| Lead replacement form | Leads → "Request a lead replacement" | Yes (empty = button hidden) |
-| Unresponsive lead form | Leads → "Report an unresponsive lead" | Yes (empty = button hidden) |
 
 - Stored in `app_settings`, key `forms` (`FormSettings` in `src/lib/ghl-forms.ts`, read through
   `getFormSettings()` / `resolveFormSettings()` in `app-settings.repository.ts`). No migration needed.
   `PORTAL_LINKS.a2pFormId` is now only the default for that setting.
 - `parseGhlFormId()` turns pasted text into an ID. API: `GET/PUT /api/admin/settings/forms` (admin only,
   audit action `settings.forms_updated`).
-- The portal gets the IDs from `forms` in `GET /api/portal/[clientId]/data` (Setup Progress) and from
-  `GET /api/portal/[clientId]/forms` (Leads page; also returns the email to pre-fill). The two Leads
-  forms are left out for anyone who cannot open the Leads section.
+- The portal gets the ID from `forms` in `GET /api/portal/[clientId]/data` (Setup Progress);
+  `GET /api/portal/[clientId]/forms` returns the same plus the email to pre-fill. The two lead forms
+  are no longer GoHighLevel forms (see the section above).
 - Every GHL form pop-up is `src/components/portal/GhlFormModal.tsx`. To add another GHL form: add a key to
   `FormSettings` + `FORM_SETTING_FIELDS`, then open it with `GhlFormModal` where it belongs.
 - Saving a link only makes the form **appear**. To get its submissions into the portal, the form still
