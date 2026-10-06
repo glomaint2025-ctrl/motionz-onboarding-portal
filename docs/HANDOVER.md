@@ -87,6 +87,31 @@ JSONB, keyed by GHL field label). New or renamed GHL fields therefore need **no 
 change**. Keep this design for any new form (add a new `customData.event` value per form type).
 Show the client their own submitted answers in their portal (read-only), not just Admin/CSM.
 
+### Where form links are managed (no developer needed)
+**Admin → Settings & Integrations → "GoHighLevel forms".** An admin pastes a form link, the `<iframe>`
+embed code or the bare ID (in GHL: Sites → Forms → the form → Integrate/Share → copy link) and saves.
+The portal keeps only the form ID and shows the form straight away:
+
+| Form | Shown on | Can be empty? |
+|---|---|---|
+| Onboarding form | Setup Progress → "Open onboarding form" | No (built-in default) |
+| Texting registration form | Setup Progress → "Open texting form" | No (built-in default) |
+| Lead replacement form | Leads → "Request a lead replacement" | Yes (empty = button hidden) |
+| Unresponsive lead form | Leads → "Report an unresponsive lead" | Yes (empty = button hidden) |
+
+- Stored in `app_settings`, key `forms` (`FormSettings` in `src/lib/ghl-forms.ts`, read through
+  `getFormSettings()` / `resolveFormSettings()` in `app-settings.repository.ts`). No migration needed.
+  `PORTAL_LINKS.onboardingFormId` / `a2pFormId` are now only the defaults for that setting.
+- `parseGhlFormId()` turns pasted text into an ID. API: `GET/PUT /api/admin/settings/forms` (admin only,
+  audit action `settings.forms_updated`).
+- The portal gets the IDs from `forms` in `GET /api/portal/[clientId]/data` (Setup Progress) and from
+  `GET /api/portal/[clientId]/forms` (Leads page; also returns the email to pre-fill). The two Leads
+  forms are left out for anyone who cannot open the Leads section.
+- Every form pop-up is `src/components/portal/GhlFormModal.tsx`. To add a fifth form: add a key to
+  `FormSettings` + `FORM_SETTING_FIELDS`, then open it with `GhlFormModal` where it belongs.
+- Saving a link only makes the form **appear**. To get its submissions into the portal, the form still
+  needs its own GHL "Form Submitted" workflow → `/api/webhooks/ghl` (see the paragraph above).
+
 ## Client feedback round 2 (2026-10-03): to do
 1. **Branding:** app background `#090703` (warm near-black) and the client's new logo (orange robot in a
    hexagon on orange). Move the accent colour from cyan to the logo's orange in `src/styles/tokens.css`;

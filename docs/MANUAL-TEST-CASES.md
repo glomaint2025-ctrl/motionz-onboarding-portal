@@ -161,6 +161,24 @@ To bring **every** older client up to date in one go instead of pressing the but
 | 10.7 | "Onboarding forms without a client" | "Nothing to review." or a list with **Link** |
 | 10.8 | "Connected services" | Email, Client tracking sheets, GoHighLevel webhooks all **Connected** |
 
+### 10b. GoHighLevel forms (same page, card "GoHighLevel forms")
+
+Use a real form link from GoHighLevel (Sites > Forms > the form > Integrate/Share > copy link). Write down
+the two IDs shown at the start so you can put them back at the end.
+
+| # | Steps | Expected |
+|---|---|---|
+| 10.9 | Look at the card | Four rows: Onboarding form, Texting registration form, Lead replacement form, Unresponsive lead form. The first two say **Showing on Setup Progress** with a Form ID and a **Preview** link; the last two say **Not set — hidden from clients** (until a link is saved). **Save form links** is greyed out |
+| 10.10 | Click **Preview** on Onboarding form | The GHL form opens in a new tab |
+| 10.11 | Lead replacement form: type `hello` > **Save form links** | Under the box: "That does not look like a GoHighLevel form link or ID…". Nothing is saved |
+| 10.12 | Clear the Onboarding form box > Save | Under the box: "This form is always shown to clients, so it cannot be left empty." Put the ID back |
+| 10.13 | Lead replacement form: paste a full form link (`https://api.leadconnectorhq.com/widget/form/…`) | "Form ID: … (not saved yet)" appears under the box, with **Preview** |
+| 10.14 | Unresponsive lead form: paste the whole `<iframe …>` embed code of a form > **Save form links** | "Form links saved. Clients see the change straight away." Both rows now say **Showing on Leads** and each box shows only the ID |
+| 10.15 | Reload the page (F5) | The saved IDs are still there |
+| 10.16 | Left menu > **Audit Logs** | Newest entry is the forms change by you (details list the forms that changed) |
+| 10.17 | Clear the Unresponsive lead form box > Save | Saved; that row says **Not set — hidden from clients** |
+| 10.18 | After 13.26 to 13.30 below: clear Lead replacement form too > Save | Both Leads rows say **Not set — hidden from clients** |
+
 ## 11. Admin: Audit Logs and Security Alerts
 
 | # | Steps | Expected |
@@ -218,6 +236,19 @@ To bring **every** older client up to date in one go instead of pressing the but
 | 13.23 | Left menu > **Company Profile** > clear Business name > Save | Required |
 | 13.24 | Phone `abc` > Save | "Enter a valid phone number…" |
 | 13.25 | Fix phone > Save > reload (F5) | "Your changes were saved."; reload shows the NEW phone |
+
+### 13b. Lead forms on the Leads page (needs 10.13 and 10.14 done first)
+
+| # | Steps | Expected |
+|---|---|---|
+| 13.26 | With **both** lead form links saved by the admin: left menu > **Leads** | Under the page intro: "Need help with a lead?" with **Request a lead replacement** and **Report an unresponsive lead** |
+| 13.27 | Click **Request a lead replacement** | Pop-up with the GHL form, your email already filled; "Loading the form..." shows first; clicking outside does NOT close it; **Open in new tab** opens the same form; **Close**, **×** or Esc closes it |
+| 13.28 | Click **Report an unresponsive lead** | The other form opens the same way |
+| 13.29 | Admin clears the Unresponsive lead form link (10.17) > reload Leads | Only **Request a lead replacement** is left |
+| 13.30 | Admin clears both links (10.18) > reload Leads | The "Need help with a lead?" row is gone completely (no empty box) |
+| 13.31 | Admin points Onboarding form at another form link > as the client open **Setup Progress** > **Open onboarding form** | The pop-up shows the NEW form. Put the original link back afterwards |
+| 13.32 | As admin or CSM open the client's portal ("Viewing as staff") > **Leads** (with a lead form link saved) | The same buttons show; the form opens with the **client's** email filled |
+| 13.33 | Phone width (375px) > **Leads** | The buttons wrap under "Need help with a lead?"; nothing is cut off; the pop-up fits the screen |
 
 ## 14. Team (still as the client owner)
 

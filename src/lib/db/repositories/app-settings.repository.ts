@@ -2,6 +2,10 @@ import { getSupabaseServiceClient } from '../supabase-client';
 import { getStore } from '../mock-db';
 import { DatabaseError } from '../../errors';
 import { PORTAL_LINKS } from '../../portal-links';
+import { FORM_SETTING_DEFAULTS, sanitizeFormSettings, type FormSettings } from '../../ghl-forms';
+
+export { parseGhlFormId, FORM_SETTING_DEFAULTS, FORM_SETTING_FIELDS, GHL_FORM_ID_PATTERN } from '../../ghl-forms';
+export type { FormSettings, FormSettingKey } from '../../ghl-forms';
 
 // ───────────────────────── csm_calendars (CSM booking calendars) ─────────────────────────
 // Self-contained block: stored under the `csm_calendars` key through the generic get/set below.
@@ -74,10 +78,12 @@ export interface SecuritySettings {
   staff_login_code: StaffLoginCodeMode;
 }
 
-const DEFAULTS: { notifications: NotificationSettings; security: SecuritySettings } = {
+const DEFAULTS: { notifications: NotificationSettings; security: SecuritySettings; forms: FormSettings } = {
   notifications: { onboarding_form_recipients: [], notify_assigned_csm: true },
   // Off by default so staff whose @motionz.ai mailbox cannot receive email are not locked out.
   security: { staff_login_code: 'off' },
+  // GoHighLevel form ids shown in the client portal. Admins change them on Settings & Integrations.
+  forms: FORM_SETTING_DEFAULTS,
 };
 
 type SettingKey = keyof typeof DEFAULTS;
@@ -115,3 +121,21 @@ export class AppSettingsRepository {
 }
 
 export const appSettingsRepository = new AppSettingsRepository();
+
+/** The portal's GoHighLevel form ids, with anything malformed replaced by the built-in default. */
+export async function getFormSettings(): Promise<FormSettings> {
+  return sanitizeFormSettings(await appSettingsRepository.get('forms'));
+}
+
+/**
+ * Form ids for the client portal. Never throws: if the setting cannot be read, the built-in
+ * onboarding and texting forms keep Setup Progress working.
+ */
+export async function resolveFormSettings(): Promise<FormSettings> {
+  try {
+    return await getFormSettings();
+  } catch (err: any) {
+    console.error(`[forms] Could not read the form settings, using the built-in defaults: ${err?.message}`);
+    return { ...FORM_SETTING_DEFAULTS };
+  }
+}

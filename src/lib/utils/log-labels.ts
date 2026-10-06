@@ -73,6 +73,7 @@ export const AUDIT_ACTION_LABELS: Record<string, string> = {
   'onboarding.step_updated': 'Onboarding step updated',
   'step.updated': 'Setup step updated',
   'settings.notifications_updated': 'Notification settings updated',
+  'settings.forms_updated': 'GoHighLevel form links updated',
   'settings.security_updated': 'Staff sign-in security updated',
   'team.invite_sent': 'Team member invited',
   'team.invite_revoked': 'Team invite cancelled',

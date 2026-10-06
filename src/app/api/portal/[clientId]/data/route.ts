@@ -13,7 +13,7 @@ import {
 import { userRepository } from '@/lib/db/repositories/users.repository';
 import { leadRepository } from '@/lib/db/repositories/leads.repository';
 import { csmAssignmentRepository } from '@/lib/db/repositories';
-import { resolveBookingCalendarId } from '@/lib/db/repositories/app-settings.repository';
+import { resolveBookingCalendarId, resolveFormSettings } from '@/lib/db/repositories/app-settings.repository';
 import { assertPortalAccess, handleAuthError } from '@/lib/auth/guard';
 import { hasPermission } from '@/lib/auth/permissions';
 import { PORTAL_MODULES } from '@/lib/portal-modules';
@@ -96,6 +96,12 @@ export async function GET(
     const canSeeContracts =
       canSee('contracts') && (!session || hasPermission(session.role, 'client:view_contract'));
 
+    // GoHighLevel form ids set by an admin. The two Leads forms follow the Leads section.
+    const formSettings = await resolveFormSettings();
+    const forms = canSee('leads')
+      ? formSettings
+      : { ...formSettings, lead_replacement_form_id: '', unresponsive_lead_form_id: '' };
+
     // Integration credentials (API tokens etc.) never leave the server. The sheet link follows Results Tracking.
     const publicIntegrations = integrations
       .filter((i: any) => i.integration_type !== 'google_sheets' || canSee('tracking'))
@@ -139,6 +145,7 @@ export async function GET(
       invitations: isMember && effectiveFeatureToggles.team === false ? [] : invitations.map(publicInvitation),
       csm: csmUser ? { name: csmUser.full_name, email: csmUser.email } : null,
       bookingCalendarId,
+      forms,
       viewer: session
         ? { email: session.email, role: session.role, full_name: viewerUser?.full_name || '' }
         : null,

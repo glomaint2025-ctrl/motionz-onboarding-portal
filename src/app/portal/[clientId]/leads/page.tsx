@@ -3,6 +3,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useParams } from 'next/navigation';
 import { Card, CardHeader, StatusBadge, Input, Select, Skeleton, Button, Pagination } from '@/components/ui';
+import { LeadHelpForms } from '@/components/portal/LeadHelpForms';
 import { formatDate } from '@/lib/utils/format';
 
 interface Lead {
@@ -211,6 +212,9 @@ export default function LeadsPage() {
           stage, update it in GoHighLevel and it updates here automatically.
         </p>
       </div>
+
+      {/* Shown only when an admin has saved a link for at least one of the two lead forms. */}
+      <LeadHelpForms clientId={clientId} />
 
       {/* Only when there is truly nothing: a client with leads is connected, whatever the setting says. */}
       {data && !data.ghlConnected && data.counts.all === 0 && (
