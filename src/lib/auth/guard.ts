@@ -48,9 +48,14 @@ export interface GuardOptions {
 export async function assertActiveAccount(session: SessionPayload): Promise<void> {
   // Staff are exempt from tenant-level bans, but a disabled staff account is blocked.
   if (session.role === 'admin' || session.role === 'csm') {
-    const staffUser = await userRepository.findById(session.userId);
+    const staffUser =
+      (await userRepository.findById(session.userId)) || (await userRepository.findByEmail(session.email));
     if (staffUser?.status === 'suspended') {
       throw new AppError('Your staff access has been disabled.', 403, 'ACCOUNT_SUSPENDED');
+    }
+    // A deleted staff member (Admin > Staff > Delete) is signed out on their next request.
+    if (!staffUser) {
+      throw new AppError('Your staff account no longer exists.', 403, 'ACCOUNT_SUSPENDED');
     }
     return;
   }

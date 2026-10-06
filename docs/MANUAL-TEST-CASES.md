@@ -101,6 +101,8 @@ Left menu > **Clients** > **Add client**.
 | 5.15 | On a client added before per-client folders (e.g. Zydeco): **Google files** | **Open tracking sheet** plus "Still missing: calculator, Drive folder." and a **Finish Google files setup** button |
 | 5.16 | Press **Finish Google files setup** | "Setting up…" then "Google files are set up."; all three links show, the button is gone. In Drive the old tracking sheet has **moved** into the new client folder (not copied) and a calculator copy is next to it |
 
+To bring **every** older client up to date in one go instead of pressing the button on each one, a developer can run `npx tsx scripts/setup-google-files.ts --dry-run` (only lists what is missing) and then the same command without `--dry-run`. See docs/07-integrations/google-sheets.md.
+
 ## 6. Admin: GHL Connect
 
 | # | Steps | Expected |
@@ -121,8 +123,12 @@ Left menu > **Clients** > **Add client**.
 | 7.5 | Put back `SRn2ONyB295xnnPR5JwR` > Save default | Saved |
 | 7.6 | **Edit** on Heshan (Test CSM) > Booking calendar ID `bad id!` > Save | Error; then clear it > Save > "Saved." |
 | 7.7 | **Edit** > change name to `Heshan (Test CSM) 2` > Save, then change back | Saved both times |
-| 7.8 | **Enable** on Test CSM Two > then **Disable** > confirm in the dialog | "was enabled" / "was disabled" |
-| 7.9 | Your own row (Motionz Admin) | No Disable button |
+| 7.8 | **Team** table | Columns **User** (name, email, and for CSMs "N assigned clients · Default calendar"), **Role**, **Status** (Active / Disabled), **Actions**. No sideways scrolling at 1024px; on a phone each person is a stacked card |
+| 7.9 | Your own row (Motionz Admin) | A "You" tag next to the role; **Edit** only, no Delete button |
+| 7.10 | A row that shows **Disabled** (e.g. Test CSM Two) > **Enable** | "… was enabled."; the status becomes Active and the Enable button is gone (there is no Disable button any more) |
+| 7.11 | **Delete** on a CSM who has clients | Dialog "Delete <name>? …"; pressing **Delete** shows inside the dialog "<name> still looks after N clients. Give those clients to another CSM first…"; nobody is deleted |
+| 7.12 | Add a throwaway staff member, then **Delete** > **Delete** | "<name> was deleted."; the row is gone; signing in with that email says it is not a staff account; Audit log shows "Staff member deleted" and their older entries are still there |
+| 7.13 | **Add a staff member** form at 1024px and wider | Name, email, Role and the **Add staff member** button sit on one row; the button is the same height as the boxes and level with them |
 
 ## 8. Admin: Portal Templates
 

@@ -48,6 +48,7 @@ export const AUDIT_ACTION_LABELS: Record<string, string> = {
   'staff.updated': 'Staff member edited',
   'staff.disabled': 'Staff member disabled',
   'staff.enabled': 'Staff member enabled',
+  'staff.deleted': 'Staff member deleted',
   'client.authenticated': 'Client signed in',
   'client.updated': 'Client details updated',
   'client.deleted': 'Client archived',

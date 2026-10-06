@@ -47,7 +47,9 @@ export default function StaffPage() {
   const clearAddError = () => setAddMessage((prev) => (prev?.type === 'error' ? null : prev));
 
   const [editing, setEditing] = useState<StaffMember | null>(null);
-  const [disableTarget, setDisableTarget] = useState<StaffMember | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<StaffMember | null>(null);
+  const [deleteBusy, setDeleteBusy] = useState(false);
+  const [deleteError, setDeleteError] = useState('');
   const [editName, setEditName] = useState('');
   const [editEmail, setEditEmail] = useState('');
   const [editRole, setEditRole] = useState<'csm' | 'admin'>('csm');
@@ -114,29 +116,61 @@ export default function StaffPage() {
     }
   };
 
-  const toggle = async (member: StaffMember, confirmed = false) => {
-    const action = member.status === 'suspended' ? 'enable' : 'disable';
-    if (action === 'disable' && !confirmed) {
-      setDisableTarget(member);
-      return;
-    }
-    setDisableTarget(null);
+  /** Only people who are already disabled can be enabled again; there is no Disable button any more. */
+  const enable = async (member: StaffMember) => {
     setTeamMessage(null);
     try {
       const res = await fetch('/api/admin/staff', {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ id: member.id, action }),
+        body: JSON.stringify({ id: member.id, action: 'enable' }),
       });
       const data = await res.json().catch(() => ({}));
       if (data.success) {
-        setTeamMessage({ type: 'ok', text: `${member.name || member.email} was ${action === 'disable' ? 'disabled' : 'enabled'}.` });
+        setTeamMessage({ type: 'ok', text: `${member.name || member.email} was enabled.` });
         load();
       } else {
         setTeamMessage({ type: 'error', text: data.error || 'Could not update the staff member.' });
       }
     } catch {
       setTeamMessage({ type: 'error', text: 'Could not reach the server. Nothing was changed.' });
+    }
+  };
+
+  const openDelete = (member: StaffMember) => {
+    setDeleteTarget(member);
+    setDeleteError('');
+  };
+
+  const closeDelete = () => {
+    if (deleteBusy) return;
+    setDeleteTarget(null);
+    setDeleteError('');
+  };
+
+  const confirmDelete = async () => {
+    if (!deleteTarget) return;
+    setDeleteBusy(true);
+    setDeleteError('');
+    try {
+      const res = await fetch('/api/admin/staff', {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id: deleteTarget.id }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (res.ok && data.success) {
+        setTeamMessage({ type: 'ok', text: `${deleteTarget.name || deleteTarget.email} was deleted.` });
+        setDeleteTarget(null);
+        load();
+      } else {
+        // The server's reason (e.g. they still have clients) stays inside the dialog.
+        setDeleteError(data.error || 'Could not delete this staff member. Please try again.');
+      }
+    } catch {
+      setDeleteError('Could not reach the server. Nobody was deleted.');
+    } finally {
+      setDeleteBusy(false);
     }
   };
 
@@ -240,7 +274,8 @@ export default function StaffPage() {
 
       <Card style={{ marginBottom: 'var(--space-6)' }}>
         <CardHeader title="Add a staff member" subtitle="They receive an email to set their password, then sign in with their email and password." />
-        <form onSubmit={addStaff} style={{ display: 'grid', gap: 'var(--space-3)', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', alignItems: 'end' }}>
+        {/* One row from about 900px; the button lines up with the input boxes (staff-tables.css). */}
+        <form onSubmit={addStaff} className="staff-add-form">
           <Input
             label="Full name"
             value={name}
@@ -331,71 +366,109 @@ export default function StaffPage() {
         {loading ? (
           <Skeleton height="120px" />
         ) : (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-2)' }}>
-            {staff.map((m) => (
-              <div
-                key={m.id}
-                style={{
-                  display: 'flex',
-                  justifyContent: 'space-between',
-                  alignItems: 'center',
-                  gap: 'var(--space-3)',
-                  flexWrap: 'wrap',
-                  padding: 'var(--space-3)',
-                  border: '1px solid var(--color-border-subtle)',
-                  borderRadius: 'var(--radius-md)',
-                }}
-              >
-                <div>
-                  <div style={{ fontWeight: 'var(--font-weight-semibold)' }}>{m.name || m.email}</div>
-                  <div style={{ fontSize: 'var(--font-size-xs)', color: 'var(--color-text-muted)' }}>
-                    {m.email}
-                    {m.assignedClients !== null ? ` · ${m.assignedClients} assigned client${m.assignedClients === 1 ? '' : 's'}` : ''}
-                  </div>
-                  {m.role === 'csm' && (
-                    <div style={{ fontSize: 'var(--font-size-xs)', color: 'var(--color-text-muted)' }}>
-                      {m.calendarId ? `Calendar: ${m.calendarId}` : 'Default calendar'}
-                    </div>
-                  )}
-                </div>
-                <div style={{ display: 'flex', gap: 'var(--space-2)', alignItems: 'center' }}>
-                  <StatusBadge status={m.role === 'admin' ? 'Admin' : 'CSM'} variant="progress" />
-                  {m.status === 'suspended' && <StatusBadge status="Disabled" variant="suspended" />}
-                  {m.self && <StatusBadge status="You" variant="pending" dot={false} />}
-                  <Button variant="outline" size="sm" onClick={() => openEdit(m)} aria-label={`Edit ${m.name || m.email}`}>
-                    Edit
-                  </Button>
-                  {!m.self && (
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => toggle(m)}
-                      aria-label={`${m.status === 'suspended' ? 'Enable' : 'Disable'} ${m.name || m.email}`}
-                    >
-                      {m.status === 'suspended' ? 'Enable' : 'Disable'}
-                    </Button>
-                  )}
-                </div>
-              </div>
-            ))}
+          <div className="ui-modern-table-card ui-staff-table-card">
+            {/* Same table as Admin > Clients: fits a 1024px screen, stacked cards on phones (staff-tables.css). */}
+            <table className="ui-modern-table ui-clients-table ui-staff-table">
+              <thead>
+                <tr>
+                  <th scope="col">User</th>
+                  <th scope="col">Role</th>
+                  <th scope="col">Status</th>
+                  <th scope="col">Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                {staff.length === 0 ? (
+                  <tr>
+                    <td colSpan={4} style={{ textAlign: 'center', justifyContent: 'center', padding: 'var(--space-8) var(--space-4)', color: 'var(--color-text-muted)' }}>
+                      No staff members yet.
+                    </td>
+                  </tr>
+                ) : (
+                  staff.map((m) => {
+                    const label = m.name || m.email;
+                    const disabled = m.status === 'suspended';
+                    return (
+                      <tr key={m.id}>
+                        <td className="ui-cell-title" data-label="User">
+                          <div className="ui-staff-user">
+                            <span className="ui-company-name">{label}</span>
+                            <span className="ui-company-sub">{m.email}</span>
+                            {m.role === 'csm' && (
+                              <span className="ui-company-sub">
+                                {m.assignedClients !== null
+                                  ? `${m.assignedClients} assigned client${m.assignedClients === 1 ? '' : 's'} · `
+                                  : ''}
+                                {m.calendarId ? `Calendar: ${m.calendarId}` : 'Default calendar'}
+                              </span>
+                            )}
+                          </div>
+                        </td>
+                        <td data-label="Role">
+                          <div className="ui-staff-badges">
+                            <StatusBadge status={m.role === 'admin' ? 'Admin' : 'CSM'} variant="progress" dot={false} />
+                            {m.self && <StatusBadge status="You" variant="pending" dot={false} />}
+                          </div>
+                        </td>
+                        <td data-label="Status">
+                          {disabled ? <StatusBadge status="Disabled" variant="suspended" /> : <StatusBadge status="Active" variant="done" />}
+                        </td>
+                        <td className="ui-cell-actions" data-label="Actions">
+                          <div className="ui-actions-cell">
+                            <Button variant="outline" size="sm" onClick={() => openEdit(m)} aria-label={`Edit ${label}`}>
+                              Edit
+                            </Button>
+                            {!m.self && disabled && (
+                              <Button variant="outline" size="sm" onClick={() => enable(m)} aria-label={`Enable ${label}`}>
+                                Enable
+                              </Button>
+                            )}
+                            {!m.self && (
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                className="ui-btn-danger-outline"
+                                onClick={() => openDelete(m)}
+                                aria-label={`Delete ${label}`}
+                              >
+                                Delete
+                              </Button>
+                            )}
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })
+                )}
+              </tbody>
+            </table>
           </div>
         )}
       </Card>
 
       <Modal
-        isOpen={Boolean(disableTarget)}
-        onClose={() => setDisableTarget(null)}
-        title="Disable staff member"
+        isOpen={Boolean(deleteTarget)}
+        onClose={closeDelete}
+        title="Delete staff member"
+        dismissOnOverlay={!deleteBusy}
         footer={
           <div style={{ display: 'flex', gap: 'var(--space-2)', justifyContent: 'flex-end', width: '100%' }}>
-            <Button variant="secondary" onClick={() => setDisableTarget(null)}>Cancel</Button>
-            <Button variant="danger" onClick={() => disableTarget && toggle(disableTarget, true)}>Disable</Button>
+            <Button variant="outline" onClick={closeDelete} disabled={deleteBusy}>
+              Cancel
+            </Button>
+            <Button variant="danger" onClick={confirmDelete} disabled={deleteBusy}>
+              {deleteBusy ? 'Deleting...' : 'Delete'}
+            </Button>
           </div>
         }
       >
-        <p>
-          Disable <strong>{disableTarget?.name || disableTarget?.email}</strong>? They are signed out and cannot sign in until you enable them again. Their clients stay assigned to them.
-        </p>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-3)' }}>
+          {deleteError && <Notice style={{ wordBreak: 'break-word' }}>{deleteError}</Notice>}
+          <p style={{ margin: 0 }}>
+            Delete <strong>{deleteTarget?.name || deleteTarget?.email}</strong>? They will no longer be able to sign in and will be
+            removed from this list. This cannot be undone. Their past activity stays in the audit log.
+          </p>
+        </div>
       </Modal>
 
       <Modal

@@ -18,6 +18,7 @@ import { resolveBaseUrl } from '@/lib/auth/security-utils';
 import { getSupabaseServiceClient } from '@/lib/db/supabase-client';
 import { sendEmail, canExposeDevLinks } from '@/lib/email';
 import { validateEmail, validateText } from '@/lib/validation';
+import { removeAvatar } from '@/lib/storage/avatars';
 
 const SETUP_LINK_MINUTES = 72 * 60;
 
@@ -274,7 +275,7 @@ export async function GET(request: Request) {
         // A CSM's own GHL booking calendar; null = their clients book on the default calendar.
         calendarId: u.role === 'csm' ? calendars.by_user[u.id] || null : null,
         created_at: u.created_at,
-        // The signed-in admin's own row: the UI hides Disable and locks the role.
+        // The signed-in admin's own row: the UI hides Delete and locks the role.
         self: isSelf(u, session),
       }))
     );
@@ -414,5 +415,130 @@ export async function PATCH(request: Request) {
   } catch (err: any) {
     if (err.statusCode === 401 || err.statusCode === 403) return handleAuthError(err);
     return NextResponse.json({ error: 'Failed to update staff member.' }, { status: 500 });
+  }
+}
+
+/**
+ * { id } — deletes a staff member for good: their sign-in, their users row and their booking
+ * calendar entry. Refused for your own account, the last active admin, and a CSM who still
+ * has clients (nothing is unassigned automatically). Their past audit entries are kept:
+ * audit_logs.actor_user_id is ON DELETE SET NULL and the entries carry the actor's email.
+ */
+export async function DELETE(request: Request) {
+  try {
+    const { session } = await requireAuth(request, { roles: ['admin'] });
+    const body = await request.json().catch(() => ({}));
+
+    const target = body.id ? await userRepository.findById(String(body.id)) : null;
+    if (!target || (target.role !== 'admin' && target.role !== 'csm')) {
+      return NextResponse.json({ error: 'Staff member not found.' }, { status: 404 });
+    }
+    if (isSelf(target, session!)) {
+      return NextResponse.json({ error: 'You cannot delete your own account.' }, { status: 400 });
+    }
+
+    const displayName = target.full_name || target.email;
+
+    if (target.role === 'admin' && target.status !== 'suspended') {
+      const admins = await userRepository.listAllByRole('admin');
+      const otherActiveAdmins = admins.filter((a) => a.id !== target.id && a.status !== 'suspended');
+      if (otherActiveAdmins.length === 0) {
+        return NextResponse.json(
+          { error: `${displayName} is the only active admin. Add or enable another admin first, then delete.` },
+          { status: 400 }
+        );
+      }
+    }
+
+    if (target.role === 'csm') {
+      const assigned = (await csmAssignmentRepository.listByCsm(target.id)).length;
+      if (assigned > 0) {
+        return NextResponse.json(
+          {
+            error: `${displayName} still looks after ${assigned} client${assigned === 1 ? '' : 's'}. Give ${
+              assigned === 1 ? 'that client' : 'those clients'
+            } to another CSM first (Clients → open the client → Assigned CSM), then delete.`,
+            assignedClients: assigned,
+          },
+          { status: 409 }
+        );
+      }
+    }
+
+    // 1. Their own booking calendar is no longer used for anyone.
+    const calendars = await getCsmCalendarSettings();
+    const previousCalendarId = calendars.by_user[target.id] || null;
+    if (previousCalendarId) {
+      const byUser = { ...calendars.by_user };
+      delete byUser[target.id];
+      try {
+        await setCsmCalendarSettings({ ...calendars, by_user: byUser }, session!.email);
+      } catch (err: any) {
+        console.error(`[staff] Booking calendar for ${target.id} could not be removed: ${err?.message}`);
+        return NextResponse.json({ error: 'Could not delete this staff member. Nothing was changed.' }, { status: 500 });
+      }
+    }
+    const restoreCalendar = async () => {
+      if (!previousCalendarId) return;
+      try {
+        await setCsmCalendarSettings(calendars, session!.email);
+      } catch (err: any) {
+        console.error(`[staff] Booking calendar for ${target.id} could not be put back: ${err?.message}`);
+      }
+    };
+
+    // 2. Their sign-in (Supabase Auth). No sign-in account at all is fine: there is nothing to remove.
+    const supabase = getSupabaseServiceClient();
+    if (supabase) {
+      const notFound = (error: { status?: number; message: string } | null) =>
+        Boolean(error && (error.status === 404 || /not found/i.test(error.message)));
+      const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(target.id);
+      let res = isUuid ? await supabase.auth.admin.deleteUser(target.id) : null;
+      if (!res || notFound(res.error)) {
+        // Older staff rows can have an id that differs from their auth id.
+        const fallbackId = await findAuthUserIdByEmail(supabase, target.email);
+        res = fallbackId && fallbackId !== target.id ? await supabase.auth.admin.deleteUser(fallbackId) : null;
+      }
+      if (res?.error && !notFound(res.error)) {
+        console.error(`[staff] Sign-in account for ${target.id} could not be deleted: ${res.error.message}`);
+        await restoreCalendar();
+        return NextResponse.json(
+          { error: `Could not remove the sign-in for ${displayName}. Nothing was deleted. Please try again.` },
+          { status: 502 }
+        );
+      }
+    }
+
+    // 3. Then the users row. Rows that point at it are released by the database
+    //    (audit logs, invitations and similar: SET NULL; CSM assignments: CASCADE, none left here).
+    try {
+      await userRepository.delete(target.id);
+    } catch (err: any) {
+      console.error(`[staff] Staff record ${target.id} could not be deleted: ${err?.message}`);
+      return NextResponse.json(
+        {
+          error: supabase
+            ? `${displayName} can no longer sign in, but could not be removed from this list. Press Delete again to finish.`
+            : 'Could not delete this staff member. Nothing was changed.',
+        },
+        { status: 500 }
+      );
+    }
+
+    await removeAvatar(target.avatar_path);
+
+    await auditLogRepository.create({
+      actor_email: session!.email,
+      actor_role: 'admin',
+      action: 'staff.deleted',
+      resource_type: 'user',
+      resource_id: target.id,
+      details: { email: target.email, name: target.full_name || null, role: target.role },
+    });
+
+    return NextResponse.json({ success: true });
+  } catch (err: any) {
+    if (err.statusCode === 401 || err.statusCode === 403) return handleAuthError(err);
+    return NextResponse.json({ error: 'Failed to delete staff member.' }, { status: 500 });
   }
 }

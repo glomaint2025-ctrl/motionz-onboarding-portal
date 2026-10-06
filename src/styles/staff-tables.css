@@ -283,3 +283,110 @@
     grid-template-columns: minmax(0, 1fr);
   }
 }
+
+/* ==========================================================================
+   Admin > Staff: "Add a staff member" form and the Team table.
+   ========================================================================== */
+
+/* Narrow screens: one field per row, then the button full width under them. */
+.staff-add-form {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: var(--space-3);
+  align-items: end;
+}
+
+/* The form sets the spacing, so the fields' own bottom margin must not push the button down. */
+.staff-add-form .ui-form-group {
+  margin-bottom: 0;
+}
+
+/* Inputs, the Role dropdown and the button are all exactly one control high. */
+.staff-add-form .ui-input,
+.staff-add-form .ui-custom-select-trigger,
+.staff-add-form .ui-btn {
+  height: var(--control-height);
+  min-height: var(--control-height);
+}
+
+.staff-add-form .ui-btn {
+  width: 100%;
+}
+
+@media (min-width: 560px) {
+  .staff-add-form {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .staff-add-form .ui-btn {
+    grid-column: 1 / -1;
+  }
+}
+
+/* From about 900px: three fields and the button on one row. The row is aligned to its
+   bottom edge, so the button lines up with the input boxes, not with the labels. */
+@media (min-width: 900px) {
+  .staff-add-form {
+    grid-template-columns: repeat(3, minmax(0, 1fr)) auto;
+  }
+
+  .staff-add-form .ui-btn {
+    grid-column: auto;
+    width: auto;
+  }
+}
+
+/* The Team table sits inside a card that already has its own shadow. */
+.ui-staff-table-card {
+  box-shadow: none;
+}
+
+.ui-staff-table .ui-staff-user {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+/* Long emails wrap instead of widening the table. */
+.ui-modern-table.ui-staff-table .ui-company-sub {
+  max-width: none;
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+
+.ui-staff-table .ui-staff-badges {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.ui-staff-table .ui-actions-cell {
+  flex-wrap: wrap;
+}
+
+/* The Actions column is only as wide as its buttons. */
+@media (min-width: 768px) {
+  .ui-modern-table.ui-staff-table th:last-child,
+  .ui-modern-table.ui-staff-table td.ui-cell-actions {
+    width: 1%;
+    white-space: nowrap;
+  }
+
+  .ui-staff-table .ui-actions-cell {
+    flex-wrap: nowrap;
+  }
+}
+
+/* Delete: an outline button in the danger colour. */
+.ui-btn.ui-btn-danger-outline {
+  background-color: transparent;
+  color: var(--color-status-danger-text);
+  border-color: var(--color-status-danger-border);
+}
+
+.ui-btn.ui-btn-danger-outline:hover:not(:disabled) {
+  background-color: var(--color-status-danger-bg);
+  border-color: var(--color-status-danger-solid);
+  color: var(--color-status-danger-text-hover);
+}

@@ -40,6 +40,22 @@ Open Admin > Clients > the client. Under **Company details > Google files** pres
 It is safe to press again; it reuses what already exists. The button disappears once the tracking
 sheet, calculator and Drive folder are all there.
 
+### All older clients at once (one-off script)
+
+`scripts/setup-google-files.ts` does the same as the button for every client that is not archived.
+It reads `.env.local`, so it works on whichever database that file points to.
+
+```
+npx tsx scripts/setup-google-files.ts --dry-run          # only lists each client and what is missing
+npx tsx scripts/setup-google-files.ts                    # sets up whatever is missing
+npx tsx scripts/setup-google-files.ts --only=<tenantId>  # one client only
+```
+
+- Run it **after** the Apps Script has been redeployed (steps below), otherwise only tracking sheets are handled.
+- It refuses to start when `GOOGLE_SHEETS_SCRIPT_URL` or `GOOGLE_SHEETS_SCRIPT_SECRET` is not set.
+- Clients that already have all three files are skipped. One client failing does not stop the others;
+  a summary is printed at the end. It is safe to run again.
+
 ## Script properties (Apps Script > Project Settings > Script Properties)
 
 | Property | Value |
