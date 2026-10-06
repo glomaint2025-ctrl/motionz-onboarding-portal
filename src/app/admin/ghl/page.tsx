@@ -26,13 +26,20 @@ function ClientRow({ client, onSaved }: { client: GhlClient; onSaved: (message: 
   const [value, setValue] = useState(client.ghl_location_id || '');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
+  // Emptying the field of a connected client disconnects it, after a second press of Save.
+  const [confirmDisconnect, setConfirmDisconnect] = useState(false);
   const connected = Boolean(client.ghl_location_id);
 
   const save = async (e: React.FormEvent) => {
     e.preventDefault();
     const trimmed = value.trim();
-    if (!trimmed) {
+    if (!trimmed && !connected) {
       setError('Enter the Location ID from the GoHighLevel sub-account URL.');
+      return;
+    }
+    if (!trimmed && !confirmDisconnect) {
+      setConfirmDisconnect(true);
+      setError(`Press Save again to disconnect ${client.name} from GoHighLevel. New leads will stop arriving in their portal.`);
       return;
     }
     setBusy(true);
@@ -49,7 +56,12 @@ function ClientRow({ client, onSaved }: { client: GhlClient; onSaved: (message: 
         return;
       }
       setEditing(false);
-      onSaved(`Location ID saved for ${client.name}.${data.locationNotice ? ` ${data.locationNotice}` : ''}`);
+      setConfirmDisconnect(false);
+      onSaved(
+        trimmed
+          ? `Location ID saved for ${client.name}.${data.locationNotice ? ` ${data.locationNotice}` : ''}`
+          : `${client.name} was disconnected from GoHighLevel.`
+      );
     } catch {
       setError('Could not reach the server. Nothing was saved.');
     } finally {
@@ -107,6 +119,7 @@ function ClientRow({ client, onSaved }: { client: GhlClient; onSaved: (message: 
             onChange={(e) => {
               setValue(e.target.value);
               setError('');
+              setConfirmDisconnect(false);
             }}
             aria-invalid={error ? true : undefined}
             aria-describedby={`${fieldId}-message`}
@@ -125,6 +138,7 @@ function ClientRow({ client, onSaved }: { client: GhlClient; onSaved: (message: 
               onClick={() => {
                 setEditing(false);
                 setError('');
+                setConfirmDisconnect(false);
                 setValue(client.ghl_location_id || '');
               }}
             >
@@ -137,7 +151,7 @@ function ClientRow({ client, onSaved }: { client: GhlClient; onSaved: (message: 
             </span>
           ) : (
             <span className="ui-helper-text admin-inline-edit-note" id={`${fieldId}-message`}>
-              In GoHighLevel, open the client’s sub-account. The ID is the part of the web address right after /location/.
+              In GoHighLevel, open the client’s sub-account. The ID is the part of the web address right after /location/.{connected ? ' To disconnect this client, empty the field and save.' : ''}
             </span>
           )}
         </form>
