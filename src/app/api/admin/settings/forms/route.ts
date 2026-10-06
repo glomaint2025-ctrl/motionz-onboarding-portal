@@ -17,9 +17,10 @@ export async function GET(request: Request) {
 }
 
 /**
- * Body: any of the three form fields, each a GoHighLevel form link, embed snippet or bare id.
- * A field that is left out keeps its saved value. The two Leads forms may be sent empty to hide them.
- * `onboarding_form_id` is ignored if sent: the onboarding form is built into the portal now.
+ * Body: `a2p_form_id` (the Texting registration form) as a GoHighLevel form link, embed snippet or
+ * bare id. Left out, it keeps its saved value; it can never be emptied.
+ * `onboarding_form_id`, `lead_replacement_form_id` and `unresponsive_lead_form_id` are ignored if
+ * sent: those forms are built into the portal now.
  */
 export async function PUT(request: Request) {
   try {

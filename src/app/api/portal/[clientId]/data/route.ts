@@ -96,11 +96,8 @@ export async function GET(
     const canSeeContracts =
       canSee('contracts') && (!session || hasPermission(session.role, 'client:view_contract'));
 
-    // GoHighLevel form ids set by an admin. The two Leads forms follow the Leads section.
-    const formSettings = await resolveFormSettings();
-    const forms = canSee('leads')
-      ? formSettings
-      : { ...formSettings, lead_replacement_form_id: '', unresponsive_lead_form_id: '' };
+    // GoHighLevel form ids set by an admin (only the Texting registration form; the rest are built in).
+    const forms = await resolveFormSettings();
 
     // Integration credentials (API tokens etc.) never leave the server. The sheet link follows Results Tracking.
     const publicIntegrations = integrations

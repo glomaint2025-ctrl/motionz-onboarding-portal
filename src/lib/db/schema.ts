@@ -69,6 +69,28 @@ export interface OnboardingSubmission {
   submitted_at: string;
 }
 
+/** A Lead Replacement or Unresponsive Lead form sent from the portal (table `lead_requests`). */
+export interface LeadRequest {
+  id: string;
+  tenant_id: string;
+  /** The lead picked from the client's leads; null when the details were typed in. */
+  lead_id: string | null;
+  type: 'replacement' | 'unresponsive';
+  lead_name: string;
+  lead_phone: string;
+  /** The answers: see ReplacementDetails / UnresponsiveDetails in src/lib/lead-requests/definition.ts. */
+  details: Record<string, any>;
+  decision: 'approved' | 'not_replaceable' | 'needs_review' | 'sent';
+  decision_reason: string | null;
+  /** Staff handling: open until someone marks it done. */
+  status: 'open' | 'done';
+  submitted_by: string | null;
+  submitter_email: string | null;
+  created_at: string;
+  resolved_at: string | null;
+  resolved_by: string | null;
+}
+
 export interface AppSetting {
   key: string;
   value: Record<string, any>;

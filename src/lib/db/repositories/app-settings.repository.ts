@@ -70,7 +70,7 @@ export interface NotificationSettings {
   notify_assigned_csm: boolean;
   /** The website review team: emailed every Website Change Request, as well as the usual staff. */
   website_request_recipients: string[];
-  /** The lead review team. Stored now; the Lead Replacement and Unresponsive Lead forms will use it. */
+  /** The lead review team: emailed every Lead Replacement and Unresponsive Lead form. */
   lead_form_recipients: string[];
 }
 
@@ -90,7 +90,18 @@ export interface SecuritySettings {
   staff_login_code: StaffLoginCodeMode;
 }
 
-const DEFAULTS: { notifications: NotificationSettings; security: SecuritySettings; forms: FormSettings } = {
+/** Optional links the portal posts events to, so the team can build their own automations. */
+export interface AutomationSettings {
+  /** A GoHighLevel Inbound Webhook link that receives every lead form submission. Empty = off. */
+  lead_request_webhook_url: string;
+}
+
+const DEFAULTS: {
+  notifications: NotificationSettings;
+  security: SecuritySettings;
+  forms: FormSettings;
+  automation: AutomationSettings;
+} = {
   notifications: {
     onboarding_form_recipients: [],
     notify_assigned_csm: true,
@@ -101,6 +112,7 @@ const DEFAULTS: { notifications: NotificationSettings; security: SecuritySetting
   security: { staff_login_code: 'off' },
   // GoHighLevel form ids shown in the client portal. Admins change them on Settings & Integrations.
   forms: FORM_SETTING_DEFAULTS,
+  automation: { lead_request_webhook_url: '' },
 };
 
 type SettingKey = keyof typeof DEFAULTS;
@@ -126,6 +138,7 @@ export class AppSettingsRepository {
         merged[listKey] = Array.isArray(merged[listKey]) ? merged[listKey].filter((e: unknown) => typeof e === 'string') : [];
       }
     }
+    if (key === 'automation' && typeof merged.lead_request_webhook_url !== 'string') merged.lead_request_webhook_url = '';
     return merged as (typeof DEFAULTS)[K];
   }
 
@@ -154,7 +167,7 @@ export async function getFormSettings(): Promise<FormSettings> {
 
 /**
  * Form ids for the client portal. Never throws: if the setting cannot be read, the built-in
- * onboarding and texting forms keep Setup Progress working.
+ * texting form keeps Setup Progress working.
  */
 export async function resolveFormSettings(): Promise<FormSettings> {
   try {

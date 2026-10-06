@@ -53,6 +53,8 @@ Tips: use a normal window for one account and an **Incognito window** (Ctrl+Shif
 | 2.3 | Card "No CSM assigned" (the "Stuck in setup" card was removed at the client's request, 7 Oct) | Plain sentence, no errors |
 | 2.4 | Card "No contract attached", next to "No CSM assigned" | Lists every live client with no contract (archived clients are not listed), or "Every client has a contract attached." Clicking a name opens that client's page |
 | 2.5 | Attach a contract to one listed client (5.8) > back to **Dashboard** | That client is no longer in the card |
+| 2.6 | Card "Lead requests to handle", next to "No contract attached" (do 13.26 to 13.44 first) | Lists each client that has open lead replacement or unresponsive lead requests, with "n open" beside the name and a yellow "n open" total at the top; or "No open lead replacement or unresponsive lead requests." Clicking a name opens that client's page |
+| 2.7 | Mark every request of one listed client done (13.47) > back to **Dashboard** | That client is no longer in the card and the total went down |
 
 ## 3. Admin: Clients list
 
@@ -158,7 +160,7 @@ To bring **every** older client up to date in one go instead of pressing the but
 |---|---|---|
 | 10.1 | Left menu > **Settings & Integrations** > card **Notification emails** > **Onboarding form** box: `heshantharushka2002@gmail.com, bad` > **Save notification settings** | "Invalid email address: bad" in red under that box and at the top of the page; nothing saved |
 | 10.2 | Put back `heshantharushka2002@gmail.com`, **Also email the CSM** ticked > Save | "Notification settings saved." |
-| 10.2a | The card has three boxes: **Onboarding form**, **Website change requests**, **Lead forms**, each "(separate with commas)" with a grey help line | Lead forms help says "Will be used by the Lead Replacement and Unresponsive Lead forms." Under the tick box: it applies to onboarding and lead forms; website requests always go to the CSM |
+| 10.2a | The card has three boxes: **Onboarding form**, **Website change requests**, **Lead forms**, each "(separate with commas)" with a grey help line | Lead forms help says "Your lead team. Used by the Lead Replacement and Unresponsive Lead forms." Under the tick box: it applies to onboarding and lead forms; website requests always go to the CSM |
 | 10.2b | **Website change requests** box: `nope` > Save. Then **Lead forms** box: `also bad` > Save | Each time the red "Invalid email address: …" is under the box with the mistake, the other boxes are not marked, nothing saved |
 | 10.2c | Website change requests `heshantharushka2002+web@gmail.com`, Lead forms `heshantharushka2002+leads@gmail.com` > Save > reload the page | Saved; all three boxes keep their addresses. Audit Logs: "Notification settings updated" naming the lists that changed |
 | 10.2d | Sign in as the Zydeco owner > Home > **Website Change Request** > send one | Gmail: the request arrives at `+web` AND at the client's CSM (one email each). Nothing arrives at `+leads` |
@@ -172,21 +174,40 @@ To bring **every** older client up to date in one go instead of pressing the but
 
 ### 10b. GoHighLevel forms (same page, card "GoHighLevel forms")
 
-Use a real form link from GoHighLevel (Sites > Forms > the form > Integrate/Share > copy link). Write down
-the two IDs shown at the start so you can put them back at the end.
+Only the Texting registration form is a GoHighLevel form now. Use a real form link from GoHighLevel
+(Sites > Forms > the form > Integrate/Share > copy link). Write down the ID shown at the start so you
+can put it back at the end.
 
 | # | Steps | Expected |
 |---|---|---|
-| 10.9 | Look at the card | A grey line at the top: "The onboarding form is now built into the portal (client → Setup Progress). Its answers are saved here, not in GoHighLevel." Three rows: Texting registration form, Lead replacement form, Unresponsive lead form (there is **no** Onboarding form row). The first says **Showing on Setup Progress** with a Form ID and a **Preview** link; the last two say **Not set — hidden from clients** (until a link is saved). **Save form links** is greyed out |
+| 10.9 | Look at the card | A grey line at the top: "The onboarding form (client → Setup Progress) and the two lead forms, Lead Replacement and Unresponsive Lead (client → Leads), are built into the portal. Their answers are saved here, not in GoHighLevel." **One** row: Texting registration form (there is **no** Onboarding form, Lead replacement form or Unresponsive lead form row). It says **Showing on Setup Progress** with a Form ID and a **Preview** link. **Save form links** is greyed out |
 | 10.10 | Click **Preview** on Texting registration form | The GHL form opens in a new tab |
-| 10.11 | Lead replacement form: type `hello` > **Save form links** | Under the box: "That does not look like a GoHighLevel form link or ID…". Nothing is saved |
+| 10.11 | Texting registration form: type `hello` > **Save form links** | Under the box: "That does not look like a GoHighLevel form link or ID…". Nothing is saved |
 | 10.12 | Clear the Texting registration form box > Save | Under the box: "This form is always shown to clients, so it cannot be left empty." Put the ID back |
-| 10.13 | Lead replacement form: paste a full form link (`https://api.leadconnectorhq.com/widget/form/…`) | "Form ID: … (not saved yet)" appears under the box, with **Preview** |
-| 10.14 | Unresponsive lead form: paste the whole `<iframe …>` embed code of a form > **Save form links** | "Form links saved. Clients see the change straight away." Both rows now say **Showing on Leads** and each box shows only the ID |
-| 10.15 | Reload the page (F5) | The saved IDs are still there |
-| 10.16 | Left menu > **Audit Logs** | Newest entry is the forms change by you (details list the forms that changed) |
-| 10.17 | Clear the Unresponsive lead form box > Save | Saved; that row says **Not set — hidden from clients** |
-| 10.18 | After 13.26 to 13.30 below: clear Lead replacement form too > Save | Both Leads rows say **Not set — hidden from clients** |
+| 10.13 | Paste a full form link of another form (`https://api.leadconnectorhq.com/widget/form/…`) | "Form ID: … (not saved yet)" appears under the box, with **Preview** |
+| 10.14 | **Save form links** | "Form links saved. Clients see the change straight away." The box shows only the ID |
+| 10.15 | Reload the page (F5) | The saved ID is still there |
+| 10.16 | Left menu > **Audit Logs** | Newest entry is "GoHighLevel form links updated" by you (details name the Texting registration form) |
+| 10.17 | Paste the whole `<iframe …>` embed code of the **original** texting form > Save | Saved; the box shows the original ID again |
+| 10.18 | As the client: **Setup Progress** > **Open texting form** | The original form opens |
+
+### 10c. Automations (same page, card "Automations (optional)")
+
+In GoHighLevel: Automation > Workflows > create a workflow > trigger **Inbound Webhook** > copy its URL.
+For a quick test without GoHighLevel you can use a throw-away link from https://webhook.site.
+
+| # | Steps | Expected |
+|---|---|---|
+| 10.19 | Look at the card | Title "Automations (optional)", sub-line "Paste a GoHighLevel Inbound Webhook link. The portal sends every lead form submission to it so you can build your own automation." Badge **Off**, an empty box "Lead forms: Inbound Webhook link", **Save automation link** greyed out |
+| 10.20 | Type `hello` > **Save automation link** | Red under the box: "That does not look like a link…". Nothing saved |
+| 10.21 | Type `http://example.com/hook` > Save | "The link must start with https://." |
+| 10.22 | Try `https://localhost/hook`, then `https://127.0.0.1/hook`, then `https://192.168.1.5/hook` > Save each | Each time: "That address is not allowed. Use the public https link GoHighLevel gives you." Nothing saved |
+| 10.23 | Paste the real Inbound Webhook link > Save | "Saved. Every new lead form submission is now sent to this link." Badge **On**. Reload (F5): the link is still there |
+| 10.24 | **Audit Logs** | "Automation link updated" by you. The details show only the host name of the link, not the whole link |
+| 10.25 | As the client send a Lead Replacement request (13.31) and an Unresponsive Lead (13.40) | In GoHighLevel (workflow > Inbound Webhook trigger > "Fetch sample requests") or on webhook.site: one request each, with `type`, `decision`, `decision_reason`, `lead` (name, phone, and `ghl_contact_id` when the lead was picked from the list), `details`, `client` (id, name, `ghl_location_id`), `submitted_by_email`, `submitted_at` |
+| 10.26 | Change the saved link to one that does not answer (for example `https://example.invalid-domain-xyz.com/hook`) > as the client send another request | The client still sees the normal result screen and the email still arrives. **Audit Logs**: "Lead form could not be sent to the automation link" with the reason |
+| 10.27 | Empty the box > Save | "Saved. Lead form submissions are no longer sent anywhere." Badge **Off**. A new client request calls nothing and adds no "could not be sent" entry |
+| 10.28 | Sign in as a CSM and open `/admin/integrations` | You are sent to My Clients; a CSM cannot see or change this |
 
 ## 11. Admin: Audit Logs and Security Alerts
 
@@ -249,18 +270,48 @@ the two IDs shown at the start so you can put them back at the end.
 | 13.25 | Fix phone > Save > reload (F5) | "Your changes were saved."; reload shows the NEW phone |
 | 13.25b | Click **My profile** (link under the Company Profile heading) > look at **Sign-in email** | Your email is shown as plain text with "This is the email you sign in with. To change it, ask your Motionz contact." There is no box to type in and no **Change email** button (staff see "…ask a Motionz admin.") |
 
-### 13b. Lead forms on the Leads page (needs 10.13 and 10.14 done first)
+### 13b. Lead forms on the Leads page (built into the portal; no admin setup needed)
+
+Before you start: Admin > Settings & Integrations > **Lead forms** box has `heshantharushka2002+leads@gmail.com`
+and "Also email the CSM" is ticked (10.2c). The forms need the database table from
+`supabase/migrations/20261007000004_lead_requests.sql` (see `docs/HANDOVER.md`).
 
 | # | Steps | Expected |
 |---|---|---|
-| 13.26 | With **both** lead form links saved by the admin: left menu > **Leads** | Under the page intro: "Need help with a lead?" with **Request a lead replacement** and **Report an unresponsive lead** |
-| 13.27 | Click **Request a lead replacement** | Pop-up with the GHL form, your email already filled; "Loading the form..." shows first; clicking outside does NOT close it; **Open in new tab** opens the same form; **Close**, **×** or Esc closes it |
-| 13.28 | Click **Report an unresponsive lead** | The other form opens the same way |
-| 13.29 | Admin clears the Unresponsive lead form link (10.17) > reload Leads | Only **Request a lead replacement** is left |
-| 13.30 | Admin clears both links (10.18) > reload Leads | The "Need help with a lead?" row is gone completely (no empty box) |
-| 13.31 | Admin points Texting registration form at another form link > as the client open **Setup Progress** > **Open texting form** | The pop-up shows the NEW form. Put the original link back afterwards |
-| 13.32 | As admin or CSM open the client's portal ("Viewing as staff") > **Leads** (with a lead form link saved) | The same buttons show; the form opens with the **client's** email filled |
-| 13.33 | Phone width (375px) > **Leads** | The buttons wrap under "Need help with a lead?"; nothing is cut off; the pop-up fits the screen |
+| 13.26 | Left menu > **Leads** | Under the page intro: "Need help with a lead?" with **Request a lead replacement** and **Report an unresponsive lead**. They are always there (no admin setting). Each lead row has two small links at the end: **Replace** and **Not responding**. Under the leads table: a card **Your requests** ("You have not sent any requests yet…" the first time) |
+| 13.27 | Click **Request a lead replacement** | A full page "Lead replacement" opens (not a pop-up) with "← Back to Leads", the intro "Submit a lead you think should be replaced. It is checked against the replacement rules straight away and approved requests go to our marketing team.", a rules box (**Replaceable:** … / **Not replaceable:** … / "Every request is checked against these rules straight away…"), and the line "Submitting as *your name* · *your company*". There are **no** boxes for your own name, company or client id |
+| 13.28 | In the rules box click **Unresponsive Lead form** | The Unresponsive lead page opens. Its rules box says "**Before you submit:** you should have called **twice a day** … Submit the lead from **day 4** …" and its **Lead Replacement form** link goes back |
+| 13.29 | On Lead replacement click **Submit request** with everything empty | Nothing is sent. "Some answers need a second look. We have marked them for you." Red under each box: "Enter the lead's name.", "Enter the lead's phone number.", "Choose a reason.", "Choose an answer.", "Please answer this question." The cursor is in the first one |
+| 13.30 | Phone `call me`; What happened `didn't qualify` > **Submit request** | "Enter a valid phone number…" and "Please give more detail (at least 30 characters). Say exactly what happened." Under the big box, before typing, the grey help reads: Vague reasons like "didn't qualify" with no detail are not approved. Say which part didn't qualify and how you know. |
+| 13.31 | Click **Pick from your leads** > type part of a lead's name > click the lead. Reason **Wrong contact info**, appointment **No, there was no appointment**, What happened: `TEST Called three times, the number belongs to a different person who never filled in a form.` > **Submit request** | Picking fills the name and phone and shows "Picked: *name*" with **Clear**. After sending: a green **Approved** badge and "This matches the replacement rules. It has been sent to our marketing team.", with **Submit another** and **Back to Leads** |
+| 13.32 | Gmail (`+leads`) and the CSM's inbox | One email each: subject "Lead replacement request (Approved): *lead name* — *client*". Body has the lead name and phone, the reason, the appointment answer, what happened, "Outcome: Approved", the reason text and who sent it. The button opens the client in the portal (admin page for the team address, the CSM's own page for the CSM) |
+| 13.33 | **Submit another** > type a name and phone by hand. Reason **I inspected the roof and they didn't buy**, appointment **Yes, and I inspected the roof**, 30+ characters > submit | Red **Not replaceable** badge: "You inspected a qualified roof and the homeowner didn't buy. That counts as a qualified appointment." Email subject says "(Not replaceable)" |
+| 13.34 | Again: reason **Not the homeowner**, appointment **Yes, and I inspected the roof** | **Not replaceable** (an inspected roof is a qualified appointment) |
+| 13.35 | Again: reason **Roof doesn't qualify (not asphalt shingle, or under 4 years old)**, appointment **Yes, and I inspected the roof** | **Approved** |
+| 13.36 | Again: reason **Something else**, any appointment answer | Yellow **Needs review** badge: "Our team will look at this one and get back to you." Email subject says "(Needs review)" |
+| 13.37 | Send exactly the same request as 13.36 again within 10 minutes | The same result screen with "We already had this request, so nothing was sent twice." No second email, no second row under Your requests |
+| 13.38 | **Back to Leads** > on any lead row click **Replace** | The Lead replacement page opens with that lead already picked (name and phone filled). **Not responding** does the same on the other form, and "Days since lead was sent" is filled from the day the lead was added |
+| 13.39 | **Report an unresponsive lead**: name, phone, Days `2`, How have you tried: `TEST rang twice a day, texts delivered, no replies.` > **Submit lead** | Nothing is sent. Red under Days: "Submit this lead from day 4. Keep calling twice a day until then." No email, nothing new under Your requests |
+| 13.40 | Change Days to `5` > **Submit lead** | Blue **Sent to the marketing team** badge with a line about the marketing team's follow-ups. Email subject "Unresponsive lead: *lead name* — *client*" with the days and what you tried |
+| 13.41 | Days `4.5` or empty > submit; then How have you tried `called` > submit | "Enter a whole number of days, from 0 to 365."; "Please give more detail (at least 20 characters)." |
+| 13.42 | **Back to Leads** > card **Your requests** | Every request you sent, newest first: lead name, "Lead replacement" or "Unresponsive lead", the date, the outcome badge and the reason. With more than 20 a **Show more** button loads the next 20 |
+| 13.43 | Sign in as another client (TC Roofing Test) > **Leads** | Their Your requests does not show Zydeco's requests |
+| 13.44 | As admin or the client's CSM open the client's portal ("Viewing as staff") > **Leads** > send a request | It works; the email says it was sent by the member of staff, and the staff list (13.45) shows them as the sender |
+| 13.45 | As a team member who does not have **Leads** ticked (15.x) | No Leads in the menu; opening `/portal/<client>/leads/replacement` directly sends you back to the portal home page, never the form |
+| 13.46 | Phone width (375px) > **Leads**, both forms, the result screen | Buttons wrap under "Need help with a lead?"; each lead card has **Replace · Not responding** on its own line at the bottom; the forms are one column; the dropdown options wrap; nothing is cut off and nothing scrolls sideways |
+| 13.46a | Admin points Texting registration form at another form link > as the client open **Setup Progress** > **Open texting form** | The pop-up shows the NEW form. Put the original link back afterwards |
+
+### 13b-2. Staff: handling lead requests
+
+| # | Steps | Expected |
+|---|---|---|
+| 13.47 | As admin: Clients > the client > card **Lead requests** (under the onboarding answers) | Every request, newest first: the form type, lead name and phone (the phone is a link), the outcome badge, **Open** or **Done**, the reason, the client's answers in full, "Sent by *email* · *date and time*", and a **Mark done** button. A yellow "n open" badge at the top of the card |
+| 13.48 | **Mark done** on one | It turns to **Done** (slightly faded) with "marked done by *you* *time*" and the button becomes **Reopen**. The "n open" badge goes down. Audit Logs: "Lead request marked done or reopened" |
+| 13.49 | **Reopen** | Back to **Open** |
+| 13.50 | As the client's CSM: My Clients > the client > setup page > card **Lead requests** | The same list with the same buttons; marking done works |
+| 13.51 | As a CSM who is **not** assigned to this client, open `/csm/clients/<that client id>/setup` | "This client is not assigned to you."; no lead requests are shown |
+| 13.52 | As the client: **Leads** > Your requests after staff marked one done | The outcome badge and reason are unchanged (Open/Done is staff-only) |
+| 13.53 | Admin > Settings: empty the **Lead forms** box and untick "Also email the CSM" > Save > as the client send a request | The client's CSM still gets the email. For a client with no CSM, every admin gets it. Put the settings back afterwards |
 
 ### 13c. The onboarding form (built into the portal) and your answers on Setup Progress
 
@@ -351,4 +402,4 @@ Expected: no sideways scrolling, bottom bar works (**More** opens the rest), tab
 
 ## 19. Emails you should have received (Gmail, `from:no-reply@mail.motionz.ai`)
 
-Client invitation · team invitation (+ sent again) · password reset · staff sign-in code · website change request (with and without attachment) · onboarding form submitted (you + CSM). Each: correct name, buttons open the **staging** site, nothing broken.
+Client invitation · team invitation (+ sent again) · password reset · staff sign-in code · website change request (with and without attachment) · onboarding form submitted (you + CSM) · lead replacement request (Approved, Not replaceable, Needs review) · unresponsive lead. Each: correct name, buttons open the **staging** site, nothing broken.

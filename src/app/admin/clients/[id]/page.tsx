@@ -8,6 +8,7 @@ import { Icon } from '@/components/brand';
 import { PORTAL_MODULES } from '@/lib/portal-modules';
 import { OnboardingAnswers, OnboardingSubmissionView } from '@/components/onboarding/OnboardingAnswers';
 import { ClientRecords } from '@/components/admin/ClientRecords';
+import { LeadRequestsCard } from '@/components/admin/LeadRequestsCard';
 import { Notice, clientStatusLabel, copyText, useRevealOnMessage } from '@/components/admin/Notice';
 import { MemberModulePicker, memberSelectableModules } from '@/components/admin/MemberModulePicker';
 import { formatDateTime } from '@/lib/utils/format';
@@ -1065,6 +1066,8 @@ export default function ClientDetailPage() {
 
       {/* Everything below saves on its own, so it sits outside the settings form. */}
       <OnboardingAnswers submissions={submissions} />
+
+      <LeadRequestsCard clientId={clientId} />
 
       <ClientRecords clientId={clientId} clientName={tenant.name} />
 

@@ -1,9 +1,11 @@
 'use client';
 
 import React, { useState, useEffect, useCallback } from 'react';
+import Link from 'next/link';
 import { useParams } from 'next/navigation';
 import { Card, CardHeader, StatusBadge, Input, Select, Skeleton, Button, Pagination } from '@/components/ui';
-import { LeadHelpForms } from '@/components/portal/LeadHelpForms';
+import { buttonClasses } from '@/components/ui/Button';
+import { LeadRequestList } from '@/components/portal/LeadRequestList';
 import { formatDate } from '@/lib/utils/format';
 
 interface Lead {
@@ -48,6 +50,8 @@ const LEADS_LAYOUT_CSS = `
 .lead-name { font-weight: var(--font-weight-medium); white-space: nowrap; }
 .lead-phone, .lead-followup, .lead-added { white-space: nowrap; }
 .lead-label { display: none; }
+.lead-actions { white-space: nowrap; font-size: var(--font-size-xs); }
+.lead-actions a { display: inline-block; padding: 2px 0; }
 @media (max-width: 1100px) {
   .leads-table thead { display: none; }
   .leads-table, .leads-table tbody { display: block; }
@@ -69,6 +73,8 @@ const LEADS_LAYOUT_CSS = `
   .lead-source { grid-area: 4 / 1 / 5 / 2; }
   .lead-followup { grid-area: 4 / 2 / 5 / 3; }
   .lead-added { grid-area: 4 / 3 / 5 / 4; }
+  .lead-actions { grid-area: 5 / 1 / 6 / 4; white-space: normal; padding-top: var(--space-2) !important; margin-top: var(--space-1); border-top: 1px solid var(--color-border-subtle); }
+  .lead-actions a { padding: 6px 0; }
   .lead-label { display: block; font-size: var(--font-size-xs); color: var(--color-text-muted); }
 }
 `;
@@ -213,8 +219,38 @@ export default function LeadsPage() {
         </p>
       </div>
 
-      {/* Shown only when an admin has saved a link for at least one of the two lead forms. */}
-      <LeadHelpForms clientId={clientId} />
+      {/* The two lead forms are built into the portal and are always here. */}
+      <div
+        role="group"
+        aria-label="Need help with a lead?"
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          flexWrap: 'wrap',
+          gap: 'var(--space-2) var(--space-3)',
+          marginBottom: 'var(--space-6)',
+        }}
+      >
+        <span style={{ fontSize: 'var(--font-size-sm)', fontWeight: 'var(--font-weight-medium)' }}>
+          Need help with a lead?
+        </span>
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 'var(--space-2)' }}>
+          <Link
+            href={`/portal/${clientId}/leads/replacement`}
+            className={buttonClasses({ variant: 'secondary', size: 'sm' })}
+            style={{ textDecoration: 'none' }}
+          >
+            Request a lead replacement
+          </Link>
+          <Link
+            href={`/portal/${clientId}/leads/unresponsive`}
+            className={buttonClasses({ variant: 'secondary', size: 'sm' })}
+            style={{ textDecoration: 'none' }}
+          >
+            Report an unresponsive lead
+          </Link>
+        </div>
+      </div>
 
       {/* Only when there is truly nothing: a client with leads is connected, whatever the setting says. */}
       {data && !data.ghlConnected && data.counts.all === 0 && (
@@ -337,7 +373,7 @@ export default function LeadsPage() {
               <table className="leads-table">
                 <thead>
                   <tr>
-                    {['Name', 'Phone', 'Email', 'Source', 'Stage', 'Follow-up', 'Added'].map((h) => (
+                    {['Name', 'Phone', 'Email', 'Source', 'Stage', 'Follow-up', 'Added', 'Help'].map((h) => (
                       <th key={h}>{h}</th>
                     ))}
                   </tr>
@@ -369,6 +405,13 @@ export default function LeadsPage() {
                         <span className="lead-label">Added</span>
                         {formatDate(l.created_at)}
                       </td>
+                      <td className="lead-actions">
+                        <Link href={`/portal/${clientId}/leads/replacement?lead=${encodeURIComponent(l.id)}`}>Replace</Link>
+                        <span aria-hidden="true" style={{ color: 'var(--color-text-muted)' }}>
+                          {' · '}
+                        </span>
+                        <Link href={`/portal/${clientId}/leads/unresponsive?lead=${encodeURIComponent(l.id)}`}>Not responding</Link>
+                      </td>
                     </tr>
                   ))}
                 </tbody>
@@ -393,6 +436,9 @@ export default function LeadsPage() {
           )}
         </Card>
       )}
+
+      {/* The client's own Lead Replacement and Unresponsive Lead requests. */}
+      {data && <LeadRequestList clientId={clientId} />}
     </div>
   );
 }

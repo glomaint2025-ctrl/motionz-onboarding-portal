@@ -19,6 +19,7 @@ import {
   SecurityEvent,
   PasswordResetToken,
   OnboardingSubmission,
+  LeadRequest,
   AppSetting,
 } from './schema';
 import { AD_SCRIPT_LIBRARY } from '../scripts/ad-script-library';
@@ -30,6 +31,7 @@ export interface DatabaseStore {
   userInvitations: UserInvitation[];
   passwordResetTokens: PasswordResetToken[];
   onboardingSubmissions: OnboardingSubmission[];
+  leadRequests: LeadRequest[];
   appSettings: AppSetting[];
   portalTemplates: PortalTemplate[];
   templateSteps: TemplateStep[];
@@ -217,6 +219,7 @@ export const createInitialStore = (): DatabaseStore => {
     userInvitations: [],
     passwordResetTokens: [],
     onboardingSubmissions: [],
+    leadRequests: [],
     appSettings: [],
 
     clientSetupSteps: [

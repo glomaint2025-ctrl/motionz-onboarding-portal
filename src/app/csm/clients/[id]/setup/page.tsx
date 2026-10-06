@@ -6,6 +6,7 @@ import Link from 'next/link';
 import { Card, CardHeader, Select, Button, StatusBadge, buttonClasses } from '@/components/ui';
 import { OnboardingAnswers, OnboardingSubmissionView } from '@/components/onboarding/OnboardingAnswers';
 import { Notice, useRevealOnMessage } from '@/components/admin/Notice';
+import { LeadRequestsCard } from '@/components/admin/LeadRequestsCard';
 import { Icon } from '@/components/brand';
 
 const STEP_STATUS_LABELS: Record<string, string> = {
@@ -230,6 +231,8 @@ export default function CSMClientSetupEditorPage() {
       )}
 
       <OnboardingAnswers submissions={submissions} />
+
+      <LeadRequestsCard clientId={clientId} />
 
       {/* Progress Bar Summary */}
       <Card style={{ marginBottom: 'var(--space-6)' }}>

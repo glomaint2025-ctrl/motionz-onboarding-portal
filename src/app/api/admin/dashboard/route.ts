@@ -6,6 +6,7 @@ import {
   onboardingSubmissionRepository,
   csmAssignmentRepository,
   contractRepository,
+  leadRequestRepository,
 } from '@/lib/db/repositories';
 import { requireAuth, handleAuthError } from '@/lib/auth/guard';
 
@@ -48,6 +49,20 @@ export async function GET(request: Request) {
     const recentEvents = events.filter((e: any) => new Date(e.created_at).getTime() > weekAgo);
     const [unmatched] = await Promise.all([onboardingSubmissionRepository.listByTenant(null, 100)]);
 
+    // Lead Replacement and Unresponsive Lead requests nobody has marked done yet, grouped by client.
+    // Never fails the dashboard: with the table missing or unreadable the card simply shows none.
+    const openRequests = await leadRequestRepository.listOpen(500).catch((err: any) => {
+      console.error('[dashboard] Could not read the lead requests:', err?.message);
+      return [];
+    });
+    const nameById = new Map(tenants.map((t) => [t.id, t.name]));
+    const openByClient = new Map<string, { id: string; name: string; open: number; newest: string }>();
+    for (const r of openRequests) {
+      const entry = openByClient.get(r.tenant_id);
+      if (entry) entry.open += 1;
+      else openByClient.set(r.tenant_id, { id: r.tenant_id, name: nameById.get(r.tenant_id) || 'Unknown client', open: 1, newest: r.created_at });
+    }
+
     return NextResponse.json({
       success: true,
       clients: {
@@ -72,6 +87,8 @@ export async function GET(request: Request) {
         highSeverity: recentEvents.filter((e: any) => e.severity === 'high' || e.severity === 'critical').length,
       },
       unmatchedSubmissions: unmatched.length,
+      // Newest first (the list comes newest first, and a Map keeps the order clients were first seen in).
+      leadRequests: { open: openRequests.length, clients: Array.from(openByClient.values()) },
     });
   } catch (err: any) {
     if (err.statusCode === 401 || err.statusCode === 403) return handleAuthError(err);
