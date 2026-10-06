@@ -74,6 +74,10 @@ export default function ForgotPasswordPage() {
                 If an account exists for <strong>{successEmail}</strong>, we&apos;ve emailed you a link to reset your
                 password. It works once and expires in 60 minutes.
               </p>
+              <p className="auth-subtitle">
+                No email after a few minutes? Check the address for typos and your spam folder, or ask your Motionz
+                contact.
+              </p>
 
               {resetUrl && (
                 <div className="auth-alert auth-alert-info">
