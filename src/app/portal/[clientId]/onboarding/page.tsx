@@ -1,13 +1,15 @@
 'use client';
 
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { Card, CardHeader, Button, StatusBadge, Skeleton } from '@/components/ui';
 import { SetupCard } from '@/components/onboarding/SetupCard';
 import { GHLOnboardingFormEmbed } from '@/components/onboarding/GHLOnboardingFormEmbed';
 import { A2PFormEmbed } from '@/components/onboarding/A2PFormEmbed';
+import { OnboardingAnswers, OnboardingSubmissionView } from '@/components/onboarding/OnboardingAnswers';
 import { calculateSetupProgress } from '@/lib/onboarding/progress';
 import { ClientSetupStep } from '@/lib/db/schema';
+import { formatDateTime } from '@/lib/utils/format';
 
 /** Steps that are not finished yet. */
 const isOpen = (step: ClientSetupStep) => step.status !== 'done';
@@ -60,6 +62,55 @@ export default function SetupProgressPage() {
   }, [clientId, attempt]);
 
   const retry = useCallback(() => setAttempt((n) => n + 1), []);
+
+  // The onboarding form answers this client has already sent (newest first). Loaded on its own so
+  // a problem here never hides the setup steps.
+  const [submissions, setSubmissions] = useState<OnboardingSubmissionView[]>([]);
+  const [answersStatus, setAnswersStatus] = useState<'loading' | 'ready' | 'error'>('loading');
+  const [showAnswers, setShowAnswers] = useState(false);
+  const answersRequest = useRef(0);
+
+  const loadAnswers = useCallback(async () => {
+    const requestId = ++answersRequest.current;
+    setAnswersStatus('loading');
+    try {
+      const res = await fetch(`/api/portal/${clientId}/onboarding-answers`);
+      const data = await res.json().catch(() => ({}));
+      if (requestId !== answersRequest.current) return;
+      if (!res.ok) {
+        setAnswersStatus('error');
+        return;
+      }
+      setSubmissions(
+        (data.submissions || []).map((s: any) => ({
+          id: s.id,
+          submitter_email: s.submitterEmail || undefined,
+          answers: s.answers || {},
+          submitted_at: s.submittedAt,
+        }))
+      );
+      setAnswersStatus('ready');
+    } catch {
+      if (requestId === answersRequest.current) setAnswersStatus('error');
+    }
+  }, [clientId]);
+
+  useEffect(() => {
+    loadAnswers();
+    return () => {
+      // Ignore a reply that arrives after leaving the page.
+      answersRequest.current++;
+    };
+  }, [loadAnswers]);
+
+  // A sent form reaches us a few seconds later, so look once when the pop-up closes.
+  const closeGHLForm = useCallback(() => {
+    setIsGHLFormOpen(false);
+    loadAnswers();
+  }, [loadAnswers]);
+
+  const latestSubmission = submissions[0];
+  const hasSubmitted = Boolean(latestSubmission);
 
   const progress = calculateSetupProgress(steps);
   const openCount = steps.filter(isOpen).length;
@@ -229,7 +280,7 @@ export default function SetupProgressPage() {
           action={
             <div style={{ display: 'flex', gap: 'var(--space-2)', flexWrap: 'wrap', justifyContent: 'flex-end' }}>
               <Button variant="secondary" size="sm" onClick={() => setIsGHLFormOpen(true)}>
-                Open onboarding form
+                {hasSubmitted ? 'Update your answers' : 'Open onboarding form'}
               </Button>
               {!hasA2PStep && (
                 <Button variant="secondary" size="sm" onClick={() => setIsA2PFormOpen(true)}>
@@ -239,6 +290,64 @@ export default function SetupProgressPage() {
             </div>
           }
         />
+
+        <div
+          aria-live="polite"
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            flexWrap: 'wrap',
+            gap: 'var(--space-2)',
+            fontSize: 'var(--font-size-sm)',
+            color: 'var(--color-text-secondary)',
+          }}
+        >
+          {latestSubmission ? (
+            <span>Submitted {formatDateTime(latestSubmission.submitted_at)}</span>
+          ) : answersStatus === 'loading' ? (
+            <Skeleton width="180px" height="16px" />
+          ) : answersStatus === 'ready' ? (
+            <span style={{ color: 'var(--color-text-muted)' }}>Not submitted yet.</span>
+          ) : null}
+          {answersStatus === 'error' && (
+            <span role="alert" style={{ color: 'var(--color-status-danger-text)' }}>
+              {hasSubmitted ? 'We could not check for newer answers.' : 'We could not load your answers.'}
+            </span>
+          )}
+          {(hasSubmitted || answersStatus !== 'loading') && (
+            <Button variant="ghost" size="sm" onClick={loadAnswers} disabled={answersStatus === 'loading'}>
+              {answersStatus === 'loading' ? 'Checking...' : answersStatus === 'error' ? 'Try again' : 'Refresh'}
+            </Button>
+          )}
+          {hasSubmitted && (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setShowAnswers((open) => !open)}
+              aria-expanded={showAnswers}
+            >
+              {showAnswers ? 'Hide your answers' : 'View your answers'}
+            </Button>
+          )}
+        </div>
+
+        {hasSubmitted && (
+          <p style={{ margin: 'var(--space-2) 0 0 0', fontSize: 'var(--font-size-sm)', color: 'var(--color-text-muted)' }}>
+            Sending the form again replaces nothing — your CSM sees the newest answers first.
+          </p>
+        )}
+
+        {hasSubmitted && showAnswers && (
+          <div
+            style={{
+              marginTop: 'var(--space-4)',
+              paddingTop: 'var(--space-4)',
+              borderTop: '1px solid var(--color-border-subtle)',
+            }}
+          >
+            <OnboardingAnswers submissions={submissions} audience="client" />
+          </div>
+        )}
       </Card>
 
       {/* Step cards */}
@@ -285,7 +394,7 @@ export default function SetupProgressPage() {
         formId={formIds.onboarding_form_id}
         isModal={true}
         isOpen={isGHLFormOpen}
-        onClose={() => setIsGHLFormOpen(false)}
+        onClose={closeGHLForm}
         prefillEmail={prefillEmail}
       />
 

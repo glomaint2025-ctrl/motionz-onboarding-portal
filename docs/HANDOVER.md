@@ -85,7 +85,12 @@ params). The client edits forms only in GHL; the GHL "Form Submitted" workflow s
 `/api/webhooks/ghl` and the portal stores **every field generically** (`onboarding_submissions.answers`
 JSONB, keyed by GHL field label). New or renamed GHL fields therefore need **no portal code or DB
 change**. Keep this design for any new form (add a new `customData.event` value per form type).
-Show the client their own submitted answers in their portal (read-only), not just Admin/CSM.
+**Done:** the client sees their own submitted answers (read-only) on **Setup Progress**, in the
+"Tell us about your business" card: "Submitted <date, time>", **View your answers**, and the form
+button becomes **Update your answers**. Data comes from `GET /api/portal/[clientId]/onboarding-answers`
+(needs the Setup Progress module; own client only; newest 10). The list of webhook-only fields that
+are never treated as answers lives in `src/lib/onboarding/answers.ts` and is used both when a
+submission is stored and when it is shown to the client.
 
 ### Where form links are managed (no developer needed)
 **Admin → Settings & Integrations → "GoHighLevel forms".** An admin pastes a form link, the `<iframe>`

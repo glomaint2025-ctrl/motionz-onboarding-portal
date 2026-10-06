@@ -250,6 +250,17 @@ the two IDs shown at the start so you can put them back at the end.
 | 13.32 | As admin or CSM open the client's portal ("Viewing as staff") > **Leads** (with a lead form link saved) | The same buttons show; the form opens with the **client's** email filled |
 | 13.33 | Phone width (375px) > **Leads** | The buttons wrap under "Need help with a lead?"; nothing is cut off; the pop-up fits the screen |
 
+### 13c. Your own onboarding answers on Setup Progress
+
+| # | Steps | Expected |
+|---|---|---|
+| 13.34 | As a client who has **never** sent the onboarding form: left menu > **Setup Progress** > look at the "Tell us about your business" card | Button says **Open onboarding form**; under it a grey line "Not submitted yet." with a small **Refresh**. No **View your answers** button |
+| 13.35 | **Open onboarding form** > fill it in (answers start with `TEST`) > Submit > close the pop-up with **×** > wait about 10 seconds > **Refresh** | The card shows "Submitted <date, time>"; the form button now says **Update your answers**; a line says "Sending the form again replaces nothing — your CSM sees the newest answers first." |
+| 13.36 | Click **View your answers** | The answers open inside the same card (question in small grey text, your answer under it), "Sent from <your email>". The button turns into **Hide your answers**; clicking it closes them. The answers match what Admin sees under **Onboarding form answers** (17.5) |
+| 13.37 | **Update your answers** > change one answer > Submit > close > **Refresh** > **View your answers** | Two pills at the top: "Latest · <date, time>" and the older one. Clicking each shows that set of answers; nothing was overwritten |
+| 13.38 | Phone width (375px) on **Setup Progress**, answers open | Buttons wrap under the title, long answers and links wrap, no sideways scrolling |
+| 13.39 | As a team member **without** Setup Progress, open `/api/portal/<client>/onboarding-answers` in the browser | Refused (403) — no answers shown. Signed out: 401 |
+
 ## 14. Team (still as the client owner)
 
 | # | Steps | Expected |
