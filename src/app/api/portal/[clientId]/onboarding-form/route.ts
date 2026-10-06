@@ -28,7 +28,7 @@ export const runtime = 'nodejs';
 
 /** Upper bound for the whole request: the files plus generous room for the written answers. */
 const REQUEST_MAX_BYTES = MAX_TOTAL_UPLOAD_BYTES + 512 * 1024;
-const TOO_LARGE = 'Your files are larger than 4 MB in total. Remove a file, or send large files to your CSM on Slack.';
+const TOO_LARGE = 'Your files are larger than 4 MB in total. Remove a file, or paste a link to large files in the links question.';
 const ONE_HOUR = 60 * 60 * 1000;
 
 const FILE_FIELDS = ONBOARDING_FORM_FIELDS.filter((f) => f.type === 'file');

@@ -307,7 +307,7 @@ export function checkUploadSelection(
     }
     total += files.reduce((sum, f) => sum + f.size, 0);
     if (files.length > 0 && total > MAX_TOTAL_UPLOAD_BYTES) {
-      errors[field.key] = 'Your files are larger than 4 MB in total. Remove a file, or send large files to your CSM on Slack.';
+      errors[field.key] = 'Your files are larger than 4 MB in total. Remove a file, or paste a link to large files in the links question.';
     }
   }
   return errors;

@@ -9,8 +9,10 @@ import {
   ONBOARDING_FORM_SECTIONS,
   ONBOARDING_FORM_FIELDS,
   ALLOWED_UPLOAD_EXTENSIONS,
+  ALLOWED_UPLOAD_LABEL,
   MAX_FILES_PER_FIELD,
   checkUploadSelection,
+  extensionOf,
   type OnboardingField,
   type OnboardingFileRef,
   type OnboardingFormValues,
@@ -252,12 +254,24 @@ export default function OnboardingFormPage() {
     if (!picked || picked.length === 0) return;
     // Copy now: the input is cleared right after this call, which empties the live FileList.
     const chosen = Array.from(picked);
-    setFiles((current) => ({ ...current, [key]: [...(current[key] || []), ...chosen] }));
+    // Wrong file types are turned away straight away, not only when the form is sent.
+    const allowed = chosen.filter((file) => ALLOWED_UPLOAD_EXTENSIONS.includes(extensionOf(file.name)));
+    const refused = chosen.filter((file) => !allowed.includes(file));
+    const next: FileMap = { ...files, [key]: [...(files[key] || []), ...allowed] };
+    setFiles(next);
+    // Count and size problems are shown as soon as they happen, on the question they belong to.
+    const found = checkUploadSelection(
+      next,
+      Object.fromEntries(Object.entries(kept).map(([fieldKey, list]) => [fieldKey, list.length]))
+    );
     setErrors((current) => {
-      // A size problem is shown on every upload question, so clear them together.
-      const next = { ...current };
-      for (const field of FILE_FIELDS) next[field.key] = '';
-      return next;
+      const updated = { ...current };
+      for (const field of FILE_FIELDS) updated[field.key] = found[field.key] || '';
+      if (refused.length > 0) {
+        const names = refused.map((file) => `"${file.name}"`).join(', ');
+        updated[key] = `${names} ${refused.length === 1 ? 'was' : 'were'} not added. Send ${ALLOWED_UPLOAD_LABEL} files; for videos, paste a link in the next question.`;
+      }
+      return updated;
     });
     setSubmitError('');
   };
@@ -344,7 +358,7 @@ export default function OnboardingFormPage() {
         focusFirstError(data.fields);
         setSubmitError('Some answers need a second look. We have marked them for you.');
       } else if (res.status === 413) {
-        setSubmitError('Your files are too large to send. Remove a file, or send large files to your CSM on Slack.');
+        setSubmitError('Your files are too large to send. Remove a file, or paste a link to large files in the links question.');
       } else {
         setSubmitError(data.error || 'Your answers could not be sent. Please try again.');
       }
