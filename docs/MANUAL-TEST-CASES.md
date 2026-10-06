@@ -50,7 +50,7 @@ Tips: use a normal window for one account and an **Incognito window** (Ctrl+Shif
 |---|---|---|
 | 2.1 | Left menu > **Dashboard** | Tiles: Active clients, Still in setup, GHL Connect x / y, Security events (7 days), New clients (30 days). Numbers match the Clients page |
 | 2.2 | Click each tile | Opens the matching page (Clients, GHL Connect, Security Alerts…) |
-| 2.3 | Cards "Stuck in setup" and "No CSM assigned" | Plain sentences, no errors |
+| 2.3 | Card "No CSM assigned" (the "Stuck in setup" card was removed at the client's request, 7 Oct) | Plain sentence, no errors |
 
 ## 3. Admin: Clients list
 
