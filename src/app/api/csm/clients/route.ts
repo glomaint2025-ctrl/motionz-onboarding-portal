@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { listTenants, getClientSetupSteps } from '@/lib/db';
 import { requireAuth, handleAuthError, getVisibleTenantIds } from '@/lib/auth/guard';
+import { contractRepository } from '@/lib/db/repositories';
 import { calculateSetupProgress } from '@/lib/onboarding/progress';
 import { parsePaginationParams, buildPaginationMeta } from '@/lib/utils/pagination';
 
@@ -21,7 +22,9 @@ export async function GET(request: Request) {
     const status = searchParams.get('status')?.trim() || 'all';
 
     const visible = await getVisibleTenantIds(session!);
-    const tenants = (await listTenants()).filter((t) => !visible || visible.has(t.id));
+    // The contract lookup is one query for every client, not one per row.
+    const [allTenants, withContract] = await Promise.all([listTenants(), contractRepository.listTenantIdsWithContract()]);
+    const tenants = allTenants.filter((t) => !visible || visible.has(t.id));
 
     const clients = await Promise.all(
       tenants.map(async (t) => {
@@ -41,6 +44,8 @@ export async function GET(request: Request) {
           total_steps: progress.totalSteps,
           current_step_name: currentStep?.name || null,
           current_step_status: currentStep?.status || null,
+          // Staff-only reminder: false until an admin attaches the client's contract.
+          hasContract: withContract.has(t.id),
           // Legacy field names kept for existing consumers
           progressPercentage: progress.percentage,
           completedCount: progress.completedSteps,

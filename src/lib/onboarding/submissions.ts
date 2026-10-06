@@ -41,6 +41,34 @@ export async function findRecentDuplicate(
   );
 }
 
+/** Lower-cased addresses with blanks and repeats removed (the same address in different capitals counts once). */
+export function uniqueEmails(...lists: (string | null | undefined)[][]): string[] {
+  const seen = new Set<string>();
+  for (const email of lists.flat()) {
+    const clean = typeof email === 'string' ? email.trim().toLowerCase() : '';
+    if (clean) seen.add(clean);
+  }
+  return Array.from(seen);
+}
+
+/** The email of the CSM assigned to a client, if there is one. */
+async function assignedCsmEmail(tenantId: string): Promise<string | null> {
+  const assignment = await csmAssignmentRepository.findByTenant(tenantId);
+  const csm = assignment ? await userRepository.findById(assignment.csm_user_id) : null;
+  return csm?.email || null;
+}
+
+/**
+ * Who a lead form (Lead Replacement, Unresponsive Lead) should be emailed to: the lead review team on
+ * Admin → Settings & Integrations, plus the client's CSM when that box is ticked.
+ * Nothing calls this yet: those forms are not built. It is here so they use the same list when they are.
+ */
+export async function leadFormRecipients(tenant?: Pick<Tenant, 'id'> | null): Promise<string[]> {
+  const settings = await appSettingsRepository.get('notifications');
+  const csm = tenant && settings.notify_assigned_csm ? await assignedCsmEmail(tenant.id) : null;
+  return uniqueEmails(settings.lead_form_recipients, [csm]);
+}
+
 /**
  * Emails the onboarding notification list: the addresses on Admin → Settings & Integrations, the
  * MEDIA_BUYER_EMAIL address when set, and the client's CSM when that box is ticked.
@@ -58,13 +86,12 @@ export async function notifyOnboardingSubmitted(params: {
   const answers = answersAsText(params.answers);
 
   const settings = await appSettingsRepository.get('notifications');
-  const recipients = new Set(settings.onboarding_form_recipients.map((r) => r.toLowerCase()));
-  if (process.env.MEDIA_BUYER_EMAIL) recipients.add(process.env.MEDIA_BUYER_EMAIL.toLowerCase());
-  if (tenant && settings.notify_assigned_csm) {
-    const assignment = await csmAssignmentRepository.findByTenant(tenant.id);
-    const csm = assignment ? await userRepository.findById(assignment.csm_user_id) : null;
-    if (csm?.email) recipients.add(csm.email.toLowerCase());
-  }
+  const recipients = new Set(
+    uniqueEmails(settings.onboarding_form_recipients, [
+      process.env.MEDIA_BUYER_EMAIL,
+      tenant && settings.notify_assigned_csm ? await assignedCsmEmail(tenant.id) : null,
+    ])
+  );
 
   const companyName = tenant?.name || answers['DBA Business Name'] || submitterEmail || 'Unknown client';
   await Promise.all(

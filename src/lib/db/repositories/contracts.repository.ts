@@ -22,6 +22,20 @@ export class ContractRepository {
     return store.contracts.filter((c) => c.tenant_id === tenantId);
   }
 
+  /**
+   * The ids of every client that has at least one contract attached, in one query.
+   * Staff lists and the admin dashboard use it for the "No contract" reminder.
+   */
+  async listTenantIdsWithContract(): Promise<Set<string>> {
+    const supabase = getSupabaseServiceClient();
+    if (supabase) {
+      const { data, error } = await supabase.from('contracts').select('tenant_id').limit(10000);
+      if (error) throw new DatabaseError(`Failed to fetch contracts: ${error.message}`, error);
+      return new Set((data || []).map((row: { tenant_id: string }) => row.tenant_id));
+    }
+    return new Set(getStore().contracts.map((c) => c.tenant_id));
+  }
+
   async create(contract: Omit<Contract, 'id' | 'created_at'> & { id?: string }): Promise<Contract> {
     const now = new Date().toISOString();
     const id = contract.id || randomUUID();

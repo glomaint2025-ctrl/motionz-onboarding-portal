@@ -14,6 +14,7 @@ interface Dashboard {
   clients: { total: number; active: number; onboarding: number; suspended: number; cancelledOrArchived: number; newLast30Days: number };
   ghl: { connected: number; total: number };
   withoutCsm: ClientRef[];
+  withoutContract: ClientRef[];
   inSetup: number;
   security: { last7Days: number; highSeverity: number };
   unmatchedSubmissions: number;
@@ -161,6 +162,10 @@ export default function AdminDashboardPage() {
             <Card>
               <CardHeader title="No CSM assigned" />
               <ClientList items={data.withoutCsm} empty="Every client has a CSM." />
+            </Card>
+            <Card>
+              <CardHeader title="No contract attached" />
+              <ClientList items={data.withoutContract || []} empty="Every client has a contract attached." />
             </Card>
           </div>
         </>

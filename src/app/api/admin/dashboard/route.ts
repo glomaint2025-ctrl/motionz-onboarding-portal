@@ -5,6 +5,7 @@ import {
   securityEventRepository,
   onboardingSubmissionRepository,
   csmAssignmentRepository,
+  contractRepository,
 } from '@/lib/db/repositories';
 import { requireAuth, handleAuthError } from '@/lib/auth/guard';
 
@@ -15,7 +16,10 @@ export async function GET(request: Request) {
   try {
     await requireAuth(request, { roles: ['admin'] });
 
-    const tenants = await tenantRepository.list({ includeArchived: true, limit: 1000 });
+    const [tenants, withContract] = await Promise.all([
+      tenantRepository.list({ includeArchived: true, limit: 1000 }),
+      contractRepository.listTenantIdsWithContract(),
+    ]);
     const live = tenants.filter((t: any) => !t.deleted_at && t.status !== 'cancelled');
 
     const setup = await Promise.all(
@@ -33,6 +37,7 @@ export async function GET(request: Request) {
           currentStep: current?.name || null,
           daysOnStep: lastChange ? Math.floor((Date.now() - lastChange) / DAY) : null,
           hasCsm: Boolean(assignment),
+          hasContract: withContract.has(t.id),
           ghlConnected: Boolean(t.ghl_location_id),
         };
       })
@@ -56,6 +61,8 @@ export async function GET(request: Request) {
       // Same client set as /admin/ghl (live clients: not archived, not cancelled).
       ghl: { connected: setup.filter((s) => s.ghlConnected).length, total: setup.length },
       withoutCsm: setup.filter((s) => !s.hasCsm).map(({ id, name }) => ({ id, name })),
+      // Live clients (not archived or cancelled) that still need a contract attached by an admin.
+      withoutContract: setup.filter((s) => !s.hasContract).map(({ id, name }) => ({ id, name })),
       inSetup: setup.filter((s) => !s.done).length,
       stuck: setup
         .filter((s) => !s.done && s.daysOnStep !== null && s.daysOnStep >= 7)

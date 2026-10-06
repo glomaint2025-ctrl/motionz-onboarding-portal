@@ -37,6 +37,8 @@ export default function CSMClientSetupEditorPage() {
   const [tenant, setTenant] = useState<any | null>(null);
   const [steps, setSteps] = useState<SetupStep[]>([]);
   const [progressPercent, setProgressPercent] = useState(0);
+  // Staff-only reminder. Stays hidden unless the server says no contract is attached.
+  const [hasContract, setHasContract] = useState(true);
   const [submissions, setSubmissions] = useState<OnboardingSubmissionView[]>([]);
   const [accessError, setAccessError] = useState('');
   const [loadError, setLoadError] = useState('');
@@ -70,6 +72,7 @@ export default function CSMClientSetupEditorPage() {
         setSteps(data.steps || []);
         setSubmissions(data.onboardingSubmissions || []);
         setProgressPercent(data.progressPercent || 0);
+        setHasContract(data.hasContract !== false);
       } else {
         setLoadError(data.error || 'Could not load this client’s setup steps.');
       }
@@ -217,6 +220,12 @@ export default function CSMClientSetupEditorPage() {
       {feedbackMessage && (
         <Notice tone="success" style={{ marginBottom: 'var(--space-5)' }}>
           {feedbackMessage}
+        </Notice>
+      )}
+
+      {!hasContract && (
+        <Notice tone="info" style={{ marginBottom: 'var(--space-5)' }}>
+          This client has no contract attached yet. Ask an admin to attach it (Admin → Clients → {tenant.name} → Contract).
         </Notice>
       )}
 

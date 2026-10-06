@@ -68,7 +68,19 @@ export interface NotificationSettings {
   onboarding_form_recipients: string[];
   /** Also email the CSM assigned to that client. */
   notify_assigned_csm: boolean;
+  /** The website review team: emailed every Website Change Request, as well as the usual staff. */
+  website_request_recipients: string[];
+  /** The lead review team. Stored now; the Lead Replacement and Unresponsive Lead forms will use it. */
+  lead_form_recipients: string[];
 }
+
+/** The three recipient lists an admin edits on Settings & Integrations. */
+export const NOTIFICATION_LIST_KEYS = ['onboarding_form_recipients', 'website_request_recipients', 'lead_form_recipients'] as const;
+export type NotificationListKey = (typeof NOTIFICATION_LIST_KEYS)[number];
+
+/** What may be saved: the two newer lists can be left out and then read back as empty. */
+export type NotificationSettingsInput = Pick<NotificationSettings, 'onboarding_form_recipients' | 'notify_assigned_csm'> &
+  Partial<NotificationSettings>;
 
 /** Who must enter an emailed one-time code after their password when signing in. */
 export type StaffLoginCodeMode = 'off' | 'csm' | 'all_staff';
@@ -79,7 +91,12 @@ export interface SecuritySettings {
 }
 
 const DEFAULTS: { notifications: NotificationSettings; security: SecuritySettings; forms: FormSettings } = {
-  notifications: { onboarding_form_recipients: [], notify_assigned_csm: true },
+  notifications: {
+    onboarding_form_recipients: [],
+    notify_assigned_csm: true,
+    website_request_recipients: [],
+    lead_form_recipients: [],
+  },
   // Off by default so staff whose @motionz.ai mailbox cannot receive email are not locked out.
   security: { staff_login_code: 'off' },
   // GoHighLevel form ids shown in the client portal. Admins change them on Settings & Integrations.
@@ -87,6 +104,7 @@ const DEFAULTS: { notifications: NotificationSettings; security: SecuritySetting
 };
 
 type SettingKey = keyof typeof DEFAULTS;
+type SettingInput<K extends SettingKey> = K extends 'notifications' ? NotificationSettingsInput : (typeof DEFAULTS)[K];
 
 export class AppSettingsRepository {
   async get<K extends SettingKey>(key: K): Promise<(typeof DEFAULTS)[K]> {
@@ -101,10 +119,17 @@ export class AppSettingsRepository {
       value = getStore().appSettings.find((s) => s.key === key)?.value;
     }
 
-    return { ...DEFAULTS[key], ...(value || {}) } as (typeof DEFAULTS)[K];
+    const merged: Record<string, any> = { ...DEFAULTS[key], ...(value || {}) };
+    if (key === 'notifications') {
+      // Values saved before the website and lead lists existed lack those keys; anything that is not a list reads as empty.
+      for (const listKey of NOTIFICATION_LIST_KEYS) {
+        merged[listKey] = Array.isArray(merged[listKey]) ? merged[listKey].filter((e: unknown) => typeof e === 'string') : [];
+      }
+    }
+    return merged as (typeof DEFAULTS)[K];
   }
 
-  async set<K extends SettingKey>(key: K, value: (typeof DEFAULTS)[K], updatedBy: string): Promise<void> {
+  async set<K extends SettingKey>(key: K, value: SettingInput<K>, updatedBy: string): Promise<void> {
     const row = { key, value, updated_at: new Date().toISOString(), updated_by: updatedBy };
     const supabase = getSupabaseServiceClient();
     if (supabase) {

@@ -3,7 +3,8 @@ import { getTenantById, logAuditEvent, DEMO_TENANT_UUID } from '@/lib/db';
 import { assertPortalAccess, handleAuthError } from '@/lib/auth/guard';
 import { resolveBaseUrl } from '@/lib/auth/security-utils';
 import { validateText } from '@/lib/validation';
-import { csmAssignmentRepository, userRepository } from '@/lib/db/repositories';
+import { appSettingsRepository, csmAssignmentRepository, userRepository } from '@/lib/db/repositories';
+import { uniqueEmails } from '@/lib/onboarding/submissions';
 import { sendEmail, websiteChangeRequestEmail } from '@/lib/email';
 import type { User } from '@/lib/db/schema';
 import {
@@ -90,6 +91,46 @@ async function resolveRecipients(tenantId: string): Promise<{ user: User; isCsm:
   }
   const admins = await userRepository.listByRole('admin');
   return admins.filter((a) => a.email).map((user) => ({ user, isCsm: false }));
+}
+
+interface RequestRecipient {
+  to: string;
+  toName?: string;
+  portalUrl: string;
+}
+
+/**
+ * Everyone emailed about a website change request: the staff above, plus the website review team
+ * from Admin → Settings & Integrations. Each address is emailed once, whatever capitals it was typed in.
+ * The staff are always emailed: the "Also email the CSM" setting does not remove them here.
+ */
+async function resolveAllRecipients(tenantId: string, baseUrl: string): Promise<RequestRecipient[]> {
+  const staff = await resolveRecipients(tenantId);
+  let team: string[] = [];
+  try {
+    const settings = await appSettingsRepository.get('notifications');
+    team = uniqueEmails(settings.website_request_recipients);
+  } catch (err: any) {
+    // The usual staff are still emailed if the setting cannot be read.
+    console.error('[website-update] Could not read the website team list:', err?.message);
+  }
+
+  const adminUrl = `${baseUrl}/admin/clients/${tenantId}`;
+  const byEmail = new Map<string, RequestRecipient>();
+  for (const { user, isCsm } of staff) {
+    const key = user.email.trim().toLowerCase();
+    if (!byEmail.has(key)) {
+      byEmail.set(key, {
+        to: user.email,
+        toName: user.full_name || undefined,
+        portalUrl: isCsm ? `${baseUrl}/csm/clients/${tenantId}/setup` : adminUrl,
+      });
+    }
+  }
+  for (const email of team) {
+    if (!byEmail.has(email)) byEmail.set(email, { to: email, portalUrl: adminUrl });
+  }
+  return Array.from(byEmail.values());
 }
 
 export async function POST(
@@ -206,13 +247,13 @@ export async function POST(
     const companyName = targetTenant?.name || 'Demo Portal';
     let notified = 0;
     try {
-      const recipients = await resolveRecipients(tenantId);
+      const recipients = await resolveAllRecipients(tenantId, baseUrl);
       const results = await Promise.all(
-        recipients.map(({ user, isCsm }) =>
+        recipients.map(({ to, toName, portalUrl }) =>
           sendEmail(
             websiteChangeRequestEmail({
-              to: user.email,
-              toName: user.full_name || undefined,
+              to,
+              toName,
               companyName,
               requestedBy: session.email,
               title,
@@ -220,7 +261,7 @@ export async function POST(
               targetPageUrl,
               isUrgent,
               attachments: attachments.map(({ name, url, size }) => ({ name, url, size })),
-              portalUrl: isCsm ? `${baseUrl}/csm/clients/${tenantId}/setup` : `${baseUrl}/admin/clients/${tenantId}`,
+              portalUrl,
             })
           ).catch(() => ({ delivered: false }))
         )

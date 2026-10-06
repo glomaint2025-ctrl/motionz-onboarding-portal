@@ -6,6 +6,7 @@ import {
   csmAssignmentRepository,
   userRepository,
   clientSetupStepRepository,
+  contractRepository,
 } from '@/lib/db/repositories';
 import { tenantService } from '@/lib/services/tenant.service';
 import { createInvitation } from '@/lib/auth/invitations';
@@ -28,10 +29,14 @@ export async function GET(request: Request) {
     const setupParam = searchParams.get('setup')?.trim() || '';
 
     // 1. Fetch all tenants with relationships for enrichment
-    const allTenants = await tenantRepository.list({
-      includeArchived: true,
-      limit: 1000,
-    });
+    // The contract lookup is one query for every client, not one per row.
+    const [allTenants, withContract] = await Promise.all([
+      tenantRepository.list({
+        includeArchived: true,
+        limit: 1000,
+      }),
+      contractRepository.listTenantIdsWithContract(),
+    ]);
 
     const enrichedTenants = await Promise.all(
       allTenants.map(async (tenant) => {
@@ -50,6 +55,8 @@ export async function GET(request: Request) {
           total_steps: steps.length,
           completed_steps: completedSteps,
           progress_percent: progressPercent,
+          // Staff-only reminder: false until an admin attaches the client's contract.
+          hasContract: withContract.has(tenant.id),
           is_archived: Boolean(tenant.deleted_at || tenant.status === 'cancelled'),
         };
       })
