@@ -209,7 +209,7 @@ async function run() {
   assert.deepStrictEqual(byKey.country.options!.slice(0, 2), ['United States', 'Canada']);
   assert.strictEqual(byKey.country.defaultValue, 'United States');
   assert.deepStrictEqual(ONBOARDING_FORM_FIELDS.filter((f) => f.type === 'file').map((f) => f.key), ['marketing_materials', 'old_leads_list']);
-  assert.ok(ONBOARDING_FORM_FIELDS.filter((f) => f.type === 'file').every((f) => /Videos are too large to upload here; send them to your CSM on Slack\./.test(f.help || '')));
+  assert.ok(ONBOARDING_FORM_FIELDS.filter((f) => f.type === 'file').every((f) => /For videos and other large files, paste a link in the next question\./.test(f.help || '')));
   assert.ok(ONBOARDING_FORM_FIELDS.filter((f) => f.type === 'text').every((f) => f.maxLength === TEXT_MAX_LENGTH && TEXT_MAX_LENGTH === 300));
   assert.ok(ONBOARDING_FORM_FIELDS.filter((f) => f.type === 'textarea').every((f) => f.maxLength === TEXTAREA_MAX_LENGTH && TEXTAREA_MAX_LENGTH === 5000));
   console.log(' PASS: the definition has all 32 questions in 5 sections, with the 13 required ones.');
