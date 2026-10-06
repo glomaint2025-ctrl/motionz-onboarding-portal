@@ -56,7 +56,7 @@ export const MAX_FILES_PER_FIELD = 5;
 export const MAX_TOTAL_UPLOAD_BYTES = 4 * 1024 * 1024;
 export const ALLOWED_UPLOAD_EXTENSIONS = ['pdf', 'png', 'jpg', 'jpeg', 'webp', 'csv', 'xlsx', 'docx', 'txt'];
 export const ALLOWED_UPLOAD_LABEL = 'PDF, PNG, JPG, WEBP, CSV, XLSX, DOCX or TXT';
-export const UPLOAD_HELP = `Up to ${MAX_FILES_PER_FIELD} files (${ALLOWED_UPLOAD_LABEL}), 4 MB in total for the whole form. Videos are too large to upload here; send them to your CSM on Slack.`;
+export const UPLOAD_HELP = `Up to ${MAX_FILES_PER_FIELD} files (${ALLOWED_UPLOAD_LABEL}), 4 MB in total for the whole form. For videos and other large files, paste a link in the next question.`;
 
 export const COUNTRY_OPTIONS = [
   'United States',
@@ -132,6 +132,10 @@ export const ONBOARDING_FORM_SECTIONS: OnboardingSection[] = [
         required: false,
         help: UPLOAD_HELP,
       },
+      // Not in the original GoHighLevel form: videos are too large to upload through the portal, so clients share a link.
+      textarea('marketing_video_links', 'Links to videos or large files (Google Drive, Dropbox, Loom, YouTube…)', false, {
+        placeholder: 'Paste one link per line. Make sure anyone with the link can view it.',
+      }),
       textarea(
         'sales_process',
         'What is the process from coming to their house and signing a contract and how do you handle the fulfillment side as well?',

@@ -154,11 +154,11 @@ async function run() {
     ['Business details', 'Marketing', 'Website', 'Offer to advertise', 'Sales refinement']
   );
   assert.ok(ONBOARDING_FORM_SECTIONS.every((s) => s.description.length > 10), 'every section has its sub-line');
-  // The GoHighLevel form has 31 questions (headings and the submit button not counted).
-  assert.strictEqual(ONBOARDING_FORM_FIELDS.length, 31);
+  // The GoHighLevel form has 31 questions (headings and the submit button not counted), plus the portal's video-links question.
+  assert.strictEqual(ONBOARDING_FORM_FIELDS.length, 32);
   assert.deepStrictEqual(
     ONBOARDING_FORM_SECTIONS.map((s) => s.fields.length),
-    [11, 5, 9, 2, 4]
+    [11, 6, 9, 2, 4]
   );
   assert.deepStrictEqual(
     ONBOARDING_FORM_FIELDS.filter((f) => f.required).map((f) => f.label),
@@ -212,7 +212,7 @@ async function run() {
   assert.ok(ONBOARDING_FORM_FIELDS.filter((f) => f.type === 'file').every((f) => /Videos are too large to upload here; send them to your CSM on Slack\./.test(f.help || '')));
   assert.ok(ONBOARDING_FORM_FIELDS.filter((f) => f.type === 'text').every((f) => f.maxLength === TEXT_MAX_LENGTH && TEXT_MAX_LENGTH === 300));
   assert.ok(ONBOARDING_FORM_FIELDS.filter((f) => f.type === 'textarea').every((f) => f.maxLength === TEXTAREA_MAX_LENGTH && TEXTAREA_MAX_LENGTH === 5000));
-  console.log(' PASS: the definition has all 31 questions in 5 sections, with the 13 required ones.');
+  console.log(' PASS: the definition has all 32 questions in 5 sections, with the 13 required ones.');
 
   // ---- 2. A valid submission -----------------------------------------------------------------
   await appSettingsRepository.set('notifications', { onboarding_form_recipients: ['buyer@motionz.ai', 'ops@motionz.ai'], notify_assigned_csm: true }, 'test');
