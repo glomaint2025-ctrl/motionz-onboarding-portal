@@ -26,6 +26,8 @@ export default function SetupProgressPage() {
   const [isGHLFormOpen, setIsGHLFormOpen] = useState(false);
   const [isA2PFormOpen, setIsA2PFormOpen] = useState(false);
   const [prefillEmail, setPrefillEmail] = useState<string | undefined>(undefined);
+  // Form ids set by an admin. Empty until loaded; the pop-ups then use the built-in forms.
+  const [formIds, setFormIds] = useState<{ onboarding_form_id?: string; a2p_form_id?: string }>({});
 
   useEffect(() => {
     let isMounted = true;
@@ -42,6 +44,7 @@ export default function SetupProgressPage() {
         }
         setSteps(data.setupSteps || []);
         setFeatureToggles(data.featureToggles || {});
+        setFormIds(data.forms || {});
         const isClient = data.viewer?.role === 'client' || data.viewer?.role === 'client_member';
         setPrefillEmail(isClient ? data.viewer.email : data.tenant?.primary_email);
       } catch {
@@ -279,6 +282,7 @@ export default function SetupProgressPage() {
       )}
 
       <GHLOnboardingFormEmbed
+        formId={formIds.onboarding_form_id}
         isModal={true}
         isOpen={isGHLFormOpen}
         onClose={() => setIsGHLFormOpen(false)}
@@ -286,6 +290,7 @@ export default function SetupProgressPage() {
       />
 
       <A2PFormEmbed
+        formId={formIds.a2p_form_id}
         isModal={true}
         isOpen={isA2PFormOpen}
         onClose={() => setIsA2PFormOpen(false)}

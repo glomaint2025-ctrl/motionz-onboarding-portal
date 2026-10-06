@@ -4,6 +4,7 @@ import React, { useEffect, useState } from 'react';
 import { Card, CardHeader, Button, StatusBadge, Skeleton, Select } from '@/components/ui';
 import { Notice } from '@/components/admin/Notice';
 import { formatDateTime } from '@/lib/utils/format';
+import { GhlFormsCard } from '../_components/GhlFormsCard';
 
 interface Submission {
   id: string;
@@ -240,6 +241,8 @@ export default function AdminSettingsPage() {
           </>
         )}
       </Card>
+
+      <GhlFormsCard />
 
       <Card style={{ marginBottom: 'var(--space-6)' }}>
         <CardHeader
