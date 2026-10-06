@@ -166,7 +166,7 @@ export default function CampaignTrackingPage() {
           <>
             <SheetFrame src={links.embedUrl} title="Your tracking sheet (Google Sheets)" />
             <p style={{ margin: 'var(--space-3) 0 0 0', fontSize: 'var(--font-size-xs)', color: 'var(--color-text-muted)' }}>
-              Not loading? Sign in to Google with the email this sheet was shared with, or open it in a new tab.
+              Not loading? Sign in to Google with the email you use for this portal, or open it in a new tab.
             </p>
           </>
         ) : (
@@ -188,7 +188,12 @@ export default function CampaignTrackingPage() {
               Your calculator is being set up. It will appear here as soon as it is ready.
             </p>
           ) : calculatorLinks.embedUrl ? (
-            <SheetFrame src={calculatorLinks.embedUrl} title="Your Money Leak Calculator (Google Sheets)" />
+            <>
+              <SheetFrame src={calculatorLinks.embedUrl} title="Your Money Leak Calculator (Google Sheets)" />
+              <p style={{ margin: 'var(--space-3) 0 0 0', fontSize: 'var(--font-size-xs)', color: 'var(--color-text-muted)' }}>
+                Not loading? Sign in to Google with the email you use for this portal, or open it in a new tab.
+              </p>
+            </>
           ) : (
             <p style={{ color: 'var(--color-text-secondary)', margin: 0 }}>
               This calculator cannot be shown inside the portal. Use &ldquo;Open in new tab&rdquo; to view it.

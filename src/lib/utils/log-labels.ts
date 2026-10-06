@@ -56,6 +56,7 @@ export const AUDIT_ACTION_LABELS: Record<string, string> = {
   'contract.added': 'Contract attached',
   'contract.removed': 'Contract removed',
   'integration.sheet_created': 'Tracking sheet created',
+  'drive.access_synced': 'Google Drive access updated',
   'ghl.webhook.lead': 'New lead received from GoHighLevel',
   'ghl.webhook.csm_call': 'Call booking received from GoHighLevel',
   'ghl.webhook.onboarding_form': 'Onboarding form received from GoHighLevel',

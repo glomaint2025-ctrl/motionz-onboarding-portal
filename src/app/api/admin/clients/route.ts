@@ -12,6 +12,7 @@ import { tenantService } from '@/lib/services/tenant.service';
 import { createInvitation } from '@/lib/auth/invitations';
 import { requireAuth, handleAuthError } from '@/lib/auth/guard';
 import { provisionClientSheet } from '@/lib/integrations/sheets/provision';
+import { driveSyncWarning, syncClientDriveAccess } from '@/lib/integrations/sheets/access';
 
 import { parsePaginationParams, buildPaginationMeta } from '@/lib/utils/pagination';
 
@@ -255,9 +256,15 @@ export async function POST(request: Request) {
       clientEmail: normalizedEmail,
     });
 
+    // The assigned CSM gets the new folder; admins reach it through the parent folder.
+    const driveAccessWarning = sheet.ok
+      ? driveSyncWarning(await syncClientDriveAccess(newTenant.id, { actorEmail, actorRole: 'admin' }))
+      : undefined;
+
     return NextResponse.json({
       success: true,
       tenant: newTenant,
+      ...(driveAccessWarning ? { driveAccessWarning } : {}),
       magicLinkUrl,
       // Whether the invite email actually went out; the success screen words itself on this.
       emailDelivered: Boolean(emailDelivered),

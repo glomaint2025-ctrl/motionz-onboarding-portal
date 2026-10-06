@@ -27,7 +27,7 @@ export interface RenameClientFilesResult {
 }
 
 /** Fields of the tenant's google_sheets integration config that this module reads and writes. */
-interface SavedGoogleFiles {
+export interface SavedGoogleFiles {
   folder_id?: string;
   folder_url?: string;
   spreadsheet_id?: string;
@@ -49,21 +49,26 @@ interface ScriptResponse {
   warnings?: unknown;
 }
 
-const text = (value: unknown): string | undefined =>
+export const text = (value: unknown): string | undefined =>
   typeof value === 'string' && value.trim() ? value.trim() : undefined;
 
 /** The id inside a Google Sheets link, for configs that only have the link saved. */
-function sheetIdFromUrl(url: unknown): string | undefined {
+export function sheetIdFromUrl(url: unknown): string | undefined {
   return text(url)?.match(/\/spreadsheets\/d\/([A-Za-z0-9_-]{10,})/)?.[1];
 }
 
-async function loadSavedFiles(tenantId: string): Promise<SavedGoogleFiles> {
+export async function loadSavedFiles(tenantId: string): Promise<SavedGoogleFiles> {
   const configs = await integrationConfigRepository.listByTenant(tenantId);
   const saved = configs.find((c) => c.integration_type === 'google_sheets');
   return (saved?.config_data as SavedGoogleFiles) || {};
 }
 
-async function callScript(payload: Record<string, unknown>, timeoutMs: number): Promise<{ status: number; data: ScriptResponse | null }> {
+/** True when the portal knows where the Apps Script web app is and how to sign its requests. */
+export const isSheetsScriptConfigured = (): boolean =>
+  Boolean(process.env.GOOGLE_SHEETS_SCRIPT_URL && process.env.GOOGLE_SHEETS_SCRIPT_SECRET);
+
+/** One signed POST to the Apps Script web app. Throws when it cannot be reached or takes too long. */
+export async function callScript<T = ScriptResponse>(payload: Record<string, unknown>, timeoutMs: number): Promise<{ status: number; data: T | null }> {
   const res = await fetch(process.env.GOOGLE_SHEETS_SCRIPT_URL as string, {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
@@ -71,7 +76,7 @@ async function callScript(payload: Record<string, unknown>, timeoutMs: number): 
     redirect: 'follow',
     signal: AbortSignal.timeout(timeoutMs),
   });
-  const data = (await res.json().catch(() => null)) as ScriptResponse | null;
+  const data = (await res.json().catch(() => null)) as T | null;
   return { status: res.status, data };
 }
 

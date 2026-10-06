@@ -4,9 +4,11 @@
 // Uses the database and Google script settings in .env.local. Archived clients are skipped.
 // Safe to run again: clients that already have everything are skipped, and the setup itself reuses
 // the files a client already has (an existing tracking sheet is moved into the folder, not copied).
-// Usage: npx tsx scripts/setup-google-files.ts [--dry-run] [--only=<tenant id>]
-//   --dry-run   only lists each client and what is missing; changes nothing
-//   --only=ID   work on that one client
+// Usage: npx tsx scripts/setup-google-files.ts [--dry-run] [--only=<tenant id>] [--sync-access]
+//   --dry-run      only lists each client and what is missing; changes nothing
+//   --only=ID      work on that one client
+//   --sync-access  afterwards, make Google Drive access match the portal's people: admins on the
+//                  parent folder, then every client (CSM, owner, team). Needs the updated Google script.
 import { readFileSync } from 'node:fs';
 import { createClient } from '@supabase/supabase-js';
 
@@ -27,6 +29,7 @@ for (const line of envText.split(/\r?\n/)) {
 
 const dryRun = process.argv.includes('--dry-run');
 const only = (process.argv.find((a) => a.startsWith('--only=')) || '').slice('--only='.length) || null;
+const syncAccess = process.argv.includes('--sync-access');
 
 interface TenantRow {
   id: string;
@@ -159,6 +162,7 @@ async function main(): Promise<void> {
   if (dryRun) {
     console.log(`  Would be set up:       ${summary.wouldSetUp}`);
     console.log('Dry run only. Run again without --dry-run to set them up.');
+    if (syncAccess) console.log('Drive access was not checked: --sync-access does nothing in a dry run.');
     return;
   }
   console.log(`  Set up:                ${summary.setUp}`);
@@ -167,6 +171,40 @@ async function main(): Promise<void> {
   for (const failure of failures) console.log(`    - ${failure}`);
   if (summary.failed > 0) {
     console.log('Run the script again to retry the failed clients; finished clients are skipped.');
+    process.exitCode = 1;
+  }
+
+  if (syncAccess) await syncAllAccess(allTenants.filter((t) => !only || t.id === only));
+}
+
+/**
+ * --sync-access: gives and removes Google Drive access so it matches the portal's people.
+ * First the parent folder (admins), then every client, archived ones included (their people
+ * lose access). Clients without a Drive folder are skipped. Safe to run again.
+ */
+async function syncAllAccess(tenants: TenantRow[]): Promise<void> {
+  const { syncAdminDriveAccess, syncClientDriveAccess, describeDriveSync, OLD_SCRIPT_WARNING } = await import(
+    '../src/lib/integrations/sheets/access'
+  );
+  const options = { actorEmail: 'setup-google-files script', actorRole: 'system', budgetMs: 120_000 };
+
+  console.log('\nGoogle Drive access');
+  const parent = await syncAdminDriveAccess(options);
+  console.log(`  Parent folder (admins): ${describeDriveSync(parent)}`);
+  if (parent.warnings.includes(OLD_SCRIPT_WARNING)) {
+    console.log('  Update the Google script first (docs/07-integrations/google-sheets.md), then run this again.');
+    process.exitCode = 1;
+    return;
+  }
+
+  let problems = parent.warnings.length > 0 ? 1 : 0;
+  for (const tenant of tenants) {
+    const result = await syncClientDriveAccess(tenant.id, options);
+    console.log(`  ${tenant.name}: ${result.skipped ? 'no Drive folder yet, skipped.' : describeDriveSync(result)}`);
+    if (result.warnings.length > 0) problems++;
+  }
+  if (problems > 0) {
+    console.log(`  ${problems} with something to check (see above). Run again after fixing; it only changes what differs.`);
     process.exitCode = 1;
   }
 }

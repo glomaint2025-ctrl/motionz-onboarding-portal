@@ -12,6 +12,7 @@ import { AppError, NotFoundError } from '../errors';
 import { getSupabaseServiceClient } from '../db/supabase-client';
 import { resolveBaseUrl } from '../auth/security-utils';
 import { sendEmail, invitationEmail, magicLinkEmail } from '../email';
+import { syncClientDriveAccess } from '../integrations/sheets/access';
 
 export interface CreateInvitationParams {
   tenantId: string;
@@ -288,6 +289,12 @@ export class InvitationService {
         timestamp: now.toISOString(),
       },
     });
+
+    // This is the one place a client owner or team member gets a working login, so it is where
+    // they are given their Google Drive access. Never throws; a Drive problem is only logged.
+    if (invitation.tenant_id && (user.role === 'client' || user.role === 'client_member')) {
+      await syncClientDriveAccess(invitation.tenant_id, { actorEmail: user.email, actorRole: user.role, budgetMs: 15_000 });
+    }
 
     return { user, tenantId: invitation.tenant_id };
   }

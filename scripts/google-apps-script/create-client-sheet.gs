@@ -9,8 +9,15 @@
  *       <Client> - Tracking                 (copy of the tracking template)
  *       <Client> - Money Leak Calculator    (copy of the calculator template)
  *
- * Both files are shared with the client as editor. The script returns the links and the
+ *       <uploaded contract files>           (added by the portal with "upload_file")
+ *
+ * Both sheets are shared with the client as editor. The script returns the links and the
  * portal saves them, so the client sees their own two files on the Results Tracking page.
+ *
+ * The portal also keeps Drive access in step with its own people ("set_access"): admins on
+ * the parent folder, the client's CSM on the client folder, the client owner and team on the
+ * two sheets, the client owner as viewer on uploaded contracts. Access is always given to
+ * named email addresses. This script never turns on "anyone with the link" sharing.
  *
  * ---------------------------------------------------------------------------------------
  * SETUP (Project Settings > Script Properties)
@@ -24,13 +31,18 @@
  *   Deploy > New deployment > Web app, Execute as "Me", Who has access "Anyone".
  *   Copy the Web app URL into GOOGLE_SHEETS_SCRIPT_URL in the portal.
  *
- * UPDATING THE CODE (keeps the same web-app URL)
+ * UPDATING THE CODE / REDEPLOY (keeps the same web-app URL)
  *   1. Replace all the code in this file and save.
  *   2. Project Settings > Script Properties > add any new property (see above).
  *   3. Deploy > Manage deployments > edit (pencil) the existing deployment >
- *      Version: "New version" > Deploy.
- *   4. Select testSetup in the toolbar, press Run, and approve the Drive permission prompt.
- *      It creates a "Setup Test" folder with both files and logs the links. Delete it after.
+ *      Version: "New version" > Deploy. (Not "New deployment": that would change the URL.)
+ *   4. Select testSetup in the toolbar, press Run, and approve any permission prompt Google shows.
+ *      It creates a "Setup Test" folder with both files, uploads and bins a small test file,
+ *      and tries the access actions with your own email only. The log ends with
+ *      "File upload: OK" and "Access actions: OK". Delete the "Setup Test" folder afterwards.
+ *
+ *   Until step 3 is done the portal keeps working, but it shows "The Google script needs
+ *   updating before Drive access can be managed." and changes no Drive access.
  *
  * The account that deploys the script must be able to edit the parent folder, both
  * templates, and any tracking sheets created earlier (it owns the ones it created).
@@ -44,6 +56,24 @@
  *   action "rename"
  *     { clientName, folderId?, trackingSheetId?, calculatorSheetId? }
  *     -> { ok, warnings }   File ids and links do not change.
+ *   action "list_access"
+ *     { ids: [fileOrFolderId, ...] }   (at most 50)
+ *     -> { ok, version, parentFolderId, scriptUser, parent: { id, ok, owner, editors, viewers },
+ *          items: [{ id, ok, owner, editors, viewers, error? }] }
+ *     Who can open each file or folder right now (emails in lower case). Changes nothing.
+ *   action "set_access"
+ *     { changes: [{ id, email, role: "editor" | "viewer" | "none" }] }   (at most 100)
+ *     -> { ok, results: [{ id, email, role, ok, error? }] }
+ *     Gives or removes one person's access to one file or folder. One bad address does not
+ *     stop the rest. The owner and the account running this script are never changed.
+ *   action "upload_file"
+ *     { folderId, name, mimeType, base64 }   (at most 6 MB)
+ *     -> { ok, fileId, url }   The folder must be inside the parent folder.
+ *   action "trash_file"
+ *     { fileId }  -> { ok }    Moves a file that is inside the parent folder to the bin.
+ *
+ *   list_access, set_access, upload_file and trash_file only ever touch the parent folder and
+ *   what is inside it. None of them reads `clientName`, and none changes link sharing.
  */
 
 var TRACKING_SUFFIX = ' - Tracking';
@@ -51,6 +81,13 @@ var CALCULATOR_SUFFIX = ' - Money Leak Calculator';
 /** The calculator tab clients should land on. Copies keep the tab ids of the template. */
 var CALCULATOR_TAB_GID = '2143281968';
 var MAX_NAME_LENGTH = 120;
+/** Returned by list_access so the portal can tell this script from an older one. */
+var SCRIPT_VERSION = 3;
+var MAX_ACCESS_CHANGES = 100;
+var MAX_ACCESS_IDS = 50;
+var MAX_UPLOAD_BYTES = 6 * 1024 * 1024;
+/** How far up the folder tree to look for the parent folder. Client files sit one or two levels down. */
+var MAX_PARENT_DEPTH = 6;
 
 function doPost(e) {
   var lock = null;
@@ -72,6 +109,10 @@ function doPost(e) {
     var action = String(body.action || 'provision');
     if (action === 'provision') return json_(provision_(body, props));
     if (action === 'rename') return json_(rename_(body, props));
+    if (action === 'list_access') return json_(listAccess_(body, props));
+    if (action === 'set_access') return json_(setAccess_(body, props));
+    if (action === 'upload_file') return json_(uploadFile_(body, props));
+    if (action === 'trash_file') return json_(trashFile_(body, props));
     return json_({ ok: false, error: 'Unknown action: ' + action });
   } catch (err) {
     return json_({ ok: false, error: message_(err) });
@@ -235,7 +276,240 @@ function renameFile_(fileId, title, label, warnings) {
   }
 }
 
+/* --------------------------------------------------------------------- access */
+
+/**
+ * Who can open each file or folder right now. Changes nothing.
+ * The parent folder is always included, so the portal can tell who gets access from above.
+ */
+function listAccess_(body, props) {
+  var ids = Array.isArray(body.ids) ? body.ids : [];
+  if (ids.length > MAX_ACCESS_IDS) return { ok: false, error: 'Too many ids in one call (the limit is ' + MAX_ACCESS_IDS + ').' };
+
+  var parentId = String(props.getProperty('FOLDER_ID') || '').trim();
+  var items = [];
+  for (var i = 0; i < ids.length; i++) {
+    items.push(describeAccess_(String(ids[i] || '').trim(), parentId));
+  }
+  return {
+    ok: true,
+    version: SCRIPT_VERSION,
+    parentFolderId: parentId,
+    scriptUser: scriptUserEmail_(),
+    parent: describeAccess_(parentId, parentId),
+    items: items,
+  };
+}
+
+function describeAccess_(id, parentId) {
+  var entry = { id: id, ok: false, owner: '', editors: [], viewers: [] };
+  try {
+    var item = itemById_(id);
+    if (!item) {
+      entry.error = 'Not found in Google Drive.';
+      return entry;
+    }
+    if (!isUnderParent_(item, parentId)) {
+      entry.error = 'This is not inside the parent folder.';
+      return entry;
+    }
+    entry.owner = ownerEmail_(item);
+    entry.editors = emails_(item.getEditors());
+    entry.viewers = emails_(item.getViewers());
+    entry.ok = true;
+  } catch (err) {
+    entry.error = message_(err);
+  }
+  return entry;
+}
+
+/**
+ * Gives or removes access, one person and one file or folder at a time.
+ * A problem with one address (for example one that is not a Google account) is reported for
+ * that line only. Link sharing is never changed, so nothing becomes public.
+ */
+function setAccess_(body, props) {
+  var changes = Array.isArray(body.changes) ? body.changes : null;
+  if (!changes) return { ok: false, error: 'changes is required' };
+  if (changes.length > MAX_ACCESS_CHANGES) {
+    return { ok: false, error: 'Too many changes in one call (the limit is ' + MAX_ACCESS_CHANGES + ').' };
+  }
+
+  var parentId = String(props.getProperty('FOLDER_ID') || '').trim();
+  var scriptUser = scriptUserEmail_();
+  var found = {}; // id -> { item, allowed } so each file is looked up once
+  var results = [];
+
+  for (var i = 0; i < changes.length; i++) {
+    var change = changes[i] || {};
+    var id = String(change.id || '').trim();
+    var email = String(change.email || '').trim().toLowerCase();
+    var role = String(change.role || '');
+    var result = { id: id, email: email, role: role, ok: false };
+    results.push(result);
+
+    try {
+      if (!id || email.indexOf('@') < 1) throw new Error('An id and an email address are required.');
+      if (role !== 'editor' && role !== 'viewer' && role !== 'none') throw new Error('Unknown role: ' + role);
+
+      if (!found[id]) {
+        var looked = itemById_(id);
+        found[id] = { item: looked, allowed: looked ? isUnderParent_(looked, parentId) : false };
+      }
+      var item = found[id].item;
+      if (!item) throw new Error('Not found in Google Drive.');
+      if (!found[id].allowed) throw new Error('This is not inside the parent folder.');
+
+      // The owner, and the account this script runs as, always keep the access they have.
+      if (email === scriptUser || email === ownerEmail_(item)) {
+        result.ok = true;
+        result.skipped = 'owner';
+        continue;
+      }
+
+      var isEditor = emails_(item.getEditors()).indexOf(email) !== -1;
+      var isViewer = emails_(item.getViewers()).indexOf(email) !== -1;
+
+      if (role === 'editor') {
+        if (!isEditor) item.addEditor(email);
+      } else if (role === 'viewer') {
+        if (isEditor) removeQuietly_(item, email, true);
+        if (isEditor || !isViewer) item.addViewer(email);
+      } else {
+        if (isEditor) removeQuietly_(item, email, true);
+        if (isEditor || isViewer) removeQuietly_(item, email, false);
+      }
+      result.ok = true;
+    } catch (err) {
+      result.error = message_(err);
+    }
+  }
+
+  return { ok: true, results: results };
+}
+
+/** Removes one person as editor (or as viewer). "They did not have access" is not an error. */
+function removeQuietly_(item, email, asEditor) {
+  try {
+    if (asEditor) item.removeEditor(email);
+    else item.removeViewer(email);
+  } catch (err) {
+    var list = emails_(asEditor ? item.getEditors() : item.getViewers());
+    if (list.indexOf(email) !== -1) throw err; // still there, so it really failed
+  }
+}
+
+/* --------------------------------------------------------------------- upload */
+
+/** Saves one uploaded file (a contract) in a client's folder. Only named people can open it. */
+function uploadFile_(body, props) {
+  var parentId = String(props.getProperty('FOLDER_ID') || '').trim();
+  var folder = folderById_(body.folderId);
+  if (!folder) return { ok: false, error: 'The Drive folder could not be found.' };
+  if (!isUnderParent_(folder, parentId)) return { ok: false, error: 'That folder is not inside the parent folder.' };
+
+  var name = cleanName_(body.name) || 'Contract';
+  var encoded = String(body.base64 || '');
+  if (!encoded) return { ok: false, error: 'The file is empty.' };
+  // Four base64 characters hold three bytes, so the size is known before decoding.
+  if (encoded.length * 0.75 > MAX_UPLOAD_BYTES + 3) return { ok: false, error: 'The file is larger than 6 MB.' };
+
+  var bytes = Utilities.base64Decode(encoded);
+  if (!bytes.length) return { ok: false, error: 'The file is empty.' };
+  if (bytes.length > MAX_UPLOAD_BYTES) return { ok: false, error: 'The file is larger than 6 MB.' };
+
+  var mimeType = String(body.mimeType || '').trim() || 'application/octet-stream';
+  var file = folder.createFile(Utilities.newBlob(bytes, mimeType, name));
+  return { ok: true, fileId: file.getId(), url: fileUrl_(file.getId()) };
+}
+
+/** Moves an uploaded file to the bin. Its viewers are removed first, so the client can no longer open it. */
+function trashFile_(body, props) {
+  var parentId = String(props.getProperty('FOLDER_ID') || '').trim();
+  var id = String(body.fileId || '').trim();
+  if (!id) return { ok: false, error: 'fileId is required' };
+
+  var file;
+  try {
+    file = DriveApp.getFileById(id);
+  } catch (err) {
+    return { ok: true, alreadyGone: true }; // deleted by hand: nothing left to do
+  }
+  if (file.isTrashed()) return { ok: true, alreadyGone: true };
+  if (!isUnderParent_(file, parentId)) return { ok: false, error: 'That file is not inside the parent folder.' };
+
+  var scriptUser = scriptUserEmail_();
+  var viewers = emails_(file.getViewers());
+  for (var i = 0; i < viewers.length; i++) {
+    if (viewers[i] === scriptUser) continue;
+    try {
+      file.removeViewer(viewers[i]);
+    } catch (err) {
+      // Access that comes from the folder cannot be removed here; the bin still hides the file.
+    }
+  }
+  file.setTrashed(true);
+  return { ok: true };
+}
+
 /* -------------------------------------------------------------------- helpers */
+
+/** A folder or a file by id (in that order), or null. Items in the bin count as missing. */
+function itemById_(id) {
+  return folderById_(id) || fileById_(id);
+}
+
+/** True for the parent folder itself and for anything inside it, however deep (within reason). */
+function isUnderParent_(item, parentId) {
+  if (!parentId) return false;
+  if (item.getId() === parentId) return true;
+  var level = [item];
+  for (var depth = 0; depth < MAX_PARENT_DEPTH && level.length; depth++) {
+    var next = [];
+    for (var i = 0; i < level.length; i++) {
+      var parents = level[i].getParents();
+      while (parents.hasNext()) {
+        var parent = parents.next();
+        if (parent.getId() === parentId) return true;
+        next.push(parent);
+      }
+    }
+    level = next;
+  }
+  return false;
+}
+
+/** Lower-cased email addresses of a list of Drive users. People whose address Google hides are left out. */
+function emails_(users) {
+  var out = [];
+  for (var i = 0; i < users.length; i++) {
+    var email = String(users[i].getEmail() || '').trim().toLowerCase();
+    if (email && out.indexOf(email) === -1) out.push(email);
+  }
+  return out;
+}
+
+function ownerEmail_(item) {
+  try {
+    var owner = item.getOwner();
+    return owner ? String(owner.getEmail() || '').trim().toLowerCase() : '';
+  } catch (err) {
+    return ''; // items on a shared drive have no single owner
+  }
+}
+
+/** The Google account this script runs as (it owns its own "My Drive"). Needs no extra permission. */
+function scriptUserEmail_() {
+  try {
+    return ownerEmail_(DriveApp.getRootFolder());
+  } catch (err) {
+    return '';
+  }
+}
+
+function fileUrl_(id) {
+  return 'https://drive.google.com/file/d/' + id + '/view';
+}
 
 /** Makes a client name safe for Drive: no slashes or control characters, single spaces, sensible length. */
 function cleanName_(value) {
@@ -343,13 +617,38 @@ function json_(data) {
 }
 
 /**
- * Run once from the editor to check the setup and grant permissions.
- * Creates a "Setup Test" folder with both files and logs the links. Delete the folder afterwards.
+ * Run from the editor after every code update, to check the setup and grant permissions.
+ * Creates a "Setup Test" folder with both files, uploads and bins a small test file, and tries
+ * the access actions with your own email only (nobody else is emailed or given access).
+ * Delete the "Setup Test" folder afterwards.
  */
 function testSetup() {
-  var result = provision_({ clientName: 'Setup Test' }, PropertiesService.getScriptProperties());
+  var props = PropertiesService.getScriptProperties();
+  var result = provision_({ clientName: 'Setup Test' }, props);
   Logger.log('Folder:         ' + result.folderUrl);
   Logger.log('Tracking sheet: ' + result.url);
   Logger.log('Calculator:     ' + (result.calculatorUrl || 'not created'));
   if (result.warnings && result.warnings.length) Logger.log('Warnings: ' + result.warnings.join(' | '));
+  if (!result.ok) return;
+
+  var me = scriptUserEmail_();
+  Logger.log('Script account: ' + (me || 'unknown'));
+
+  // Upload a tiny file into the test folder, then move it to the bin again.
+  var upload = uploadFile_(
+    { folderId: result.folderId, name: 'Setup test file.txt', mimeType: 'text/plain', base64: Utilities.base64Encode('Setup test') },
+    props
+  );
+  var binned = upload.ok ? trashFile_({ fileId: upload.fileId }, props) : { ok: false };
+  Logger.log('File upload:    ' + (upload.ok && binned.ok ? 'OK' : 'FAILED ' + (upload.error || binned.error || '')));
+
+  // Access actions on the test folder, using only this account's own address.
+  var list = listAccess_({ ids: [result.folderId, result.spreadsheetId] }, props);
+  var listOk = list.ok && list.parent.ok && list.items.length === 2 && list.items[0].ok && list.items[1].ok;
+  var set = me ? setAccess_({ changes: [{ id: result.folderId, email: me, role: 'editor' }] }, props) : null;
+  var setOk = !set || (set.ok && set.results.length === 1 && set.results[0].ok);
+  Logger.log('Access actions: ' + (setOk && listOk ? 'OK' : 'FAILED ' + JSON.stringify({ set: set, list: list })));
+  if (list.parent.ok) {
+    Logger.log('Parent folder is shared with: ' + (list.parent.editors.concat(list.parent.viewers).join(', ') || 'nobody else'));
+  }
 }

@@ -11,6 +11,8 @@ interface ContractRecord {
   document_url?: string;
   signed_at?: string;
   ghl_document_id?: string;
+  /** True when the file was uploaded to the client's Google Drive folder (not a pasted link). */
+  is_drive_file?: boolean;
   created_at: string;
 }
 
@@ -19,6 +21,8 @@ export default function ContractPage() {
   const clientId = (params?.clientId as string) || 'demo';
 
   const [contracts, setContracts] = useState<ContractRecord[]>([]);
+  // The Google account an uploaded contract is shared with.
+  const [ownerEmail, setOwnerEmail] = useState('');
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState('');
 
@@ -28,7 +32,10 @@ export default function ContractPage() {
       .then(async (res) => {
         const data = await res.json().catch(() => ({}));
         if (!isMounted) return;
-        if (res.ok) setContracts(data.contracts || []);
+        if (res.ok) {
+          setContracts(data.contracts || []);
+          setOwnerEmail(typeof data.ownerEmail === 'string' ? data.ownerEmail : '');
+        }
         else setError(res.status === 403 ? 'Only the account owner can see the contract.' : 'Your contract could not be loaded. Please refresh the page.');
       })
       .catch(() => isMounted && setError('We could not reach the server. Check your connection and refresh the page.'))
@@ -76,9 +83,16 @@ export default function ContractPage() {
                 }
               />
               {contract.document_url ? (
-                <a href={contract.document_url} target="_blank" rel="noopener noreferrer">
-                  <Button variant="primary">Open document</Button>
-                </a>
+                <>
+                  <a href={contract.document_url} target="_blank" rel="noopener noreferrer">
+                    <Button variant="primary">Open document</Button>
+                  </a>
+                  {contract.is_drive_file && (
+                    <p style={{ color: 'var(--color-text-muted)', fontSize: 'var(--font-size-xs)', margin: 'var(--space-2) 0 0 0' }}>
+                      Opens in Google Drive. Sign in to Google with {ownerEmail || 'the account owner’s email'} to view it.
+                    </p>
+                  )}
+                </>
               ) : (
                 <p style={{ color: 'var(--color-text-muted)', fontSize: 'var(--font-size-sm)', margin: 0 }}>
                   The document file has not been attached yet.

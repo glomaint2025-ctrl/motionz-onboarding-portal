@@ -19,6 +19,7 @@ import { getSupabaseServiceClient } from '@/lib/db/supabase-client';
 import { sendEmail, canExposeDevLinks } from '@/lib/email';
 import { validateEmail, validateText } from '@/lib/validation';
 import { removeAvatar } from '@/lib/storage/avatars';
+import { driveSyncWarning, syncStaffDriveAccess } from '@/lib/integrations/sheets/access';
 
 const SETUP_LINK_MINUTES = 72 * 60;
 
@@ -246,13 +247,30 @@ async function updateStaff(body: any, target: User, session: SessionIdentity) {
     },
   });
 
+  // A new email or role changes who may open the Google Drive folders (the old email loses its access).
+  const driveAccessWarning =
+    updates.email || updates.role
+      ? driveSyncWarning(
+          await syncStaffDriveAccess(target.id, {
+            actorEmail: session.email,
+            actorRole: 'admin',
+            removeEmails: updates.email ? [before.email] : [],
+          })
+        )
+      : undefined;
+
   if (!calendarSaved) {
     return NextResponse.json(
       { error: 'The other changes were saved, but the booking calendar could not be saved. Try again.' },
       { status: 500 }
     );
   }
-  return NextResponse.json({ success: true, staff: present(updated, savedCalendarId || null), changed });
+  return NextResponse.json({
+    success: true,
+    staff: present(updated, savedCalendarId || null),
+    changed,
+    ...(driveAccessWarning ? { driveAccessWarning } : {}),
+  });
 }
 
 /** Admin > Staff: list Motionz staff with their assigned client counts. */
@@ -336,10 +354,18 @@ export async function POST(request: Request) {
       details: { email, role, emailDelivered: delivery.delivered },
     });
 
+    // A new admin can open every client's Google files (through the parent folder). A new CSM
+    // has no clients yet; they get each client's folder when the client is assigned to them.
+    const driveAccessWarning =
+      role === 'admin'
+        ? driveSyncWarning(await syncStaffDriveAccess(user.id, { actorEmail: session!.email, actorRole: 'admin' }))
+        : undefined;
+
     return NextResponse.json({
       success: true,
       staff: { id: user.id, email, name: fullName, role, status: 'active' },
       emailDelivered: delivery.delivered,
+      ...(driveAccessWarning ? { driveAccessWarning } : {}),
       ...(canExposeDevLinks() ? { setupUrl } : {}),
     });
   } catch (err: any) {
@@ -411,7 +437,12 @@ export async function PATCH(request: Request) {
       resource_id: target.id,
       details: { email: target.email },
     });
-    return NextResponse.json({ success: true });
+
+    // Disabled staff lose their Google Drive access; enabled staff get it back.
+    const driveAccessWarning = driveSyncWarning(
+      await syncStaffDriveAccess(target.id, { actorEmail: session!.email, actorRole: 'admin' })
+    );
+    return NextResponse.json({ success: true, ...(driveAccessWarning ? { driveAccessWarning } : {}) });
   } catch (err: any) {
     if (err.statusCode === 401 || err.statusCode === 403) return handleAuthError(err);
     return NextResponse.json({ error: 'Failed to update staff member.' }, { status: 500 });
@@ -536,7 +567,12 @@ export async function DELETE(request: Request) {
       details: { email: target.email, name: target.full_name || null, role: target.role },
     });
 
-    return NextResponse.json({ success: true });
+    // Their email comes off the parent Drive folder. (A CSM has no clients left at this point.)
+    const driveAccessWarning = driveSyncWarning(
+      await syncStaffDriveAccess(null, { actorEmail: session!.email, actorRole: 'admin', removeEmails: [target.email] })
+    );
+
+    return NextResponse.json({ success: true, ...(driveAccessWarning ? { driveAccessWarning } : {}) });
   } catch (err: any) {
     if (err.statusCode === 401 || err.statusCode === 403) return handleAuthError(err);
     return NextResponse.json({ error: 'Failed to delete staff member.' }, { status: 500 });

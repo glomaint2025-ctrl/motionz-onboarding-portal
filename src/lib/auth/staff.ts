@@ -206,6 +206,13 @@ export const authenticateStaff = async (
       full_name: normalizedEmail.split('@')[0].replace(/[._]/g, ' '),
       role: assignedRole,
     });
+
+    // A staff member created by their first sign-in: an admin gets the parent Drive folder.
+    // Loaded here (not at the top) because the access module itself uses this file.
+    if (assignedRole === 'admin') {
+      const { syncAdminDriveAccess } = await import('../integrations/sheets/access');
+      await syncAdminDriveAccess({ actorEmail: normalizedEmail, actorRole: 'admin', budgetMs: 10_000 });
+    }
   }
 
   await logAuditEvent({

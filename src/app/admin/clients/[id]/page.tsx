@@ -66,6 +66,8 @@ export default function ClientDetailPage() {
   const [filesBusy, setFilesBusy] = useState(false);
   const [filesError, setFilesError] = useState('');
   const [filesNotice, setFilesNotice] = useState('');
+  const [accessBusy, setAccessBusy] = useState(false);
+  const [accessResult, setAccessResult] = useState<{ ok: boolean; text: string } | null>(null);
   const [driveWarning, setDriveWarning] = useState('');
   const [submissions, setSubmissions] = useState<OnboardingSubmissionView[]>([]);
   const [csmUserId, setCsmUserId] = useState('');
@@ -249,7 +251,9 @@ export default function ClientDetailPage() {
       };
       if (res.ok && data.success) {
         setGoogleFiles(files);
-        const warnings: string[] = Array.isArray(data.sheet?.warnings) ? data.sheet.warnings : [];
+        const warnings: string[] = Array.isArray(data.sheet?.warnings) ? [...data.sheet.warnings] : [];
+        // The files are there, but sharing them with the right people needs a look.
+        if (typeof data.driveAccessWarning === 'string' && data.driveAccessWarning) warnings.push(data.driveAccessWarning);
         if (files.trackingSheetUrl && files.calculatorUrl && files.folderUrl && warnings.length === 0) {
           setFilesNotice('Google files are set up.');
         } else {
@@ -266,6 +270,30 @@ export default function ClientDetailPage() {
       setFilesError('Could not reach the server, so the Google files were not set up.');
     } finally {
       setFilesBusy(false);
+    }
+  };
+
+  // Compares who can open the client's Google files with the portal's people and fixes the difference.
+  const handleSyncDriveAccess = async () => {
+    if (accessBusy) return;
+    setAccessBusy(true);
+    setAccessResult(null);
+    try {
+      const res = await fetch(`/api/admin/clients/${clientId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'sync_drive_access' }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (res.ok && data.success) {
+        setAccessResult({ ok: Boolean(data.upToDate), text: data.message || 'Access is up to date' });
+      } else {
+        setAccessResult({ ok: false, text: data.error || 'Drive access could not be checked. Please try again.' });
+      }
+    } catch {
+      setAccessResult({ ok: false, text: 'Could not reach the server, so Drive access was not checked.' });
+    } finally {
+      setAccessBusy(false);
     }
   };
 
@@ -353,6 +381,10 @@ export default function ClientDetailPage() {
       const data = await res.json().catch(() => ({}));
       if (res.ok && data.success) {
         if (data.tenant) setTenant(data.tenant);
+        // Saved, but Google Drive access did not follow (for example after a CSM change). Shown under "Google files".
+        if (typeof data.driveAccessWarning === 'string' && data.driveAccessWarning) {
+          setAccessResult({ ok: false, text: data.driveAccessWarning });
+        }
         if (typeof data.driveWarning === 'string' && data.driveWarning) {
           // Saved, but Google Drive did not follow the new name. Stays on screen until the next save.
           setDriveWarning(data.driveWarning);
@@ -936,7 +968,29 @@ export default function ClientDetailPage() {
                   {filesBusy ? 'Setting up...' : googleFileLinks.length === 0 ? 'Set up Google files' : 'Finish Google files setup'}
                 </Button>
               )}
+              {googleFiles.folderUrl && (
+                <Button type="button" variant="outline" size="sm" onClick={handleSyncDriveAccess} disabled={accessBusy || filesBusy}>
+                  {accessBusy ? 'Checking access...' : 'Re-sync Drive access'}
+                </Button>
+              )}
             </div>
+            {googleFiles.folderUrl && (accessBusy || accessResult) && (
+              <span
+                role="status"
+                style={{
+                  display: 'block',
+                  fontSize: 'var(--font-size-xs)',
+                  marginTop: 'var(--space-1)',
+                  color: accessResult && !accessResult.ok ? 'var(--color-status-danger-text)' : 'var(--color-text-muted)',
+                }}
+              >
+                {accessBusy
+                  ? 'Checking who can open this client’s Google files. This can take a few seconds.'
+                  : accessResult?.ok
+                    ? `${accessResult.text}. The CSM, the client and their team can open what they should.`
+                    : accessResult?.text}
+              </span>
+            )}
             {googleFilesMissing.length > 0 && googleFileLinks.length > 0 && !filesBusy && !filesError && (
               <span style={{ display: 'block', fontSize: 'var(--font-size-xs)', color: 'var(--color-text-muted)', marginTop: 'var(--space-1)' }}>
                 Still missing: {googleFilesMissing.join(', ')}.

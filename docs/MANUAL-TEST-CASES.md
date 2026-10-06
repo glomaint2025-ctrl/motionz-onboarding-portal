@@ -95,10 +95,19 @@ Left menu > **Clients** > **Add client**.
 | 5.4 | **Open portal** (opens in a new tab) > left menu / Tools | Roof Measurement is gone; opening `.../roof-measurement` sends you to Home |
 | 5.5 | Back in the first tab: tick Roof Measurement again > Save | Saved |
 | 5.6 | **Assigned CSM** > Thomas > Save > reload | Shows Thomas. Change back to Heshan (Test CSM) > Save |
-| 5.7 | **Contract**: Title `Test agreement`, Document link `http://example.com/a.pdf` > **Attach contract** | "Document link must be a full https:// link." |
-| 5.8 | Link `https://example.com/a.pdf`, leave Signed on empty > Attach | Listed as "Not signed yet · Open" |
-| 5.9 | **Remove** > confirm **Remove contract** | The blue notice comes back at the top of the Contract card: "No contract attached yet. Paste the signed contract link below so TC Roofing Test can see it on their Contract page." |
+| 5.7 | **Contract** card: under "How do you want to attach the contract?" choose **Paste a link**. Title `Test agreement`, Document link `http://example.com/a.pdf` > **Attach contract** | "Document link must be a full https:// link." |
+| 5.8 | Link `https://example.com/a.pdf`, leave Signed on empty > Attach | Listed as "Not signed yet · Link · Open" |
+| 5.9 | **Remove** > confirm **Remove contract** | The blue notice comes back at the top of the Contract card: "No contract attached yet. Upload the signed contract or paste its link below so TC Roofing Test can see it on their Contract page." |
 | 5.9a | Attach the contract again (5.8) | The notice is gone as soon as the contract is listed. Sign in as the TC owner: the Contract page shows the contract and no reminder anywhere |
+| 5.9b | Choose **Upload a file** (the default). Look at the form | A **Contract file** picker with "PDF, DOCX, PNG or JPG, up to 4 MB." and, under the form, "The file is saved in this client's Google Drive folder. It is never public…". The button reads **Upload contract** |
+| 5.9c | Title `Signed agreement`, pick a `.txt` or `.xlsx` file > **Upload contract** | "Upload a PDF, DOCX, PNG or JPG file." Nothing is added |
+| 5.9d | Pick a PDF larger than 4 MB > **Upload contract** | "That file is larger than 4 MB. Upload a smaller file, or paste a link instead." |
+| 5.9e | Rename any picture to `fake.pdf`, pick it > **Upload contract** | ""fake.pdf" does not look like a valid .pdf file." |
+| 5.9f | Pick a real PDF under 4 MB, Signed on = today > **Upload contract** | "Uploading…" then a notice "Contract uploaded to TC Roofing Test's Google Drive folder. Only Motionz staff and the account owner can open it." Listed as "Signed … · Uploaded file in Google Drive · Open". **Open** shows the PDF in Google Drive. In Drive the file is inside the client's folder; its Share dialog lists the owner's email as **Viewer** and General access is **Restricted** |
+| 5.9g | Sign in as the TC owner > **Contract** | The contract with **Open document** and under it "Opens in Google Drive. Sign in to Google with <owner email> to view it." Signed in to Google with that email the PDF opens; in a browser signed in to another Google account Google says you need access |
+| 5.9h | A contract attached as a link (5.8), on the owner's Contract page | **Open document** with no Google Drive line under it |
+| 5.9i | As admin: **Remove** the uploaded contract > the dialog | It adds "The uploaded file is moved to the bin in Google Drive." Confirm: the row is gone; in Drive the file is in the bin; the owner's Contract page no longer lists it |
+| 5.9j | On a client with **no Drive folder yet** (Google files row shows a set-up button): upload a PDF | "This client has no Google Drive folder yet. Press "Set up Google files" under Company details first, then upload the contract again." Nothing is added. **Paste a link** still works for that client |
 | 5.10 | **Client team** > **Invitations waiting** > **Send again** > confirm | One sentence "We emailed a new invitation…". Gmail gets a new invite; the old link no longer works |
 | 5.11 | **Invite** button > email `heshantharushka2002+tc2@gmail.com` > send | "We emailed the invitation to …" |
 | 5.12 | On that waiting invite > **Cancel invite** > confirm | It disappears; its Gmail link shows "This link isn't working" |
@@ -108,6 +117,27 @@ Left menu > **Clients** > **Add client**.
 | 5.16 | Press **Finish Google files setup** | "Setting up…" then "Google files are set up."; all three links show, the button is gone. In Drive the old tracking sheet has **moved** into the new client folder (not copied) and a calculator copy is next to it |
 
 To bring **every** older client up to date in one go instead of pressing the button on each one, a developer can run `npx tsx scripts/setup-google-files.ts --dry-run` (only lists what is missing) and then the same command without `--dry-run`. See docs/07-integrations/google-sheets.md.
+
+### 5b. Google Drive access follows the portal (needs the updated Google script, see docs/07-integrations/google-sheets.md)
+
+Use **TC Roofing Test** (it has a Drive folder). Keep the client's Drive folder open in another tab, signed in as the Google account that owns the script, and check **Share** on the folder, the tracking sheet and the calculator after each step. Use test addresses that are real Google accounts (the `heshantharushka2002+…@gmail.com` ones are); each person who is given access gets Google's own "shared with you" email.
+
+| # | Steps | Expected |
+|---|---|---|
+| 5.17 | **Company details > Google files** | Next to the links there is a **Re-sync Drive access** button (only when the client has a Drive folder) |
+| 5.18 | Press **Re-sync Drive access** | "Checking who can open this client's Google files…" then "Access is up to date. …" or "Added n, removed n. …". Press again: "Access is up to date." |
+| 5.19 | In Drive: the **parent folder** > Share | Every active portal admin is an **Editor**. General access: **Restricted** |
+| 5.20 | In Drive: the **client folder** > Share | The assigned CSM is an Editor (admins show too, passed down from the parent folder). The client owner and team are **not** on the folder |
+| 5.21 | In Drive: the **tracking sheet** and the **calculator** > Share | The client owner is an Editor; so is every active team member who may see Results Tracking. General access: **Restricted** on both |
+| 5.22 | **Assigned CSM** > another CSM > Save | Saved. In Drive the new CSM is on the client folder and the previous one is gone. Change it back > Save: it swaps back |
+| 5.23 | **Client team**: untick **Results Tracking** for a team member > save | In Drive that member is no longer on the tracking sheet or calculator. Tick it again > save: they are back |
+| 5.24 | **Client team**: disable a team member, then enable them | Disabled: gone from both sheets. Enabled: back on both |
+| 5.25 | Invite a new team member with Results Tracking ticked; before they accept, look in Drive | Not shared with them yet. After they open the invite and set a password: they are an Editor on both sheets, and they receive Google's "shared with you" emails |
+| 5.26 | In Drive, share the tracking sheet by hand with some other Google address > back in the portal press **Re-sync Drive access** | "Removed 1. …" and that address is gone from the sheet (client files are kept exactly in step with the portal) |
+| 5.27 | **Audit Logs** | One "Google Drive access updated" entry for each step above that changed something; none for a re-sync that found nothing to change |
+| 5.28 | Only while the Google script has **not** been updated yet: press **Re-sync Drive access** | Red text "The Google script needs updating before Drive access can be managed." Nothing changes in Drive, and saving the client, changing the CSM or the team still works |
+
+While doing section 16 (suspend / reactivate / archive / unarchive) check Drive again: while the client is suspended or archived the owner and team are **off** both sheets and the contract, the CSM and admins still have access; after reactivating or unarchiving the owner and team are back.
 
 ## 6. Admin: GHL Connect
 
@@ -135,6 +165,10 @@ To bring **every** older client up to date in one go instead of pressing the but
 | 7.11 | **Delete** on a CSM who has clients | Dialog "Delete <name>? …"; pressing **Delete** shows inside the dialog "<name> still looks after N clients. Give those clients to another CSM first…"; nobody is deleted |
 | 7.12 | Add a throwaway staff member, then **Delete** > **Delete** | "<name> was deleted."; the row is gone; signing in with that email says it is not a staff account; Audit log shows "Staff member deleted" and their older entries are still there |
 | 7.13 | **Add a staff member** form at 1024px and wider | Name, email, Role and the **Add staff member** button sit on one row; the button is the same height as the boxes and level with them |
+| 7.14 | Drive access (needs the updated Google script): add a throwaway **Admin**, then look at the parent Drive folder > Share | The new admin is an Editor on the parent folder (and receives Google's "shared with you" email if the address is a Google account; otherwise the add still succeeds) |
+| 7.15 | **Edit** that admin > change Role to CSM > Save | They are no longer on the parent folder. Change back to Admin: they are on it again |
+| 7.16 | **Delete** the throwaway admin | Gone from the parent folder. Anyone you shared the parent folder with by hand, who is not portal staff, is still there |
+| 7.17 | Disable, then enable, a CSM who has clients (a disabled row shows **Enable**; disabling is done from the database on staging) | Disabled: gone from the folder of every client they look after. Enabled: back on each |
 
 ## 8. Admin: Portal Templates
 
@@ -255,8 +289,8 @@ For a quick test without GoHighLevel you can use a throw-away link from https://
 | 13.10 | Step 2 **Open texting form** | Texting form pop-up with your email filled |
 | 13.11 | Left menu > **Leads** | Total leads, New this week, "By stage" chips, table (Name, Phone, Email, Source, Stage, Follow-up, Added) |
 | 13.12 | Search a lead name; click a stage chip | List filters; "x of y match" |
-| 13.13 | Left menu > **Results Tracking** | Your tracking sheet + **Money Leak Calculator**, both load; **Open in new tab** works for both. The calculator is the client's **own copy** (file name "<Client> - Money Leak Calculator", opened on the calculator tab), not a sheet shared with other clients. A client without a copy yet sees "Your calculator is being set up." |
-| 13.14 | Left menu > **Contract** | "No contract yet" (or the attached one) |
+| 13.13 | Left menu > **Results Tracking** | Your tracking sheet + **Money Leak Calculator**, both load; **Open in new tab** works for both. The calculator is the client's **own copy** (file name "<Client> - Money Leak Calculator", opened on the calculator tab), not a sheet shared with other clients. A client without a copy yet sees "Your calculator is being set up." Under each sheet: "Not loading? Sign in to Google with the email you use for this portal, or open it in a new tab." |
+| 13.14 | Left menu > **Contract** | "No contract yet" (or the attached one). An uploaded contract shows "Opens in Google Drive. Sign in to Google with <your email> to view it." under **Open document**; a pasted link does not (see 5.9g, 5.9h) |
 | 13.15 | Left menu > **Tools & Resources** | Join Slack, Join Skool (open in new tab), Measure a roof, View scripts |
 | 13.16 | Left menu > **Video Scripts** > **AI Video** | 3 scripts with your name/company, **Copy script** |
 | 13.17 | **Self-Filmed** > in Pain Point click **Use this one**, then tab Testimonials > Use this one, Trustworthy > Use this one | "Ready to record" with 3 picks |

@@ -13,6 +13,7 @@ import { userRepository } from '@/lib/db/repositories/users.repository';
 import { tenantRepository } from '@/lib/db/repositories/tenants.repository';
 import { enforceRateLimit } from '@/lib/auth/security-utils';
 import type { UserInvitation } from '@/lib/db/schema';
+import { syncClientDriveAccess } from '@/lib/integrations/sheets/access';
 
 /** Inviting, removing and changing people's access is for the account owner (and Motionz staff). */
 const NO_PAGES_MESSAGE = 'Choose at least one page this person can see.';
@@ -451,6 +452,10 @@ export async function PUT(
       );
     }
 
+    // Google Drive access follows the change (the tracking sheet and calculator). It never fails
+    // the request, and a Drive problem is kept in the activity log for Motionz, not shown to the client.
+    const syncDriveAccess = () => syncClientDriveAccess(tenantId, { actorEmail, actorRole, budgetMs: 15_000 });
+
     if (action === 'suspend') {
       const banReason = (typeof reason === 'string' ? reason.trim().slice(0, 500) : '') || 'Access turned off by the account owner.';
       const updatedUser = await userRepository.suspendUser(
@@ -475,6 +480,7 @@ export async function PUT(
           suspendedByRole: actorRole,
         },
       });
+      await syncDriveAccess();
 
       return NextResponse.json({
         success: true,
@@ -495,6 +501,7 @@ export async function PUT(
         resourceId: targetUser.id,
         details: { email: targetUser.email, unsuspendedBy: actorEmail },
       });
+      await syncDriveAccess();
 
       return NextResponse.json({
         success: true,
@@ -550,6 +557,7 @@ export async function PUT(
           updatedByRole: actorRole,
         },
       });
+      await syncDriveAccess();
 
       return NextResponse.json({
         success: true,

@@ -14,6 +14,7 @@ import {
 } from '@/lib/db/repositories';
 import { requireAuth, handleAuthError } from '@/lib/auth/guard';
 import { provisionClientSheet, renameClientFiles } from '@/lib/integrations/sheets/provision';
+import { describeDriveSync, driveSyncWarning, syncClientDriveAccess } from '@/lib/integrations/sheets/access';
 import { createInvitation, resendInvitation, revokeInvitation } from '@/lib/auth/invitations';
 import { PORTAL_MODULES } from '@/lib/portal-modules';
 
@@ -164,8 +165,11 @@ export async function PUT(
       ? await tenantRepository.update(tenant.id, updates)
       : tenant;
 
+    let csmReassigned = false;
     if (csmChange) {
-      await csmAssignmentRepository.setForTenant(tenant.id, csm_user_id ? String(csm_user_id) : null);
+      const previousCsmId = (await csmAssignmentRepository.findByTenant(tenant.id))?.csm_user_id || null;
+      const saved = await csmAssignmentRepository.setForTenant(tenant.id, csm_user_id ? String(csm_user_id) : null);
+      csmReassigned = (saved?.csm_user_id || null) !== previousCsmId;
     }
 
     // Update feature toggles if supplied
@@ -195,10 +199,16 @@ export async function PUT(
       if (!renamed.ok) driveWarning = renamed.error || 'Google Drive did not answer.';
     }
 
+    // A new CSM gets the client's Drive folder; the previous one loses it.
+    const driveAccessWarning = csmReassigned
+      ? driveSyncWarning(await syncClientDriveAccess(tenant.id, { actorEmail, actorRole: 'admin' }))
+      : undefined;
+
     return NextResponse.json({
       success: true,
       tenant: updatedTenant,
       ...(driveWarning ? { driveWarning } : {}),
+      ...(driveAccessWarning ? { driveAccessWarning } : {}),
       ...(locationNotice ? { locationNotice } : {}),
     });
   } catch (err: any) {
@@ -233,7 +243,14 @@ export async function DELETE(
       resource_id: tenant.id,
     });
 
-    return NextResponse.json({ success: true, message: 'Portal archived successfully.' });
+    // An archived client's people lose their Drive access; staff keep theirs.
+    const driveAccessWarning = driveSyncWarning(await syncClientDriveAccess(tenant.id, { actorEmail, actorRole: 'admin' }));
+
+    return NextResponse.json({
+      success: true,
+      message: 'Portal archived successfully.',
+      ...(driveAccessWarning ? { driveAccessWarning } : {}),
+    });
   } catch (err: any) {
     if (err.statusCode === 401 || err.statusCode === 403) {
       return handleAuthError(err);
@@ -258,6 +275,12 @@ export async function PATCH(
     const body = await request.json();
     const { action, invitationId, memberId, reason } = body;
 
+    // Google Drive access follows the change just made. A Drive problem is only ever a warning.
+    const driveAccessNote = async (): Promise<{ driveAccessWarning?: string }> => {
+      const warning = driveSyncWarning(await syncClientDriveAccess(tenant.id, { actorEmail, actorRole: 'admin' }));
+      return warning ? { driveAccessWarning: warning } : {};
+    };
+
     // Set up (or finish setting up) the client's Google files: Drive folder, tracking sheet and
     // calculator. Used when it failed during client creation, and to bring a client created before
     // per-client folders up to date (their sheet is moved into the new folder, not copied).
@@ -277,6 +300,9 @@ export async function PATCH(
         resource_id: tenant.id,
         details: { ok: sheet.ok, error: sheet.error, calculator: Boolean(sheet.calculatorOk), warnings: sheet.warnings },
       });
+      // Once the files exist, everyone who should reach them is given access (CSM, team, admins).
+      const access = sheet.ok ? await syncClientDriveAccess(tenant.id, { actorEmail, actorRole: 'admin' }) : null;
+      const driveAccessWarning = driveSyncWarning(access);
       return NextResponse.json(
         {
           success: sheet.ok,
@@ -287,9 +313,22 @@ export async function PATCH(
             folderUrl: sheet.folderUrl || null,
           },
           error: sheet.error,
+          ...(driveAccessWarning ? { driveAccessWarning } : {}),
         },
         { status: sheet.ok ? 200 : 502 }
       );
+    }
+
+    // "Re-sync Drive access": compares who can open the client's Google files with the portal's
+    // people and fixes the difference. Safe to press at any time.
+    if (action === 'sync_drive_access') {
+      const access = await syncClientDriveAccess(tenant.id, { actorEmail, actorRole: 'admin', budgetMs: 50_000 });
+      return NextResponse.json({
+        success: true,
+        driveAccess: access,
+        upToDate: access.ok && access.warnings.length === 0,
+        message: describeDriveSync(access),
+      });
     }
 
     // 1. Tenant-level suspension (Admin bans whole client company portal + cascades to all members)
@@ -313,6 +352,7 @@ export async function PATCH(
         message: 'Client organization and members suspended.',
         tenant: updatedTenant,
         cascadedMembers: cascadedCount,
+        ...(await driveAccessNote()),
       });
     }
 
@@ -336,6 +376,7 @@ export async function PATCH(
         message: 'Client organization and cascade-suspended members reactivated.',
         tenant: updatedTenant,
         unlockedMembers: unlockedCount,
+        ...(await driveAccessNote()),
       });
     }
 
@@ -367,7 +408,7 @@ export async function PATCH(
         details: { email: targetUser.email, reason: banReason },
       });
 
-      return NextResponse.json({ success: true, message: 'Member account suspended.', user: updatedUser });
+      return NextResponse.json({ success: true, message: 'Member account suspended.', user: updatedUser, ...(await driveAccessNote()) });
     }
 
     // 4. Member-level unban by Admin
@@ -391,7 +432,7 @@ export async function PATCH(
         details: { email: targetUser.email },
       });
 
-      return NextResponse.json({ success: true, message: 'Member account reactivated.', user: updatedUser });
+      return NextResponse.json({ success: true, message: 'Member account reactivated.', user: updatedUser, ...(await driveAccessNote()) });
     }
 
     // 4b. Member permissions update by Admin
@@ -427,6 +468,7 @@ export async function PATCH(
         success: true,
         message: 'Member permissions updated successfully.',
         user: updatedUser,
+        ...(await driveAccessNote()),
       });
     }
 
@@ -508,6 +550,7 @@ export async function PATCH(
         message: locationNotice ? `Client unarchived. ${locationNotice}` : 'Client unarchived.',
         tenant: updatedTenant,
         ...(locationNotice ? { locationNotice } : {}),
+        ...(await driveAccessNote()),
       });
     }
 

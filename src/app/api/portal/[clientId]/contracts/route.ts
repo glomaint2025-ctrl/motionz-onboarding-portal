@@ -3,6 +3,7 @@ import { getTenantById, getContracts, DEMO_TENANT_UUID } from '@/lib/db';
 import { assertPortalAccess, handleAuthError } from '@/lib/auth/guard';
 import { assertModuleEnabled } from '@/lib/auth/modules';
 import { hasPermission } from '@/lib/auth/permissions';
+import { contractDriveFileId } from '@/lib/integrations/sheets/contract-files';
 
 export async function GET(
   request: NextRequest,
@@ -26,10 +27,16 @@ export async function GET(
     }
 
     // Return strictly contracts - no extraneous data
-    const contracts = await getContracts(tenantId);
+    // An uploaded contract lives in the client's Google Drive folder and is shared with the
+    // account owner's email, so the page can say which Google account opens it.
+    const contracts = (await getContracts(tenantId)).map(({ storage_path, ...contract }) => ({
+      ...contract,
+      is_drive_file: Boolean(contractDriveFileId({ storage_path })),
+    }));
+    const ownerEmail = session?.role === 'client' ? session.email : targetTenant?.primary_email || null;
 
     return NextResponse.json(
-      { contracts },
+      { contracts, ownerEmail },
       {
         headers: {
           'Cache-Control': 'no-store, no-cache, must-revalidate',
