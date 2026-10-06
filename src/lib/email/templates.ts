@@ -81,6 +81,22 @@ export function passwordResetEmail(params: { to: string; url: string; expiresInM
   );
 }
 
+/** Sent to the OLD address after a person changes their own sign-in email in My profile. */
+export function signInEmailChangedEmail(params: { to: string; newEmail: string }): EmailMessage {
+  return build(
+    params.to,
+    'Your Motionz sign-in email was changed',
+    'Your sign-in email was changed',
+    [
+      `Your Motionz sign-in email was changed to ${params.newEmail}.`,
+      'From now on, use the new address to sign in. Your password stays the same.',
+    ],
+    undefined,
+    "If this wasn't you, contact your Motionz team.",
+    ['sign-in-email-changed']
+  );
+}
+
 export function staffLoginCodeEmail(params: { to: string; code: string; expiresInMinutes: number }): EmailMessage {
   const message = build(
     params.to,

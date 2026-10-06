@@ -26,6 +26,9 @@ export const SECURITY_EVENT_LABELS: Record<string, string> = {
   rate_limit_exceeded: 'Too many attempts (temporarily blocked)',
   role_privilege_escalation_attempt: 'Blocked: area not allowed for this role',
   unauthorized_capability_attempt: 'Blocked: action not allowed for this role',
+  account_email_changed: 'Sign-in email changed (My profile)',
+  account_email_change_wrong_password: 'Wrong password when changing sign-in email',
+  account_email_change_out_of_step: 'Sign-in email change did not finish (needs a fix)',
   cross_tenant_access_attempt: "Blocked: tried to open another client's portal",
 };
 
@@ -33,6 +36,10 @@ export const AUDIT_ACTION_LABELS: Record<string, string> = {
   'auth.logout': 'Signed out',
   'auth.password_reset_requested': 'Password reset requested',
   'auth.password_reset_completed': 'Password reset completed',
+  'account.profile_updated': 'Own name or phone updated (My profile)',
+  'account.avatar_updated': 'Profile picture updated',
+  'account.avatar_removed': 'Profile picture removed',
+  'account.email_changed': 'Sign-in email changed (My profile)',
   'staff.authenticated': 'Staff signed in',
   'staff.dev_authenticated': 'Staff signed in (development)',
   'staff.login_code_verified': 'Staff signed in with an emailed code',

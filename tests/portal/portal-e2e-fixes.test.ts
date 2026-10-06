@@ -156,7 +156,9 @@ async function run() {
   const me = await meGet(req('/api/auth/me', 'GET', undefined, csm));
   assert.strictEqual(me.status, 200);
   const meBody = await me.json();
-  assert.deepStrictEqual(Object.keys(meBody).sort(), ['email', 'fullName', 'role']);
+  // avatarUrl: the person's own profile picture link for the header (null without one).
+  assert.deepStrictEqual(Object.keys(meBody).sort(), ['avatarUrl', 'email', 'fullName', 'role']);
+  assert.strictEqual(meBody.avatarUrl, null);
   assert.strictEqual(meBody.fullName, csmUser.full_name);
   assert.strictEqual(meBody.role, 'csm');
   assert.strictEqual((await meGet(req('/api/auth/me', 'GET'))).status, 401);

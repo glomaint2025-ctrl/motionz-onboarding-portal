@@ -4,6 +4,12 @@ import { getStore } from '../mock-db';
 import { User, UserRole } from '../schema';
 import { DatabaseError, NotFoundError, AppError } from '../../errors';
 
+/** The database has no such column yet (migration not applied). */
+export function isMissingColumnError(error: any): boolean {
+  const message = String(error?.message || '');
+  return error?.code === 'PGRST204' || error?.code === '42703' || message.includes('schema cache') || message.includes('column');
+}
+
 export class UserRepository {
   private async getTenantMetadata(tenantId?: string | null): Promise<{ suspendedMap: Record<string, any>; userPermissions: Record<string, string[]> }> {
     if (!tenantId) return { suspendedMap: {}, userPermissions: {} };
@@ -312,6 +318,34 @@ export class UserRepository {
 
     Object.assign(user, cleanUpdates);
     return user;
+  }
+
+  /**
+   * Saves (or clears, with null) the profile picture path.
+   * Returns false when the database has no avatar_path column yet, so callers can say
+   * "not available" instead of failing. Nothing else on the row is touched.
+   */
+  async setAvatarPath(userId: string, path: string | null, client: any = getSupabaseServiceClient()): Promise<boolean> {
+    const now = new Date().toISOString();
+    if (client) {
+      const { data, error } = await client
+        .from('users')
+        .update({ avatar_path: path, updated_at: now })
+        .eq('id', userId)
+        .select('id');
+      if (error) {
+        if (isMissingColumnError(error)) return false;
+        throw new DatabaseError(`Failed to save profile picture: ${error.message}`, error);
+      }
+      if (!data || data.length === 0) throw new NotFoundError('User', userId);
+      return true;
+    }
+
+    const user = getStore().users.find((u) => u.id === userId);
+    if (!user) throw new NotFoundError('User', userId);
+    user.avatar_path = path;
+    user.updated_at = now;
+    return true;
   }
 
   async delete(userId: string): Promise<void> {

@@ -9,7 +9,10 @@ import { buttonClasses } from '@/components/ui/Button';
 import { Icon } from '@/components/brand/Icon';
 import { suspendedPageUrl } from '@/components/portal/suspended';
 
-/** Portal section (URL segment) to the module that switches it on or off. */
+/**
+ * Portal section (URL segment) to the module that switches it on or off.
+ * "my-profile" is deliberately not listed: every signed-in person can always open their own profile.
+ */
 const FEATURE_ROUTE_MAP: Record<string, string> = {
   'onboarding': 'onboarding',
   'leads': 'leads',

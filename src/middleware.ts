@@ -112,6 +112,14 @@ export async function middleware(request: NextRequest) {
     }
   }
 
+  // 2b. "My profile" API (/api/account/*): any signed-in person, acting on themselves only.
+  // The routes re-check the session and refuse suspended accounts.
+  if (pathname.startsWith('/api/account') && !session) {
+    return secureResponse(
+      NextResponse.json({ error: 'Authentication required.' }, { status: 401 })
+    );
+  }
+
   // 3. Protect Portal API routes (/api/portal/*)
   if (pathname.startsWith('/api/portal/')) {
     const parts = pathname.split('/');

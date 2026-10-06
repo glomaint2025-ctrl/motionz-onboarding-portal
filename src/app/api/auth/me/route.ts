@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getSessionFromRequest } from '@/lib/auth/guard';
 import { userRepository } from '@/lib/db/repositories/users.repository';
+import { getAvatarUrl } from '@/lib/storage/avatars';
 
 export const dynamic = 'force-dynamic';
 
@@ -25,6 +26,8 @@ export async function GET(request: NextRequest) {
         email: session.email,
         role: session.role,
         fullName: user?.full_name || '',
+        // Short-lived signed link to their profile picture; null when they have none.
+        avatarUrl: user ? await getAvatarUrl(user.id, user.avatar_path) : null,
       },
       { headers: { 'Cache-Control': 'no-store, no-cache, must-revalidate' } }
     );

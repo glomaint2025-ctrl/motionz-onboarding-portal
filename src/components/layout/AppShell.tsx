@@ -5,20 +5,19 @@ import { Header } from './Header';
 import { Sidebar } from './Sidebar';
 import { MobileNav } from './MobileNav';
 import { roleHomeHref } from './nav-config';
+import { VIEWER_ROLE_LABELS, myProfileHref } from '@/lib/account/role-labels';
 
 /** The signed-in person, shown in the top-right of the header. */
 export interface ShellViewer {
   name?: string;
   /** Their real role: admin, csm, client or client_member. */
   role?: string | null;
+  /** Their profile picture (a short-lived link), when they have one. */
+  avatarUrl?: string | null;
 }
 
-const VIEWER_ROLE_LABELS: Record<string, string> = {
-  admin: 'Admin',
-  csm: 'CSM',
-  client: 'Account owner',
-  client_member: 'Team member',
-};
+/** Fired by My profile after a change the header shows (name, picture). */
+const PROFILE_UPDATED_EVENT = 'motionz:profile-updated';
 
 export interface AppShellProps {
   children: React.ReactNode;
@@ -51,6 +50,14 @@ export const AppShell: React.FC<AppShellProps> = ({
   const [fetchedViewer, setFetchedViewer] = useState<ShellViewer | null>(null);
   const [isViewerLoading, setIsViewerLoading] = useState(viewer === undefined);
   const needsLookup = viewer === undefined;
+  // Bumped when the person edits their profile, so the header shows the new name or picture.
+  const [viewerVersion, setViewerVersion] = useState(0);
+
+  useEffect(() => {
+    const refresh = () => setViewerVersion((n) => n + 1);
+    window.addEventListener(PROFILE_UPDATED_EVENT, refresh);
+    return () => window.removeEventListener(PROFILE_UPDATED_EVENT, refresh);
+  }, []);
 
   useEffect(() => {
     if (!needsLookup) return;
@@ -58,7 +65,9 @@ export const AppShell: React.FC<AppShellProps> = ({
     fetch('/api/auth/me')
       .then(async (res) => {
         const data = await res.json().catch(() => ({}));
-        if (isMounted && res.ok) setFetchedViewer({ name: data.fullName || '', role: data.role || null });
+        if (isMounted && res.ok) {
+          setFetchedViewer({ name: data.fullName || '', role: data.role || null, avatarUrl: data.avatarUrl || null });
+        }
       })
       .catch(() => {
         // The header falls back to the role label alone.
@@ -69,7 +78,7 @@ export const AppShell: React.FC<AppShellProps> = ({
     return () => {
       isMounted = false;
     };
-  }, [needsLookup]);
+  }, [needsLookup, viewerVersion]);
 
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const closeMobileMenu = useCallback(() => setIsMobileMenuOpen(false), []);
@@ -113,6 +122,8 @@ export const AppShell: React.FC<AppShellProps> = ({
           isUserLoading={needsLookup && isViewerLoading}
           portalTitle={portalTitle}
           userRole={roleLabel}
+          avatarUrl={person?.avatarUrl || null}
+          profileHref={myProfileHref(person?.role, clientId) || undefined}
           homeHref={roleHomeHref(role, clientId)}
           isLoading={isLoading}
           isMenuOpen={isMobileMenuOpen}

@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState, useEffect, useRef } from 'react';
+import Link from 'next/link';
 import { useParams } from 'next/navigation';
 import { Card, CardHeader, Button, Input, Skeleton } from '@/components/ui';
 
@@ -114,6 +115,10 @@ export default function ClientProfilePage() {
         <h1 style={{ marginBottom: 'var(--space-1)' }}>Company Profile</h1>
         <p style={{ color: 'var(--color-text-secondary)' }}>
           Your business name and contact details.
+        </p>
+        <p style={{ color: 'var(--color-text-secondary)', fontSize: 'var(--font-size-sm)', marginTop: 'var(--space-1)' }}>
+          Looking for your own name, photo or sign-in email? Open{' '}
+          <Link href={`/portal/${clientId}/my-profile`}>My profile</Link>.
         </p>
       </div>
 
