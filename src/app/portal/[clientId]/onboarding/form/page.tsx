@@ -250,7 +250,9 @@ export default function OnboardingFormPage() {
 
   const addFiles = (key: string, picked: FileList | null) => {
     if (!picked || picked.length === 0) return;
-    setFiles((current) => ({ ...current, [key]: [...(current[key] || []), ...Array.from(picked)] }));
+    // Copy now: the input is cleared right after this call, which empties the live FileList.
+    const chosen = Array.from(picked);
+    setFiles((current) => ({ ...current, [key]: [...(current[key] || []), ...chosen] }));
     setErrors((current) => {
       // A size problem is shown on every upload question, so clear them together.
       const next = { ...current };
