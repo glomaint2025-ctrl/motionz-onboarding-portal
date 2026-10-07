@@ -430,7 +430,8 @@ async function runSync(tenantIds: string[], clientOnly: boolean, options: DriveS
       targets,
       desired,
       current,
-      protectedEmails: [scriptUser],
+      // The owner of the main folder reaches everything inside it and cannot be taken off by the script.
+      protectedEmails: [scriptUser, norm(parent.owner)],
       readOnlyIds,
       parentRemovable: (email) => portalPeople.has(email) || isStaffEmail(email),
     });
@@ -477,8 +478,8 @@ async function runSync(tenantIds: string[], clientOnly: boolean, options: DriveS
   for (const change of failed.slice(0, 5)) {
     result.warnings.push(
       change.role === 'none'
-        ? `Could not remove ${change.email} from ${TARGET_LABEL[change.target]}: ${change.error}`
-        : `Could not give ${change.email} access to ${TARGET_LABEL[change.target]}: ${change.error}`
+        ? `Google would not remove ${change.email} from ${TARGET_LABEL[change.target]}. Remove them by hand in Google Drive if they should not have access. (Google said: ${change.error})`
+        : `Google would not give ${change.email} access to ${TARGET_LABEL[change.target]}. Check that ${change.email} is a Google account, and that the Google account running the script owns it or is allowed to share it. (Google said: ${change.error})`
     );
   }
   if (failed.length > 5) result.warnings.push(`...and ${failed.length - 5} more.`);
