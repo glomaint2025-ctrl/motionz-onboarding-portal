@@ -32,14 +32,14 @@
 <p class="lead">The portal runs on my test accounts today. To go live it needs accounts that Motionz owns, so you control your data, emails and files.</p>
 
 <div class="box">
-  <strong>How it works.</strong> For each item choose <strong>A</strong> (invite me and I set it up) or <strong>B</strong> (you do it and send me the result).
+  <strong>How it works.</strong> For items 2, 3 and 4 choose <strong>A</strong> (invite me and I set it up) or <strong>B</strong> (you do it and send me the result). The other items are short steps for you.
   Never send a password; A is always an invitation you can remove later.
-  My email for invitations: <strong>__________________________</strong>. Your time with option A: about 30–45 minutes.
+  My email for invitations: <strong>__________________________</strong>. Your time: about 30–45 minutes in total.
 </div>
 
 <h2>The 8 items</h2>
 <table>
-  <tr><th></th><th>What and why</th><th>A: invite me</th><th>B: do it yourself</th></tr>
+  <tr><th></th><th>What and why</th><th>A: invite me (items 2–4)</th><th>B: do it yourself (items 2–4)</th></tr>
   <tr>
     <td class="n">1</td>
     <td class="w">Portal address<br><span class="muted">where clients sign in</span></td>
@@ -66,14 +66,21 @@
   <tr>
     <td class="n">5</td>
     <td class="w">Google Drive<br><span class="muted">each client's folder, sheets and contract</span></td>
-    <td>Tell me which Google account will own the client files. 15-minute screen share: we create the main folder and install a small script in that account.</td>
-    <td>Same steps alone, from a written guide I send you.</td>
+    <td colspan="2">Signed in to the Google account that should own the client files (about 10 minutes):
+      <ol style="margin:1mm 0 0">
+        <li>In Drive, create a folder "Motionz Portal Clients". Leave its sharing on <strong>Restricted</strong>.</li>
+        <li>Make a copy of the two templates into that account: the Data Sheet template and the Money Leak Calculator.</li>
+        <li>Go to script.google.com → New project → paste the script I send you → Save.</li>
+        <li>Project Settings → Script Properties → add the 4 values I send you.</li>
+        <li>Deploy → New deployment → Web app → Execute as "Me", access "Anyone" → Deploy. Approve the Google prompt.</li>
+        <li>Send me the Web app URL it shows.</li>
+      </ol>
+    </td>
   </tr>
   <tr>
     <td class="n">6</td>
     <td class="w">Google Cloud key<br><span class="muted">roof measurement tool</span></td>
-    <td>console.cloud.google.com → new project "Motionz Portal" → add billing (card needed) → IAM → add me as Editor.</td>
-    <td>Create the project, add billing, enable <em>Solar API</em> and <em>Geocoding API</em>, create an API key restricted to those two. Send it to me privately.</td>
+    <td colspan="2"><strong>Done.</strong> You already sent this key and it works. One small step for safety: console.cloud.google.com → APIs &amp; Services → Credentials → open the key → API restrictions → allow only <em>Solar API</em> and <em>Geocoding API</em> → Save.</td>
   </tr>
   <tr>
     <td class="n">7</td>
@@ -86,7 +93,7 @@
     <td colspan="2">The test connection was made from my Slack user. For go-live: Slack → Apps → "Incoming WebHooks" → Add to Slack → pick the channel → copy the link → paste it in the portal under Admin → Settings &amp; Integrations → Slack messages.</td>
   </tr>
 </table>
-<p class="muted">Costs (approximate, check each provider): Vercel free to start, Pro about $20/month. Supabase free to start, Pro about $25/month (recommended for backups). Resend free up to 3,000 emails/month. Google Cloud pay per use, small. Drive, GHL and Slack: nothing extra.</p>
+<p class="muted">Costs (approximate, check each provider): Vercel free to start, Pro about $20/month. Supabase free to start, Pro about $25/month (recommended for backups). Resend free up to 3,000 emails/month. Google Cloud (already set up) pay per use, small. Drive, GHL and Slack: nothing extra.</p>
 
 <h2>Good to know</h2>
 <ul>
@@ -108,7 +115,7 @@
 <div class="box">
   <strong>Please reply with</strong>
   <ol>
-    <li>A or B for items 2, 3, 4, 5 and 6</li>
+    <li>A or B for items 2, 3 and 4</li>
     <li>The portal address you want</li>
     <li>The Google account that will own the client files</li>
     <li>Is the test GHL sub-account ready?</li>
