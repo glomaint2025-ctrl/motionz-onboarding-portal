@@ -147,6 +147,13 @@ While doing section 16 (suspend / reactivate / archive / unarchive) check Drive 
 | 6.2 | TC Roofing Test > **Set Location ID** > `bad id!` > Save | "The GoHighLevel Location ID looks wrong…" |
 | 6.3 | **Cancel** | Editor closes, nothing saved |
 | 6.4 | Zydeco row shows Location ID `TG1QAGQkANvoJ3UdmZRZ` and "Last lead received" | Matches GHL |
+| 6.5 | Top card **When does a contact count as a lead?** | Two choices; "As soon as an opportunity is created (default)" is selected on a fresh install; no tag field is shown |
+| 6.6 | Choose **Only when the contact has this tag** | A "Tag name in GoHighLevel" field appears with the placeholder "Qualified" |
+| 6.7 | Leave the field empty > **Save** | "Type the tag name." under the field; nothing saved |
+| 6.8 | Type `hot, Qualified` > **Save** | "Type one tag name, without commas."; nothing saved |
+| 6.9 | Type `Qualified` > **Save** > reload the page | Green "Saved. From now on a contact counts as a lead only when it has the tag "Qualified"…". After the reload the second choice and `Qualified` are still there. Audit Logs: "Lead rule updated (when a contact counts as a lead)" with Lead tag: Qualified and Lead tag before: (none) |
+| 6.10 | Choose **As soon as an opportunity is created (default)** > **Save** > reload | "Saved. Every new opportunity counts as a lead."; the first choice is selected after the reload. **Do this before leaving staging** unless the team has asked for the tag rule |
+| 6.11 | Sign in as a CSM and open `/api/admin/settings/leads` | Not allowed (403); CSMs have no GHL Connect page |
 
 ## 7. CSM Manager: Staff
 
@@ -496,6 +503,12 @@ GHL: top-left **sub-account switcher**. Only use the sub-account with Location I
 | 17.6a | **Only in an approved test sub-account** (Zydeco is a real client now: do not test there) whose `Portal: sync leads` workflow has the **Opportunity Status Changed = Lost** trigger (see `docs/07-integrations/ghl-workflows.md`, "Removing a lead: mark the opportunity Lost"): open the test opportunity > set its status to **Lost** | Within ~1 min the lead is gone from the client's portal **Leads** page and the lead count drops by one. Audit Logs: "Lead removed (marked lost in GoHighLevel)" with the lead's name and the client. A lead request sent earlier about that lead is still under Your requests with its name and phone |
 | 17.6b | In the same test sub-account: move another opportunity to a stage whose name only contains the word (for example "Lost Contact Attempt") | The lead stays in the portal and shows that stage |
 | 17.6c | Set the lost opportunity back to **Open** and move it to another stage (or add a new opportunity for the same contact) | The lead is back on the Leads page |
+| 17.6d | **Lead tag rule, simulated (local portal only, test client).** Admin > GHL Connect: set the tag `Qualified` (6.9). Then run `node scripts/simulate-ghl-webhooks.mjs leads --location=<test client location id> --email=<test client email> --tags="Qualified"` | Simulated leads 1 to 7 appear on the test client's Leads page. The last line of the output, "untagged lead", answers `ignored … Contact is not tagged "Qualified" yet.`; **Sim Untagged is not on the Leads page** and Audit Logs has no entry for it |
+| 17.6e | Run the same command with `stage` and **without** `--tags` | Sim Lead 1 moves to "Contacted": a lead that already exists is updated even though the event has no tag |
+| 17.6f | Run the same command with `untag` | Sim Lead 1 is gone from the Leads page. Audit Logs: "Lead removed (tag taken off in GoHighLevel)". Clean up with `node scripts/clear-simulated-ghl-data.mjs` and set the rule back to the default (6.10) |
+| 17.6g | **Lead tag rule, real GoHighLevel. Only in an approved test sub-account** whose `Portal: sync leads` workflow has the **Contact Tag (Tag Added = Qualified)** trigger (see `docs/07-integrations/ghl-workflows.md`, "Option: only tagged contacts count as leads"), with the tag set in the portal: add an opportunity for a new contact with no tag | The contact does **not** appear on the client's Leads page |
+| 17.6h | Add the tag **Qualified** to that contact in GHL | Within ~1 min the contact is on the Leads page, with its pipeline stage if GoHighLevel sent one, otherwise "New". Drag the opportunity to another stage: the portal follows |
+| 17.6i | With the optional `Portal: lead tag removed` workflow published: remove the tag from the contact | Within ~1 min the lead is gone. Audit Logs: "Lead removed (tag taken off in GoHighLevel)". Without that workflow the lead stays |
 | 17.7 | Clean up: GHL delete the test opportunity + contact; cancel the test booking if wanted | Mark the test opportunity **Lost** first so it leaves the portal (deleting it outright is not detected) |
 
 ## 18. Phone check

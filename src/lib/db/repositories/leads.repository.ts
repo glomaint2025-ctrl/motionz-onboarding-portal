@@ -364,6 +364,22 @@ export class LeadRepository {
     return this.create({ tenant_id: tenantId, ghl_contact_id: ghlContactId, status: 'New', ...fields });
   }
 
+  /** True when this client already has a lead for that GoHighLevel contact. */
+  async existsByGhlContactId(tenantId: string, ghlContactId: string): Promise<boolean> {
+    const supabase = getSupabaseServiceClient();
+    if (supabase) {
+      const { data, error } = await supabase
+        .from('leads')
+        .select('id')
+        .eq('tenant_id', tenantId)
+        .eq('ghl_contact_id', ghlContactId)
+        .limit(1);
+      if (error) throw new DatabaseError(`Failed to look up lead: ${error.message}`, error);
+      return Boolean(data?.length);
+    }
+    return getStore().leads.some((l) => l.tenant_id === tenantId && l.ghl_contact_id === ghlContactId);
+  }
+
   /**
    * Removes a client's lead by its GoHighLevel contact id (every row, should old duplicates exist).
    * Returns what was removed; an empty list when the portal never had that lead.

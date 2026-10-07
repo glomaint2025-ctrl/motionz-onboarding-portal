@@ -12,6 +12,7 @@ import { logAuditEvent } from '@/lib/db';
 import { resolveBaseUrl, enforceRateLimit, getClientIp } from '@/lib/auth/security-utils';
 import { extractAnswers } from '@/lib/onboarding/answers';
 import { findRecentDuplicate, notifyOnboardingSubmitted } from '@/lib/onboarding/submissions';
+import { getLeadSettings } from '@/lib/db/repositories/app-settings.repository';
 import type { Tenant } from '@/lib/db/schema';
 
 /**
@@ -22,6 +23,9 @@ import type { Tenant } from '@/lib/db/schema';
  * - lead_lost       Opportunity marked Lost (or Abandoned) in a client's sub-account: the lead is
  *                   removed from the portal. A `lead` event whose status says lost / abandoned,
  *                   or whose stage is named exactly "Lost" / "Abandoned", does the same.
+ * - lead_unqualified The lead tag was taken off the contact: the lead is removed. Only used when a
+ *                   lead tag is set under Admin → GHL Connect; with a tag set, a `lead` event for a
+ *                   contact without that tag creates nothing (an existing lead is still updated).
  * - csm_call        Call booked with a CSM on the Motionz calendar. Routed by the client's email.
  * - onboarding_form Onboarding form submitted in GoHighLevel. Routed by the submitter's email.
  *                   (Clients now fill the form in inside the portal; this stays for an old workflow.)
@@ -42,6 +46,8 @@ type Payload = Record<string, any>;
 interface HandlerResult {
   tenant?: Tenant;
   ignored?: string;
+  /** With `ignored`: an everyday case that is answered but not written to the audit log. */
+  quiet?: boolean;
   error?: string;
   notified?: number;
   /** Audit action to record instead of `ghl.webhook.<event>`, with extra facts for that entry. */
@@ -110,6 +116,37 @@ function isLostOpportunity(event: string, p: Payload, stage: string | undefined)
   return statuses.some((status) => isClosedWord(str(status))) || isClosedWord(stage);
 }
 
+const normalizeTag = (tag: string): string => tag.trim().replace(/\s+/g, ' ').toLowerCase();
+
+/** A tags field as GoHighLevel may send it: "a, Qualified, b" or ["a", "Qualified", "b"]. */
+function tagsIn(value: unknown): string[] {
+  if (Array.isArray(value)) return value.flatMap(tagsIn);
+  if (typeof value !== 'string') return [];
+  return value.split(',').map(normalizeTag).filter(Boolean);
+}
+
+/** True when the contact carries the tag (any letter case), in `tags`, `contact.tags` or `customData.tags`. */
+function hasTag(p: Payload, tag: string): boolean {
+  const wanted = normalizeTag(tag);
+  return [p.tags, p.contact?.tags, p.customData?.tags].some((field) => tagsIn(field).includes(wanted));
+}
+
+/** Removes the client's lead for that contact; `reason` is added to the audit entry when given. */
+async function removeLead(tenant: Tenant, contactId: string, notFound: string, reason?: string): Promise<HandlerResult> {
+  const removed = await leadRepository.deleteByGhlContactId(tenant.id, contactId);
+  if (removed.length === 0) return { tenant, ignored: notFound };
+  const lead = removed[0];
+  return {
+    tenant,
+    action: 'ghl.webhook.lead_removed',
+    auditDetails: {
+      leadName: clip(`${lead.first_name || ''} ${lead.last_name || ''}`.trim() || 'Unnamed lead', 200),
+      client: clip(tenant.name, 200),
+      ...(reason ? { reason } : {}),
+    },
+  };
+}
+
 async function handleLead(p: Payload, event: string): Promise<HandlerResult> {
   const tenant = await tenantByLocation(str(p.location?.id) || str(p.locationId));
   if (!tenant) return { ignored: 'Unknown or missing location id.' };
@@ -123,17 +160,24 @@ async function handleLead(p: Payload, event: string): Promise<HandlerResult> {
   // Marked Lost / Abandoned in GoHighLevel: the lead leaves the portal. If the same contact gets a
   // new open opportunity later, the next `lead` event creates it again.
   if (isLostOpportunity(event, p, stage)) {
-    const removed = await leadRepository.deleteByGhlContactId(tenant.id, contactId);
-    if (removed.length === 0) return { tenant, ignored: 'Lead marked lost, but it is not in the portal.' };
-    const lead = removed[0];
-    return {
-      tenant,
-      action: 'ghl.webhook.lead_removed',
-      auditDetails: {
-        leadName: clip(`${lead.first_name || ''} ${lead.last_name || ''}`.trim() || 'Unnamed lead', 200),
-        client: clip(tenant.name, 200),
-      },
-    };
+    return removeLead(tenant, contactId, 'Lead marked lost, but it is not in the portal.');
+  }
+
+  // Optional rule (Admin → GHL Connect): only contacts carrying a chosen tag count as leads.
+  // Empty = every opportunity counts.
+  const requiredTag = (await getLeadSettings()).required_tag;
+
+  // The tag was taken off in GoHighLevel: the lead leaves the portal.
+  if (event === 'lead_unqualified') {
+    if (!requiredTag) return { tenant, ignored: 'The lead tag rule is switched off, so no lead was removed.' };
+    return removeLead(tenant, contactId, 'Tag removed, but the lead is not in the portal.', 'tag removed');
+  }
+
+  // Not tagged and not a lead yet: nothing to do, and nothing to record. Every untagged contact in
+  // every sub-account ends up here, so an audit entry per event would bury the log.
+  // A lead the portal already has is still updated: only `lead_unqualified` or Lost removes it.
+  if (requiredTag && !hasTag(p, requiredTag) && !(await leadRepository.existsByGhlContactId(tenant.id, contactId))) {
+    return { tenant, ignored: `Contact is not tagged "${requiredTag}" yet.`, quiet: true };
   }
 
   await leadRepository.upsertByGhlContactId(tenant.id, contactId, {
@@ -296,7 +340,7 @@ export async function POST(request: NextRequest) {
     const event = clip(str(payload?.customData?.event) || str(payload?.type), 50) || 'unknown';
     let result: HandlerResult;
 
-    if (event === 'lead' || event === 'lead_lost') result = await handleLead(payload, event);
+    if (event === 'lead' || event === 'lead_lost' || event === 'lead_unqualified') result = await handleLead(payload, event);
     else if (event === 'csm_call') result = await handleCsmCall(payload);
     else if (event === 'onboarding_form') result = await handleOnboardingForm(request, payload);
     else result = await handleMarketplaceEvent(event, payload);
@@ -306,7 +350,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: result.error }, { status: 400 });
     }
     if (result.ignored) {
-      await recordNotStored('ignored', event, payload, result);
+      if (!result.quiet) await recordNotStored('ignored', event, payload, result);
       // 200 so GHL does not retry an event we will never be able to place.
       return NextResponse.json({ received: true, ignored: true, reason: result.ignored });
     }
