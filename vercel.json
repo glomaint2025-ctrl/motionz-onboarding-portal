@@ -2,7 +2,7 @@
   "framework": "nextjs",
   "cleanUrls": true,
   "trailingSlash": false,
-  "regions": ["iad1"],
+  "regions": ["sin1"],
   "headers": [
     {
       "source": "/api/(.*)",
