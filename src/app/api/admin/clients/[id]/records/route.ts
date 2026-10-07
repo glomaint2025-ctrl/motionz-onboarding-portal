@@ -100,7 +100,8 @@ export async function POST(request: Request, { params }: { params: { id: string 
         const checked = validateContractFile({ name: file.name, type: file.type, size: file.size, bytes });
         const uploaded = await uploadContractFile({
           tenantId: tenant.id,
-          name: checked.name,
+          // Named after the contract title, so it is recognisable in the client's Drive folder.
+          name: `${title.replace(/[\/:*?"<>|]+/g, ' ').trim().slice(0, 100) || 'Contract'}.${checked.name.split('.').pop()}`,
           contentType: checked.contentType,
           bytes,
         });

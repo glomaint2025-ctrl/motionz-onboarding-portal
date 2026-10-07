@@ -148,7 +148,10 @@ export const ClientRecords: React.FC<{ clientId: string; clientName?: string }> 
       if (mode === 'upload') {
         setNotice(
           saved.driveAccessWarning
-            ? `The contract was uploaded, but the client may not be able to open it yet. ${saved.driveAccessWarning}`
+            ? // Only a problem with the contract file itself can keep the client from opening it.
+              /the contract file/i.test(saved.driveAccessWarning)
+              ? `The contract was uploaded, but the client may not be able to open it yet. ${saved.driveAccessWarning}`
+              : `Contract uploaded to ${clientName || 'the client'}’s Google Drive folder. One note about Drive access: ${saved.driveAccessWarning}`
             : `Contract uploaded to ${clientName || 'the client'}’s Google Drive folder. Only Motionz staff and the account owner can open it.`
         );
       }

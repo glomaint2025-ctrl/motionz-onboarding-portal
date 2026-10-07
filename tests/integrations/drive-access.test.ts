@@ -624,7 +624,7 @@ async function run() {
     assert.deepStrictEqual(actions(), ['upload_file', 'list_access', 'set_access'], 'upload, then the access sync');
     assert.deepStrictEqual(
       { folderId: calls[0].folderId, name: calls[0].name, mimeType: calls[0].mimeType, base64: calls[0].base64 },
-      { folderId: 'demo_folder_0123456789', name: 'Signed-Agreement.pdf', mimeType: 'application/pdf', base64: Buffer.from(pdf).toString('base64') }
+      { folderId: 'demo_folder_0123456789', name: 'Service Agreement.pdf', mimeType: 'application/pdf', base64: Buffer.from(pdf).toString('base64') }
     );
     assert.ok(!('clientName' in calls[0]), 'no clientName: an old script cannot mistake an upload for a new client');
     const fileId = body.contract.drive_file_id as string;
