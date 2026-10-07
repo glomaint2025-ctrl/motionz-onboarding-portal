@@ -80,7 +80,8 @@ function authorize(request: NextRequest, payload: Payload): { ok: boolean; statu
 
 async function tenantByLocation(locationId: string | undefined): Promise<Tenant | undefined> {
   if (!locationId) return undefined;
-  return (await tenantRepository.list({ limit: 1000 })).find((t) => t.ghl_location_id === locationId);
+  // One indexed lookup. (This used to load every client on every event and search the list.)
+  return (await tenantRepository.findByGhlLocationId(locationId)) || undefined;
 }
 
 /** A client is identified by the email of any of its portal users, or the company's primary email. */

@@ -3,6 +3,7 @@ import { getSupabaseServiceClient } from '../supabase-client';
 import { getStore } from '../mock-db';
 import { Contract } from '../schema';
 import { DatabaseError } from '../../errors';
+import { fetchAllRows } from '../paging';
 
 export class ContractRepository {
   async listByTenant(tenantId: string): Promise<Contract[]> {
@@ -29,9 +30,21 @@ export class ContractRepository {
   async listTenantIdsWithContract(): Promise<Set<string>> {
     const supabase = getSupabaseServiceClient();
     if (supabase) {
-      const { data, error } = await supabase.from('contracts').select('tenant_id').limit(10000);
-      if (error) throw new DatabaseError(`Failed to fetch contracts: ${error.message}`, error);
-      return new Set((data || []).map((row: { tenant_id: string }) => row.tenant_id));
+      // Read page by page: one request returns at most 1,000 rows, and a client beyond that
+      // would wrongly show as having no contract.
+      const rows = await fetchAllRows<{ tenant_id: string }>(
+        (from, to) =>
+          supabase
+            .from('contracts')
+            .select('tenant_id', { count: 'exact' })
+            .order('tenant_id', { ascending: true })
+            .order('id', { ascending: true })
+            .range(from, to),
+        (error) => {
+          throw new DatabaseError(`Failed to fetch contracts: ${error.message}`, error);
+        }
+      );
+      return new Set(rows.map((row) => row.tenant_id));
     }
     return new Set(getStore().contracts.map((c) => c.tenant_id));
   }

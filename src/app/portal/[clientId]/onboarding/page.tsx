@@ -11,6 +11,7 @@ import { OnboardingAnswers, OnboardingSubmissionView } from '@/components/onboar
 import { calculateSetupProgress } from '@/lib/onboarding/progress';
 import { ClientSetupStep } from '@/lib/db/schema';
 import { formatDateTime } from '@/lib/utils/format';
+import { fetchPortalData } from '@/lib/portal-data-client';
 
 /** Steps that are not finished yet. */
 const isOpen = (step: ClientSetupStep) => step.status !== 'done';
@@ -37,7 +38,7 @@ export default function SetupProgressPage() {
       setIsLoading(true);
       setLoadError('');
       try {
-        const res = await fetch(`/api/portal/${clientId}/data`);
+        const res = await fetchPortalData(clientId);
         const data = await res.json().catch(() => ({}));
         if (!isMounted) return;
         if (!res.ok) {

@@ -3,6 +3,18 @@ import { getSupabaseServiceClient, resolveTenantId } from '../supabase-client';
 import { getStore } from '../mock-db';
 import { Tenant } from '../schema';
 import { AppError, DatabaseError, NotFoundError } from '../../errors';
+import { fetchAllRows, chunk, IN_MAX_IDS } from '../paging';
+
+const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+/** The columns the staff overview pages read; `settings` is kept because a suspension can live there. */
+const SUMMARY_COLUMNS = 'id,name,slug,status,deleted_at,created_at,ghl_location_id,suspended_at,suspended_reason,settings';
+
+/** The database has no such column yet (an older schema): the caller reads every column instead. */
+function isMissingColumn(error: any): boolean {
+  const message = String(error?.message || '');
+  return error?.code === 'PGRST204' || error?.code === '42703' || message.includes('schema cache') || message.includes('column');
+}
 
 export class TenantRepository {
   private normalizeTenant(tenant: any): Tenant {
@@ -146,6 +158,123 @@ export class TenantRepository {
       return true;
     });
     return results.slice(offset, offset + limit).map((t) => this.normalizeTenant(t));
+  }
+
+  /**
+   * Every client, newest first, however many there are (the database answers at most 1,000 rows
+   * per request, so this reads page by page). `summary` reads only the columns the overview pages use.
+   */
+  async listAll(options?: { includeArchived?: boolean; summary?: boolean }): Promise<Tenant[]> {
+    const includeArchived = options?.includeArchived ?? false;
+
+    const supabase = getSupabaseServiceClient();
+    if (supabase) {
+      const read = (columns: string) =>
+        fetchAllRows<any>(
+          (from, to) => {
+            let query = supabase
+              .from('tenants')
+              .select(columns, { count: 'exact' })
+              .order('created_at', { ascending: false })
+              .order('id', { ascending: true })
+              .range(from, to);
+            if (!includeArchived) query = query.is('deleted_at', null);
+            return query;
+          },
+          (error) => {
+            throw error;
+          }
+        );
+
+      let rows: any[];
+      try {
+        rows = await read(options?.summary ? SUMMARY_COLUMNS : '*');
+      } catch (error: any) {
+        if (!options?.summary || !isMissingColumn(error)) {
+          throw new DatabaseError(`Failed to list tenants: ${error?.message}`, error);
+        }
+        try {
+          rows = await read('*');
+        } catch (retryError: any) {
+          throw new DatabaseError(`Failed to list tenants: ${retryError?.message}`, retryError);
+        }
+      }
+      return rows.map((t) => this.normalizeTenant(t));
+    }
+
+    return getStore()
+      .tenants.filter((t) => includeArchived || !t.deleted_at)
+      .map((t) => this.normalizeTenant(t));
+  }
+
+  /** The clients with these ids, newest first. Ids that match nothing are skipped. */
+  async listByIds(ids: string[], options?: { includeArchived?: boolean }): Promise<Tenant[]> {
+    const includeArchived = options?.includeArchived ?? false;
+    const unique = Array.from(new Set(ids.filter(Boolean)));
+    if (unique.length === 0) return [];
+    const wanted = new Set(unique);
+
+    const supabase = getSupabaseServiceClient();
+    if (supabase) {
+      const uuids = unique.filter((id) => UUID_REGEX.test(id));
+      if (uuids.length === 0) return [];
+      // A long id list is cheaper as one full read than as many IN (...) requests.
+      if (uuids.length > IN_MAX_IDS) {
+        return (await this.listAll({ includeArchived })).filter((t) => wanted.has(t.id));
+      }
+      const pages = await Promise.all(
+        chunk(uuids).map(async (part) => {
+          let query = supabase.from('tenants').select('*').in('id', part);
+          if (!includeArchived) query = query.is('deleted_at', null);
+          const { data, error } = await query;
+          if (error) throw new DatabaseError(`Failed to list tenants: ${error.message}`, error);
+          return data || [];
+        })
+      );
+      return pages
+        .flat()
+        .sort(
+          (a: any, b: any) =>
+            new Date(b.created_at).getTime() - new Date(a.created_at).getTime() || String(a.id).localeCompare(String(b.id))
+        )
+        .map((t) => this.normalizeTenant(t));
+    }
+
+    return getStore()
+      .tenants.filter((t) => wanted.has(t.id) && (includeArchived || !t.deleted_at))
+      .map((t) => this.normalizeTenant(t));
+  }
+
+  /**
+   * The clients that use a GoHighLevel Location ID, newest first: one indexed lookup, not a scan
+   * of every client. Archived clients are left out unless asked for.
+   */
+  async listByGhlLocationId(locationId: string, options?: { includeArchived?: boolean }): Promise<Tenant[]> {
+    if (!locationId) return [];
+    const includeArchived = options?.includeArchived ?? false;
+
+    const supabase = getSupabaseServiceClient();
+    if (supabase) {
+      let query = supabase
+        .from('tenants')
+        .select('*')
+        .eq('ghl_location_id', locationId)
+        .order('created_at', { ascending: false })
+        .limit(50);
+      if (!includeArchived) query = query.is('deleted_at', null);
+      const { data, error } = await query;
+      if (error) throw new DatabaseError(`Failed to fetch tenant by location: ${error.message}`, error);
+      return (data || []).map((t) => this.normalizeTenant(t));
+    }
+
+    return getStore()
+      .tenants.filter((t) => t.ghl_location_id === locationId && (includeArchived || !t.deleted_at))
+      .map((t) => this.normalizeTenant(t));
+  }
+
+  /** The live (not archived) client connected to a GoHighLevel Location ID, or null. */
+  async findByGhlLocationId(locationId: string): Promise<Tenant | null> {
+    return (await this.listByGhlLocationId(locationId))[0] || null;
   }
 
   async findBySlug(slug: string, options?: { includeArchived?: boolean }): Promise<Tenant | null> {

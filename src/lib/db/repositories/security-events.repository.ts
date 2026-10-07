@@ -69,6 +69,23 @@ export class SecurityEventRepository {
     return { rows: matches.slice(offset, offset + limit), total: matches.length };
   }
 
+  /** How many events were recorded after a moment (optionally only some severities), without fetching them. */
+  async countSince(sinceIso: string, severities?: SecuritySeverity[]): Promise<number> {
+    const supabase = getSupabaseServiceClient();
+    if (supabase) {
+      let query = supabase.from('security_events').select('id', { count: 'exact', head: true }).gt('created_at', sinceIso);
+      if (severities?.length) query = query.in('severity', severities);
+      const { count, error } = await query;
+      if (error) throw new DatabaseError(`Failed to count security events: ${error.message}`, error);
+      return count || 0;
+    }
+
+    const sinceMs = new Date(sinceIso).getTime();
+    return getStore().securityEvents.filter(
+      (e) => new Date(e.created_at).getTime() > sinceMs && (!severities?.length || severities.includes(e.severity))
+    ).length;
+  }
+
   async list(options?: { tenantId?: string; severity?: SecuritySeverity; isResolved?: boolean; limit?: number }): Promise<SecurityEvent[]> {
     const limit = options?.limit || 100;
     const supabase = getSupabaseServiceClient();

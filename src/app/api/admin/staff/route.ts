@@ -277,11 +277,19 @@ async function updateStaff(body: any, target: User, session: SessionIdentity) {
 export async function GET(request: Request) {
   try {
     const { session } = await requireAuth(request, { roles: ['admin'] });
-    const [admins, csms, calendars] = await Promise.all([
+    // The assigned-client numbers come from one read of the assignments, not one read per CSM.
+    const [admins, csms, calendars, assignments] = await Promise.all([
       userRepository.listAllByRole('admin'),
       userRepository.listAllByRole('csm'),
       getCsmCalendarSettings(),
+      csmAssignmentRepository.listAll(),
     ]);
+    const assignedByCsm = new Map<string, number>();
+    for (const a of assignments) assignedByCsm.set(a.csm_user_id, (assignedByCsm.get(a.csm_user_id) || 0) + 1);
+    // The seeded demo CSM is also known by a fixed id (same rule as csmAssignmentRepository.listByCsm).
+    const assignedTo = (userId: string) =>
+      (assignedByCsm.get(userId) || 0) +
+      (userId === 'user-csm-1' ? assignedByCsm.get('e0000000-0000-0000-0000-000000000002') || 0 : 0);
     const staff = await Promise.all(
       [...admins, ...csms].map(async (u) => ({
         id: u.id,
@@ -289,7 +297,7 @@ export async function GET(request: Request) {
         name: u.full_name,
         role: u.role,
         status: u.status || 'active',
-        assignedClients: u.role === 'csm' ? (await csmAssignmentRepository.listByCsm(u.id)).length : null,
+        assignedClients: u.role === 'csm' ? assignedTo(u.id) : null,
         // A CSM's own GHL booking calendar; null = their clients book on the default calendar.
         calendarId: u.role === 'csm' ? calendars.by_user[u.id] || null : null,
         created_at: u.created_at,

@@ -105,6 +105,8 @@ export const OLD_SCRIPT_WARNING = 'The Google script needs updating before Drive
 const TIMEOUT_WARNING = 'Google Drive did not answer in time, so Drive access was not checked. Use "Re-sync Drive access" on the client page to try again.';
 const DEFAULT_BUDGET_MS = 25_000;
 const MAX_IDS_PER_CALL = 50;
+/** How many clients' records are read from the database at the same time before a sync. */
+const SCOPE_LOAD_CONCURRENCY = 10;
 const MAX_CHANGES_PER_CALL = 100;
 
 const norm = (email: unknown): string => String(email || '').trim().toLowerCase();
@@ -394,10 +396,12 @@ async function runSync(tenantIds: string[], clientOnly: boolean, options: DriveS
 
   try {
     // 1. What the portal knows.
+    // Several clients (a CSM's whole list) are read a few at a time instead of one after another.
     const scopes: ClientScope[] = [];
-    for (const id of Array.from(new Set(tenantIds))) {
-      const scope = await loadClientScope(id);
-      if (scope) scopes.push(scope);
+    const uniqueIds = Array.from(new Set(tenantIds));
+    for (let i = 0; i < uniqueIds.length; i += SCOPE_LOAD_CONCURRENCY) {
+      const loaded = await Promise.all(uniqueIds.slice(i, i + SCOPE_LOAD_CONCURRENCY).map((id) => loadClientScope(id)));
+      for (const scope of loaded) if (scope) scopes.push(scope);
     }
     if (clientOnly && scopes.length === 0) return { ...NOTHING };
 

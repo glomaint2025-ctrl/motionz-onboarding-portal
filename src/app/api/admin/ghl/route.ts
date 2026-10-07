@@ -22,7 +22,11 @@ export async function GET(request: Request) {
   try {
     await requireAuth(request, { roles: ['admin'] });
 
-    const tenants = await tenantRepository.list({ includeArchived: true, limit: 1000 });
+    // Every client in one paged read, and every client's newest lead time in one grouped query.
+    const [tenants, latestByTenant] = await Promise.all([
+      tenantRepository.listAll({ includeArchived: true, summary: true }),
+      leadRepository.lastLeadAtByTenant(),
+    ]);
     const live = tenants.filter((t: any) => !t.deleted_at && t.status !== 'cancelled');
 
     const rows = await Promise.all(
@@ -31,7 +35,8 @@ export async function GET(request: Request) {
         name: t.name,
         status: t.status,
         ghl_location_id: t.ghl_location_id || null,
-        lastLeadAt: await lastLeadAt(t.id),
+        // Without the grouped query (database function not installed yet) each client is asked in turn.
+        lastLeadAt: latestByTenant ? latestByTenant.get(t.id) || null : await lastLeadAt(t.id),
       }))
     );
     rows.sort((a, b) => a.name.localeCompare(b.name));

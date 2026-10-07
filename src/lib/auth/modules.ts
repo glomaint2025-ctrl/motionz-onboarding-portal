@@ -1,4 +1,5 @@
-import { featureToggleRepository, userRepository } from '../db/repositories';
+import { featureToggleRepository } from '../db/repositories';
+import { getSessionUserById } from './guard';
 import { AppError } from '../errors';
 import type { SessionPayload } from './session';
 
@@ -19,7 +20,7 @@ export async function assertModuleEnabled(
   }
 
   if (session?.role === 'client_member') {
-    const user = await userRepository.findById(session.userId);
+    const user = await getSessionUserById(session);
     if (user && Array.isArray(user.allowed_modules) && !user.allowed_modules.includes(moduleKey)) {
       throw new AppError('You do not have access to this section.', 403, 'MODULE_NOT_ALLOWED');
     }

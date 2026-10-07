@@ -15,11 +15,18 @@ const HIGH: SecuritySeverity[] = ['high', 'critical'];
 async function withTenantNames<T extends { tenant_id?: string | null }>(rows: T[]): Promise<(T & { tenant_name: string | null })[]> {
   const ids = Array.from(new Set(rows.map((r) => r.tenant_id).filter((id): id is string => Boolean(id))));
   const names = new Map<string, string>();
+  // One read for every client on the page, not one per client.
+  const tenants = await tenantRepository.listByIds(ids, { includeArchived: true }).catch(() => []);
+  for (const tenant of tenants) if (tenant?.name) names.set(tenant.id, tenant.name);
+  // An id that is a short name or alias rather than the client's own id is still looked up by itself.
   await Promise.all(
-    ids.map(async (id) => {
-      const tenant = await tenantRepository.findById(id, { includeArchived: true }).catch(() => null);
-      if (tenant?.name) names.set(id, tenant.name);
-    })
+    ids
+      .filter((id) => !names.has(id))
+      .filter((id) => !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id))
+      .map(async (id) => {
+        const tenant = await tenantRepository.findById(id, { includeArchived: true }).catch(() => null);
+        if (tenant?.name) names.set(id, tenant.name);
+      })
   );
   return rows.map((r) => ({ ...r, tenant_name: (r.tenant_id && names.get(r.tenant_id)) || null }));
 }

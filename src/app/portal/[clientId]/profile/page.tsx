@@ -4,6 +4,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
 import { Card, CardHeader, Button, Input, Skeleton } from '@/components/ui';
+import { fetchPortalData } from '@/lib/portal-data-client';
 
 export default function ClientProfilePage() {
   const params = useParams();
@@ -38,7 +39,7 @@ export default function ClientProfilePage() {
     let isMounted = true;
     async function loadProfile() {
       try {
-        const res = await fetch(`/api/portal/${clientId}/data`);
+        const res = await fetchPortalData(clientId);
         const data = await res.json().catch(() => ({}));
         if (!res.ok) {
           if (isMounted) setLoadError(data.error || 'Could not load your company profile.');

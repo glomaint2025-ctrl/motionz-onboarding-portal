@@ -4,6 +4,7 @@ import React, { useState, useEffect } from 'react';
 import { useParams } from 'next/navigation';
 import { Card, CardHeader, StatusBadge, Skeleton } from '@/components/ui';
 import { buttonClasses } from '@/components/ui/Button';
+import { fetchPortalData } from '@/lib/portal-data-client';
 
 interface SheetLinks {
   /** Normal Google Sheets URL, opened in a new tab. */
@@ -94,7 +95,7 @@ export default function CampaignTrackingPage() {
 
   useEffect(() => {
     let isMounted = true;
-    fetch(`/api/portal/${clientId}/data`)
+    fetchPortalData(clientId)
       .then(async (res) => {
         if (!res.ok) {
           const data = await res.json().catch(() => ({}));

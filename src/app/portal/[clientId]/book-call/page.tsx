@@ -5,6 +5,7 @@ import { useParams } from 'next/navigation';
 import { BookingWidget } from '@/components/portal/BookingWidget';
 import { Card, Skeleton } from '@/components/ui';
 import { PORTAL_LINKS } from '@/lib/portal-links';
+import { fetchPortalData } from '@/lib/portal-data-client';
 
 export default function BookCallPage() {
   const params = useParams();
@@ -21,7 +22,7 @@ export default function BookCallPage() {
     let isMounted = true;
     async function loadViewer() {
       try {
-        const res = await fetch(`/api/portal/${clientId}/data`);
+        const res = await fetchPortalData(clientId);
         if (!res.ok) return;
         const data = await res.json();
         if (!isMounted) return;

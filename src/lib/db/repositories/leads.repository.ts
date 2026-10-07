@@ -3,6 +3,7 @@ import { getSupabaseServiceClient } from '../supabase-client';
 import { getStore } from '../mock-db';
 import { Lead } from '../schema';
 import { DatabaseError } from '../../errors';
+import { fetchAllRows } from '../paging';
 
 /** Postgres error code for "duplicate key value violates unique constraint". */
 const UNIQUE_VIOLATION = '23505';
@@ -28,6 +29,38 @@ function searchTerms(search?: string): string[] {
 function matchesTerms(lead: Lead, terms: string[]): boolean {
   const haystack = [lead.first_name, lead.last_name, lead.email, lead.phone].filter(Boolean).join(' ').toLowerCase();
   return terms.every((t) => haystack.includes(t.toLowerCase()));
+}
+
+/**
+ * The grouped counts come from database functions added by migration 20261008000001. Until that
+ * migration has run the functions do not exist: the repository then reads the rows itself, and
+ * asks again for the functions after a while (this remembers a missing function, never data).
+ */
+const RPC_RETRY_MS = 10 * 60 * 1000;
+const rpcMissingSince = new Map<string, number>();
+
+function isMissingFunction(error: any): boolean {
+  const message = String(error?.message || '').toLowerCase();
+  return error?.code === 'PGRST202' || error?.code === '42883' || message.includes('could not find the function') || message.includes('schema cache');
+}
+
+/** Calls a database function; null when it is not installed (or failed), so the caller falls back. */
+async function callOptionalRpc<T>(supabase: any, name: string, args?: Record<string, unknown>): Promise<T[] | null> {
+  const missingAt = rpcMissingSince.get(name);
+  if (missingAt && Date.now() - missingAt < RPC_RETRY_MS) return null;
+  try {
+    const { data, error } = await (args ? supabase.rpc(name, args) : supabase.rpc(name));
+    if (error) {
+      if (isMissingFunction(error)) rpcMissingSince.set(name, Date.now());
+      else console.error(`[leads] ${name} failed, reading the rows instead: ${error.message}`);
+      return null;
+    }
+    rpcMissingSince.delete(name);
+    return (data || []) as T[];
+  } catch (err: any) {
+    console.error(`[leads] ${name} failed, reading the rows instead: ${err?.message}`);
+    return null;
+  }
 }
 
 export class LeadRepository {
@@ -125,7 +158,16 @@ export class LeadRepository {
     };
 
     const supabase = getSupabaseServiceClient();
-    if (supabase) {
+    const grouped = supabase
+      ? await callOptionalRpc<{ stage: string | null; lead_count: number | string }>(supabase, 'lead_stage_counts', { p_tenant_id: tenantId })
+      : null;
+    if (grouped) {
+      // One grouped query in the database.
+      for (const row of grouped) {
+        const stage = row.stage || 'New';
+        counts.set(stage, (counts.get(stage) || 0) + Number(row.lead_count || 0));
+      }
+    } else if (supabase) {
       // Only the stage column is read, in chunks, so every lead is counted.
       const CHUNK = 1000;
       for (let from = 0; from < 200000; from += CHUNK) {
@@ -148,6 +190,44 @@ export class LeadRepository {
     return Array.from(counts.entries())
       .map(([stage, count]) => ({ stage, count }))
       .sort((a, b) => b.count - a.count || a.stage.localeCompare(b.stage));
+  }
+
+  /**
+   * When each client's newest lead arrived (client id → created_at), for every client that has
+   * leads, in one grouped query. Null when the database function is not installed yet: the caller
+   * then asks client by client.
+   */
+  async lastLeadAtByTenant(): Promise<Map<string, string> | null> {
+    const latest = new Map<string, string>();
+    const supabase = getSupabaseServiceClient();
+    if (supabase) {
+      const name = 'tenant_last_lead_at';
+      const missingAt = rpcMissingSince.get(name);
+      if (missingAt && Date.now() - missingAt < RPC_RETRY_MS) return null;
+      try {
+        // Read page by page like any other long list: one answer holds at most 1,000 clients.
+        const rows = await fetchAllRows<{ tenant_id: string; last_lead_at: string }>(
+          (from, to) => supabase.rpc(name, {}, { count: 'exact' }).order('tenant_id', { ascending: true }).range(from, to),
+          (error) => {
+            throw error;
+          }
+        );
+        rpcMissingSince.delete(name);
+        for (const row of rows) if (row.tenant_id && row.last_lead_at) latest.set(row.tenant_id, row.last_lead_at);
+        return latest;
+      } catch (error: any) {
+        if (isMissingFunction(error)) rpcMissingSince.set(name, Date.now());
+        else console.error(`[leads] ${name} failed, asking client by client instead: ${error?.message}`);
+        return null;
+      }
+    }
+
+    for (const lead of getStore().leads) {
+      if (!lead.created_at) continue;
+      const current = latest.get(lead.tenant_id);
+      if (!current || new Date(lead.created_at).getTime() > new Date(current).getTime()) latest.set(lead.tenant_id, lead.created_at);
+    }
+    return latest;
   }
 
   async listByTenant(

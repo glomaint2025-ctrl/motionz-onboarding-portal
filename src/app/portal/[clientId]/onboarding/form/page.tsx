@@ -20,6 +20,7 @@ import {
 import { validateOnboardingValues } from '@/lib/onboarding/form-validation';
 import { isFileList } from '@/lib/onboarding/answers';
 import { formatDateTime } from '@/lib/utils/format';
+import { fetchPortalData } from '@/lib/portal-data-client';
 
 type Values = Record<string, string | string[]>;
 type FileMap = Record<string, File[]>;
@@ -153,7 +154,7 @@ export default function OnboardingFormPage() {
       setLoadError('');
       try {
         const [dataRes, answersRes] = await Promise.all([
-          fetch(`/api/portal/${clientId}/data`),
+          fetchPortalData(clientId),
           // Earlier answers only pre-fill the form, so a problem here does not block it.
           fetch(`/api/portal/${clientId}/onboarding-answers`).catch(() => null),
         ]);

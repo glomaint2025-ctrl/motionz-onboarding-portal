@@ -8,6 +8,7 @@ import { Button, PortalPreloader } from '@/components/ui';
 import { buttonClasses } from '@/components/ui/Button';
 import { Icon } from '@/components/brand/Icon';
 import { suspendedPageUrl } from '@/components/portal/suspended';
+import { loadPortalData } from '@/lib/portal-data-client';
 
 /**
  * Portal section (URL segment) to the module that switches it on or off.
@@ -56,7 +57,7 @@ export default function ClientPortalLayout({
       setIsLoading(true);
       setLoadError('');
       try {
-        const res = await fetch(`/api/portal/${clientId}/data`);
+        const res = await loadPortalData(clientId);
         const data = await res.json().catch(() => ({}));
         if (res.status === 403 && data?.suspended) {
           window.location.href = suspendedPageUrl(data);

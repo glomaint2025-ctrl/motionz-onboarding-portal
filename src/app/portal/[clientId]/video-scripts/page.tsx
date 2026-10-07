@@ -18,6 +18,7 @@ import {
   SelectedScripts,
 } from '@/lib/scripts/ad-script-library';
 import { PORTAL_LINKS } from '@/lib/portal-links';
+import { fetchPortalData } from '@/lib/portal-data-client';
 
 interface StoredScriptTemplate {
   id: string;
@@ -90,7 +91,7 @@ export default function VideoScriptsPage() {
     async function loadData() {
       try {
         const [portalRes, prefRes, scriptsRes] = await Promise.all([
-          fetch(`/api/portal/${clientId}/data`),
+          fetchPortalData(clientId),
           fetch(`/api/portal/${clientId}/video-preference`),
           fetch(`/api/portal/${clientId}/script-templates`),
         ]);

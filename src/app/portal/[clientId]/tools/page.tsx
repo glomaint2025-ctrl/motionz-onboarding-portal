@@ -8,6 +8,7 @@ import { Icon, type IconName } from '@/components/brand/Icon';
 import { SlackLogo } from '@/components/brand/SlackLogo';
 import { SkoolLogo } from '@/components/brand/SkoolLogo';
 import { PORTAL_LINKS } from '@/lib/portal-links';
+import { fetchPortalData } from '@/lib/portal-data-client';
 
 interface ToolItem {
   title: string;
@@ -55,7 +56,7 @@ export default function ToolsAndResourcesPage() {
 
   useEffect(() => {
     let isMounted = true;
-    fetch(`/api/portal/${clientId}/data`)
+    fetchPortalData(clientId)
       .then((res) => (res.ok ? res.json() : null))
       .then((data) => {
         if (isMounted && data) setFeatureToggles(data.featureToggles || {});

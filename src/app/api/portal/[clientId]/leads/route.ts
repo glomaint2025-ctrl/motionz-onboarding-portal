@@ -45,13 +45,15 @@ export async function GET(
     const stageParam = (searchParams.get('stage') || '').trim().slice(0, SEARCH_MAX);
     const stage = stageParam && stageParam.toUpperCase() !== 'ALL' ? stageParam : undefined;
 
-    const [firstTry, all, newThisWeek, byStage, integrations] = await Promise.all([
+    const [firstTry, newThisWeek, byStage, integrations] = await Promise.all([
       leadRepository.query(tenantId, { search, stage, limit: pageSize, offset: (requestedPage - 1) * pageSize }),
-      leadRepository.countByTenant(tenantId),
       leadRepository.countByTenant(tenantId, { since: new Date(Date.now() - WEEK_MS).toISOString() }),
+      // One grouped query: how many leads sit in each stage.
       leadRepository.stageCounts(tenantId),
       getTenantIntegrations(tenantId),
     ]);
+    // Every lead is in exactly one stage, so the stage counts add up to the total: no separate count.
+    const all = byStage.reduce((sum, s) => sum + s.count, 0);
 
     // Connected when the location is saved on the client or on their GoHighLevel integration.
     // Leads only ever arrive from GoHighLevel, so having leads also means it is connected.

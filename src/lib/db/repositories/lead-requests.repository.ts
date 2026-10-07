@@ -3,6 +3,7 @@ import { getSupabaseServiceClient } from '../supabase-client';
 import { getStore } from '../mock-db';
 import { LeadRequest } from '../schema';
 import { AppError, DatabaseError } from '../../errors';
+import { fetchAllRows } from '../paging';
 
 /**
  * The `lead_requests` table has not been created yet (migration 20261007000004 not run).
@@ -121,6 +122,32 @@ export class LeadRequestRepository {
       return (data || []) as LeadRequest[];
     }
     return mockRows().filter((r) => r.status === 'open').sort(newestFirst).slice(0, limit);
+  }
+
+  /**
+   * Which client each open request belongs to and when it was sent, newest first: every open
+   * request, with only those two facts, so the dashboard can count them per client.
+   */
+  async listOpenSummaries(): Promise<Pick<LeadRequest, 'tenant_id' | 'created_at'>[]> {
+    const supabase = getSupabaseServiceClient();
+    if (supabase) {
+      return fetchAllRows<Pick<LeadRequest, 'tenant_id' | 'created_at'>>(
+        (from, to) =>
+          supabase
+            .from('lead_requests')
+            .select('tenant_id,created_at', { count: 'exact' })
+            .eq('status', 'open')
+            .order('created_at', { ascending: false })
+            .order('id', { ascending: true })
+            .range(from, to),
+        (error) => fail('list open lead requests', error),
+        20000
+      );
+    }
+    return mockRows()
+      .filter((r) => r.status === 'open')
+      .sort(newestFirst)
+      .map((r) => ({ tenant_id: r.tenant_id, created_at: r.created_at }));
   }
 
   /** Marks a request done (recording who and when) or reopens it. Returns null when it does not exist. */

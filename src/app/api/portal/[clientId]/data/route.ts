@@ -1,20 +1,18 @@
 import { NextRequest, NextResponse } from 'next/server';
-import {
-  getTenantById,
-  getClientSetupSteps,
-  getAppointments,
-  getContracts,
-  getFeatureToggles,
-  getTenantIntegrations,
-  getTeamMembers,
-  listTeamMemberInvitations,
-  DEMO_TENANT_UUID,
-} from '@/lib/db';
+import { getTenantById, DEMO_TENANT_UUID } from '@/lib/db';
 import { userRepository } from '@/lib/db/repositories/users.repository';
 import { leadRepository } from '@/lib/db/repositories/leads.repository';
-import { csmAssignmentRepository } from '@/lib/db/repositories';
+import {
+  csmAssignmentRepository,
+  clientSetupStepRepository,
+  appointmentRepository,
+  contractRepository,
+  featureToggleRepository,
+  integrationConfigRepository,
+  invitationRepository,
+} from '@/lib/db/repositories';
 import { resolveBookingCalendarId, resolveFormSettings } from '@/lib/db/repositories/app-settings.repository';
-import { assertPortalAccess, handleAuthError } from '@/lib/auth/guard';
+import { assertPortalAccess, handleAuthError, getSessionUser } from '@/lib/auth/guard';
 import { hasPermission } from '@/lib/auth/permissions';
 import { PORTAL_MODULES } from '@/lib/portal-modules';
 import type { UserInvitation } from '@/lib/db/schema';
@@ -40,12 +38,23 @@ export async function GET(
     // Enforce active account, tenant suspension, and tenant isolation
     const session = await assertPortalAccess(request, targetTenant, rawClientId);
     const isMember = session?.role === 'client_member';
-    // The signed-in person (not the account owner), for the greeting and the header.
-    const viewerUser = session
-      ? (await userRepository.findById(session.userId)) || (await userRepository.findByEmail(session.email))
-      : null;
 
+    // The assigned CSM, then (together) that person's name and their booking calendar.
+    const loadCsm = async () => {
+      const assignment = await csmAssignmentRepository.findByTenant(tenantId);
+      const [csmUser, bookingCalendarId] = await Promise.all([
+        assignment ? userRepository.findById(assignment.csm_user_id) : Promise.resolve(null),
+        // The assigned CSM's own GHL booking calendar, else the default one (also when there is no CSM).
+        resolveBookingCalendarId(assignment?.csm_user_id),
+      ]);
+      return { csmUser, bookingCalendarId };
+    };
+
+    // Everything the page needs is read at the same time. The client was loaded above, so each
+    // read goes straight to its table (no second lookup of the client per read), and the signed-in
+    // person's row is the one the access check already read.
     const [
+      viewerUser,
       steps,
       leadCount,
       appointments,
@@ -53,18 +62,33 @@ export async function GET(
       featureToggles,
       integrations,
       teamMembers,
-      invitations,
+      pendingInvitations,
+      { csmUser, bookingCalendarId },
+      forms,
     ] = await Promise.all([
-      getClientSetupSteps(tenantId),
+      // The signed-in person (not the account owner), for the greeting and the header.
+      session ? getSessionUser(session) : Promise.resolve(null),
+      clientSetupStepRepository.listByTenant(tenantId),
       leadRepository.countByTenant(tenantId),
-      getAppointments(tenantId),
-      getContracts(tenantId),
-      getFeatureToggles(tenantId),
-      getTenantIntegrations(tenantId),
-      getTeamMembers(tenantId),
+      appointmentRepository.listByTenant(tenantId),
+      contractRepository.listByTenant(tenantId),
+      featureToggleRepository.getTogglesForTenant(tenantId),
+      integrationConfigRepository.listByTenant(tenantId),
+      userRepository.listByTenant(tenantId),
       // Pending invitations hold other people's emails and phone numbers: owner and staff only.
-      isMember ? Promise.resolve([] as UserInvitation[]) : listTeamMemberInvitations(tenantId),
+      isMember ? Promise.resolve([] as UserInvitation[]) : invitationRepository.listByTenant(tenantId, { pendingOnly: true }),
+      loadCsm(),
+      // GoHighLevel form ids set by an admin (only the Texting registration form; the rest are built in).
+      resolveFormSettings(),
     ]);
+
+    // Invitations still waiting: not accepted, revoked or expired, and not for somebody already on the team.
+    const activeEmails = new Set(teamMembers.map((m) => m.email.toLowerCase()));
+    const nowDate = new Date();
+    const invitations = pendingInvitations.filter(
+      (inv) =>
+        !inv.accepted_at && !inv.revoked_at && new Date(inv.expires_at) > nowDate && !activeEmails.has(inv.email.toLowerCase())
+    );
 
     // A team member only gets the sections that are on for the client AND granted to them.
     // Every known module is checked, including ones the client has no saved on/off setting for.
@@ -86,18 +110,10 @@ export async function GET(
       }
     }
 
-    const assignment = await csmAssignmentRepository.findByTenant(tenantId);
-    const csmUser = assignment ? await userRepository.findById(assignment.csm_user_id) : null;
-    // The assigned CSM's own GHL booking calendar, else the default one (also when there is no CSM).
-    const bookingCalendarId = await resolveBookingCalendarId(assignment?.csm_user_id);
-
     const isClientRole = session?.role === 'client' || session?.role === 'client_member';
     const canSee = (moduleKey: string) => !isClientRole || effectiveFeatureToggles[moduleKey] !== false;
     const canSeeContracts =
       canSee('contracts') && (!session || hasPermission(session.role, 'client:view_contract'));
-
-    // GoHighLevel form ids set by an admin (only the Texting registration form; the rest are built in).
-    const forms = await resolveFormSettings();
 
     // Integration credentials (API tokens etc.) never leave the server. The sheet link follows Results Tracking.
     const publicIntegrations = integrations

@@ -8,6 +8,7 @@ import { buttonClasses } from '@/components/ui/Button';
 import { formatDateTime } from '@/lib/utils/format';
 import { nextUpcomingCall } from '@/lib/utils/appointments';
 import { suspendedPageUrl } from '@/components/portal/suspended';
+import { fetchPortalData } from '@/lib/portal-data-client';
 
 interface SetupStep {
   name: string;
@@ -121,7 +122,7 @@ export default function ClientOverviewPage() {
     let isMounted = true;
     async function loadData() {
       try {
-        const res = await fetch(`/api/portal/${clientId}/data`);
+        const res = await fetchPortalData(clientId);
         if (res.status === 403) {
           const data = await res.json().catch(() => ({}));
           if (data?.suspended) {

@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
-import { listTenants, getClientSetupSteps } from '@/lib/db';
 import { requireAuth, handleAuthError, getVisibleTenantIds } from '@/lib/auth/guard';
-import { contractRepository } from '@/lib/db/repositories';
+import { contractRepository, tenantRepository, clientSetupStepRepository } from '@/lib/db/repositories';
+import type { ClientSetupStep } from '@/lib/db/schema';
 import { calculateSetupProgress } from '@/lib/onboarding/progress';
 import { parsePaginationParams, buildPaginationMeta } from '@/lib/utils/pagination';
 
@@ -22,37 +22,39 @@ export async function GET(request: Request) {
     const status = searchParams.get('status')?.trim() || 'all';
 
     const visible = await getVisibleTenantIds(session!);
-    // The contract lookup is one query for every client, not one per row.
-    const [allTenants, withContract] = await Promise.all([listTenants(), contractRepository.listTenantIdsWithContract()]);
-    const tenants = allTenants.filter((t) => !visible || visible.has(t.id));
+    // A CSM's clients are read by id, an admin's as the full list: never capped at a page, and
+    // the contract and setup-step lookups are one read each, not one per row.
+    const [tenants, withContract] = await Promise.all([
+      visible ? tenantRepository.listByIds(Array.from(visible)) : tenantRepository.listAll(),
+      contractRepository.listTenantIdsWithContract(),
+    ]);
+    const stepsByTenant = await clientSetupStepRepository.listByTenants(visible ? tenants.map((t) => t.id) : null);
 
-    const clients = await Promise.all(
-      tenants.map(async (t) => {
-        const steps = await getClientSetupSteps(t.id);
-        const progress = calculateSetupProgress(steps);
-        const currentStep = steps.find((s) => s.status !== 'done');
-        return {
-          id: t.id,
-          name: t.name,
-          slug: t.slug,
-          status: t.status,
-          primary_email: t.primary_email,
-          primary_contact_name: t.primary_contact_name,
-          phone: t.phone,
-          progress_percent: progress.percentage,
-          completed_steps: progress.completedSteps,
-          total_steps: progress.totalSteps,
-          current_step_name: currentStep?.name || null,
-          current_step_status: currentStep?.status || null,
-          // Staff-only reminder: false until an admin attaches the client's contract.
-          hasContract: withContract.has(t.id),
-          // Legacy field names kept for existing consumers
-          progressPercentage: progress.percentage,
-          completedCount: progress.completedSteps,
-          totalCount: progress.totalSteps,
-        };
-      })
-    );
+    const clients = tenants.map((t) => {
+      const steps = (stepsByTenant.get(t.id) || []) as ClientSetupStep[];
+      const progress = calculateSetupProgress(steps);
+      const currentStep = steps.find((s) => s.status !== 'done');
+      return {
+        id: t.id,
+        name: t.name,
+        slug: t.slug,
+        status: t.status,
+        primary_email: t.primary_email,
+        primary_contact_name: t.primary_contact_name,
+        phone: t.phone,
+        progress_percent: progress.percentage,
+        completed_steps: progress.completedSteps,
+        total_steps: progress.totalSteps,
+        current_step_name: currentStep?.name || null,
+        current_step_status: currentStep?.status || null,
+        // Staff-only reminder: false until an admin attaches the client's contract.
+        hasContract: withContract.has(t.id),
+        // Legacy field names kept for existing consumers
+        progressPercentage: progress.percentage,
+        completedCount: progress.completedSteps,
+        totalCount: progress.totalSteps,
+      };
+    });
 
     const q = search?.toLowerCase();
     const filtered = clients.filter((c) => {

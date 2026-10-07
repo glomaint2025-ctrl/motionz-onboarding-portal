@@ -12,55 +12,63 @@ import { requireAuth, handleAuthError } from '@/lib/auth/guard';
 
 const DAY = 24 * 60 * 60 * 1000;
 
-/** Admin dashboard metrics (FR-501). Everything is computed from real data; unknown sources are null. */
+/**
+ * Admin dashboard metrics (FR-501). Everything is computed from real data; unknown sources are null.
+ *
+ * The number of database reads is fixed, however many clients there are: each table is read once
+ * (clients, setup steps, CSM assignments, contracts, open lead requests, two security counts,
+ * unmatched submissions), all at the same time, and joined here.
+ */
 export async function GET(request: Request) {
   try {
     await requireAuth(request, { roles: ['admin'] });
 
-    const [tenants, withContract] = await Promise.all([
-      tenantRepository.list({ includeArchived: true, limit: 1000 }),
-      contractRepository.listTenantIdsWithContract(),
-    ]);
+    const weekAgo = new Date(Date.now() - 7 * DAY).toISOString();
+    const [tenants, withContract, stepsByTenant, assignments, eventsLast7Days, highSeverityLast7Days, unmatched, allOpenRequests] =
+      await Promise.all([
+        tenantRepository.listAll({ includeArchived: true, summary: true }),
+        contractRepository.listTenantIdsWithContract(),
+        clientSetupStepRepository.listByTenants(null),
+        csmAssignmentRepository.listAll(),
+        securityEventRepository.countSince(weekAgo),
+        securityEventRepository.countSince(weekAgo, ['high', 'critical']),
+        onboardingSubmissionRepository.listByTenant(null, 100),
+        // Lead Replacement and Unresponsive Lead requests nobody has marked done yet.
+        // Never fails the dashboard: with the table missing or unreadable the card simply shows none.
+        leadRequestRepository.listOpenSummaries().catch((err: any) => {
+          console.error('[dashboard] Could not read the lead requests:', err?.message);
+          return [] as { tenant_id: string; created_at: string }[];
+        }),
+      ]);
+
     const live = tenants.filter((t: any) => !t.deleted_at && t.status !== 'cancelled');
+    const withCsm = new Set(assignments.map((a) => a.tenant_id));
 
-    const setup = await Promise.all(
-      live.map(async (t) => {
-        const [steps, assignment] = await Promise.all([
-          clientSetupStepRepository.listByTenant(t.id),
-          csmAssignmentRepository.findByTenant(t.id),
-        ]);
-        const current = steps.find((s: any) => s.status !== 'done');
-        const lastChange = current ? new Date((current as any).updated_at || t.created_at).getTime() : null;
-        return {
-          id: t.id,
-          name: t.name,
-          done: steps.length > 0 && !current,
-          currentStep: current?.name || null,
-          daysOnStep: lastChange ? Math.floor((Date.now() - lastChange) / DAY) : null,
-          hasCsm: Boolean(assignment),
-          hasContract: withContract.has(t.id),
-          ghlConnected: Boolean(t.ghl_location_id),
-        };
-      })
-    );
-
-    const events = await securityEventRepository.list({ limit: 500 });
-    const weekAgo = Date.now() - 7 * DAY;
-    const recentEvents = events.filter((e: any) => new Date(e.created_at).getTime() > weekAgo);
-    const [unmatched] = await Promise.all([onboardingSubmissionRepository.listByTenant(null, 100)]);
-
-    // Lead Replacement and Unresponsive Lead requests nobody has marked done yet, grouped by client.
-    // Never fails the dashboard: with the table missing or unreadable the card simply shows none.
-    const openRequests = await leadRequestRepository.listOpen(500).catch((err: any) => {
-      console.error('[dashboard] Could not read the lead requests:', err?.message);
-      return [];
+    const setup = live.map((t) => {
+      const steps = stepsByTenant.get(t.id) || [];
+      const current = steps.find((s) => s.status !== 'done');
+      const lastChange = current ? new Date(current.updated_at || t.created_at).getTime() : null;
+      return {
+        id: t.id,
+        name: t.name,
+        done: steps.length > 0 && !current,
+        currentStep: current?.name || null,
+        daysOnStep: lastChange ? Math.floor((Date.now() - lastChange) / DAY) : null,
+        hasCsm: withCsm.has(t.id),
+        hasContract: withContract.has(t.id),
+        ghlConnected: Boolean(t.ghl_location_id),
+      };
     });
-    const nameById = new Map(tenants.map((t) => [t.id, t.name]));
+
+    // Requests are grouped by client. Only live clients count: a request left behind by an
+    // archived or cancelled client is not something anybody still has to handle.
+    const liveNameById = new Map(live.map((t) => [t.id, t.name]));
+    const openRequests = allOpenRequests.filter((r) => liveNameById.has(r.tenant_id));
     const openByClient = new Map<string, { id: string; name: string; open: number; newest: string }>();
     for (const r of openRequests) {
       const entry = openByClient.get(r.tenant_id);
       if (entry) entry.open += 1;
-      else openByClient.set(r.tenant_id, { id: r.tenant_id, name: nameById.get(r.tenant_id) || 'Unknown client', open: 1, newest: r.created_at });
+      else openByClient.set(r.tenant_id, { id: r.tenant_id, name: liveNameById.get(r.tenant_id) || 'Unknown client', open: 1, newest: r.created_at });
     }
 
     return NextResponse.json({
@@ -83,8 +91,8 @@ export async function GET(request: Request) {
         .filter((s) => !s.done && s.daysOnStep !== null && s.daysOnStep >= 7)
         .map(({ id, name, currentStep, daysOnStep }) => ({ id, name, currentStep, daysOnStep })),
       security: {
-        last7Days: recentEvents.length,
-        highSeverity: recentEvents.filter((e: any) => e.severity === 'high' || e.severity === 'critical').length,
+        last7Days: eventsLast7Days,
+        highSeverity: highSeverityLast7Days,
       },
       unmatchedSubmissions: unmatched.length,
       // Newest first (the list comes newest first, and a Map keeps the order clients were first seen in).

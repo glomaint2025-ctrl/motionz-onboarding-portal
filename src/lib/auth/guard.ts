@@ -5,6 +5,55 @@ import { Capability, hasPermission, assertTenantAccess } from './permissions';
 import { securityEventRepository, auditLogRepository, userRepository, tenantRepository, csmAssignmentRepository } from '../db/repositories';
 import { AppError } from '../errors';
 import { PERSONAL_ACCESS_OFF_MESSAGE, PORTAL_ARCHIVED_MESSAGE, isTenantArchived } from './edge-session';
+import type { User, Tenant, CsmAssignment } from '../db/schema';
+
+/**
+ * Per-request memo. One HTTP request runs several checks in a row (requireAuth, assertPortalAccess,
+ * assertModuleEnabled, then the route itself) and each used to read the same user, client and CSM
+ * assignment again. Within one request they are now read once.
+ *
+ * It is keyed on the Request object (through the session parsed from it), so it lives exactly as
+ * long as that request: nothing is shared between requests, and a suspension or permission change
+ * is seen by the very next request. A session object that did not come from a request is never memoised.
+ */
+interface RequestLookups {
+  user?: Promise<User | null>;
+  userById?: Promise<User | null>;
+  tenant?: Promise<Tenant | null>;
+  assignments: Map<string, Promise<CsmAssignment | null>>;
+}
+const sessionByRequest = new WeakMap<object, { session: SessionPayload | null }>();
+const lookupsBySession = new WeakMap<SessionPayload, RequestLookups>();
+
+function memoFor(session: SessionPayload): RequestLookups | null {
+  return lookupsBySession.get(session) || null;
+}
+
+/** The signed-in person's own user row by id, read once per request. */
+export function getSessionUserById(session: SessionPayload): Promise<User | null> {
+  const memo = memoFor(session);
+  if (!memo) return userRepository.findById(session.userId);
+  if (!memo.userById) memo.userById = userRepository.findById(session.userId);
+  return memo.userById;
+}
+
+/** The signed-in person's user row (by id, else by the session's email), read once per request. */
+export function getSessionUser(session: SessionPayload): Promise<User | null> {
+  const load = async () => (await getSessionUserById(session)) || (await userRepository.findByEmail(session.email));
+  const memo = memoFor(session);
+  if (!memo) return load();
+  if (!memo.user) memo.user = load();
+  return memo.user;
+}
+
+/** The session's own client (archived ones included), read once per request. */
+function getSessionTenant(session: SessionPayload): Promise<Tenant | null> {
+  const load = () => tenantRepository.findById(session.tenantId!, { includeArchived: true });
+  const memo = memoFor(session);
+  if (!memo) return load();
+  if (!memo.tenant) memo.tenant = load();
+  return memo.tenant;
+}
 
 /**
  * Anonymous access to the demo sandbox is a local-development convenience only:
@@ -19,7 +68,13 @@ export function isPublicDemoRead(method?: string): boolean {
  */
 export async function assertCsmAssigned(session: SessionPayload | null, tenantId: string): Promise<void> {
   if (!session || session.role !== 'csm') return;
-  const assignment = await csmAssignmentRepository.findByTenant(tenantId);
+  const memo = memoFor(session);
+  let lookup = memo?.assignments.get(tenantId);
+  if (!lookup) {
+    lookup = csmAssignmentRepository.findByTenant(tenantId);
+    memo?.assignments.set(tenantId, lookup);
+  }
+  const assignment = await lookup;
   if (!assignment || assignment.csm_user_id !== session.userId) {
     throw new AppError('This client is not assigned to you.', 403, 'CSM_NOT_ASSIGNED');
   }
@@ -48,8 +103,7 @@ export interface GuardOptions {
 export async function assertActiveAccount(session: SessionPayload): Promise<void> {
   // Staff are exempt from tenant-level bans, but a disabled staff account is blocked.
   if (session.role === 'admin' || session.role === 'csm') {
-    const staffUser =
-      (await userRepository.findById(session.userId)) || (await userRepository.findByEmail(session.email));
+    const staffUser = await getSessionUser(session);
     if (staffUser?.status === 'suspended') {
       throw new AppError('Your staff access has been disabled.', 403, 'ACCOUNT_SUSPENDED');
     }
@@ -60,9 +114,15 @@ export async function assertActiveAccount(session: SessionPayload): Promise<void
     return;
   }
 
+  // The client and the person are read together; the client is still judged first.
+  const tenantLookup = session.tenantId ? getSessionTenant(session) : null;
+  const userLookup = getSessionUserById(session);
+  // A failed user read must not surface before (or instead of) the client's verdict.
+  userLookup.catch(() => undefined);
+
   // 1. Client-level suspension first: it also suspends every person, and its reason is meant for them.
-  if (session.tenantId) {
-    const tenant = await tenantRepository.findById(session.tenantId, { includeArchived: true });
+  if (tenantLookup) {
+    const tenant = await tenantLookup;
     if (isTenantArchived(tenant)) {
       throw new AppError(PORTAL_ARCHIVED_MESSAGE, 403, 'TENANT_ARCHIVED');
     }
@@ -77,7 +137,7 @@ export async function assertActiveAccount(session: SessionPayload): Promise<void
   }
 
   // 2. This person's own access turned off (the reason stays private)
-  const user = await userRepository.findById(session.userId);
+  const user = await userLookup;
   if (user && user.status === 'suspended') {
     throw new AppError(
       PERSONAL_ACCESS_OFF_MESSAGE,
@@ -91,6 +151,15 @@ export async function assertActiveAccount(session: SessionPayload): Promise<void
  * Extracts and cryptographically verifies the session from an incoming HTTP request.
  */
 export function getSessionFromRequest(request: Request | NextRequest): SessionPayload | null {
+  const known = sessionByRequest.get(request);
+  if (known) return known.session;
+  const session = readSessionFromRequest(request);
+  sessionByRequest.set(request, { session });
+  if (session) lookupsBySession.set(session, { assignments: new Map() });
+  return session;
+}
+
+function readSessionFromRequest(request: Request | NextRequest): SessionPayload | null {
   let cookieHeader: string | null = null;
 
   if ('cookies' in request && typeof (request as any).cookies?.get === 'function') {

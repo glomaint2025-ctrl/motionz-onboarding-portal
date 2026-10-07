@@ -3,6 +3,7 @@ import { getSupabaseServiceClient, resolveTenantId } from '../supabase-client';
 import { getStore } from '../mock-db';
 import { User, UserRole } from '../schema';
 import { DatabaseError, NotFoundError, AppError } from '../../errors';
+import { chunk } from '../paging';
 
 /** The database has no such column yet (migration not applied). */
 export function isMissingColumnError(error: any): boolean {
@@ -131,6 +132,32 @@ export class UserRepository {
 
     const store = getStore();
     return store.users.find((u) => u.email.toLowerCase() === normalized) || null;
+  }
+
+  /**
+   * Staff users by id, in one request per 100 ids (e.g. the CSM names for a page of clients).
+   * Meant for staff: the per-client suspension details that findById adds are not read.
+   */
+  async findByIds(userIds: string[]): Promise<User[]> {
+    const unique = Array.from(new Set(userIds.filter(Boolean)));
+    if (unique.length === 0) return [];
+
+    const supabase = getSupabaseServiceClient();
+    if (supabase) {
+      const uuids = unique.filter((id) => /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id));
+      if (uuids.length === 0) return [];
+      const pages = await Promise.all(
+        chunk(uuids).map(async (part) => {
+          const { data, error } = await supabase.from('users').select('*').in('id', part);
+          if (error) throw new DatabaseError(`Failed to fetch users: ${error.message}`, error);
+          return data || [];
+        })
+      );
+      return pages.flat().map((u) => this.normalizeUserWithSuspension(u));
+    }
+
+    const store = getStore();
+    return unique.map((id) => store.users.find((u) => u.id === id)).filter((u): u is User => Boolean(u));
   }
 
   /** All users of one staff role, including disabled ones (Admin > Staff). */

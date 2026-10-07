@@ -44,12 +44,25 @@ export * from '../errors';
 export * from '../validation';
 export { getStore, resetStore } from './mock-db';
 export { DEMO_TENANT_UUID, LEGACY_DEMO_TENANT_UUID, resolveTenantId } from './supabase-client';
+import { LEGACY_DEMO_TENANT_UUID } from './supabase-client';
 
 /**
  * Tenant Repository Delegations
  */
 export const getTenantById = async (tenantId: string): Promise<Tenant | null> => {
   return tenantRepository.findById(tenantId);
+};
+
+const CANONICAL_ID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+/**
+ * The client's real id for an id, slug or demo alias. A plain UUID already is the real id, so it
+ * needs no database lookup: callers that have loaded the client pass its id and pay nothing here.
+ */
+const resolveId = async (tenantId: string): Promise<string> => {
+  if (CANONICAL_ID.test(tenantId) && tenantId !== LEGACY_DEMO_TENANT_UUID) return tenantId;
+  const tenant = await getTenantById(tenantId);
+  return tenant ? tenant.id : tenantId;
 };
 
 export const listTenants = async (): Promise<Tenant[]> => {
@@ -82,8 +95,7 @@ export const updateTenantProfile = async (
  * Onboarding / Setup Steps Repository Delegations
  */
 export const getClientSetupSteps = async (tenantId: string): Promise<ClientSetupStep[]> => {
-  const tenant = await getTenantById(tenantId);
-  const resolvedId = tenant ? tenant.id : tenantId;
+  const resolvedId = await resolveId(tenantId);
   return clientSetupStepRepository.listByTenant(resolvedId);
 };
 
@@ -92,8 +104,7 @@ export const updateClientSetupStep = async (
   stepKey: string,
   updates: Partial<Pick<ClientSetupStep, 'status' | 'name' | 'what_it_is' | 'right_now' | 'we_need_from_you' | 'unlocks'>>
 ): Promise<ClientSetupStep | null> => {
-  const tenant = await getTenantById(tenantId);
-  const resolvedId = tenant ? tenant.id : tenantId;
+  const resolvedId = await resolveId(tenantId);
   return clientSetupStepRepository.updateStep(resolvedId, stepKey, updates);
 };
 
@@ -101,14 +112,12 @@ export const updateClientSetupStep = async (
  * Leads & Appointments Delegations
  */
 export const getLeads = async (tenantId: string): Promise<Lead[]> => {
-  const tenant = await getTenantById(tenantId);
-  const resolvedId = tenant ? tenant.id : tenantId;
+  const resolvedId = await resolveId(tenantId);
   return leadRepository.listByTenant(resolvedId);
 };
 
 export const getAppointments = async (tenantId: string): Promise<Appointment[]> => {
-  const tenant = await getTenantById(tenantId);
-  const resolvedId = tenant ? tenant.id : tenantId;
+  const resolvedId = await resolveId(tenantId);
   return appointmentRepository.listByTenant(resolvedId);
 };
 
@@ -116,14 +125,12 @@ export const getAppointments = async (tenantId: string): Promise<Appointment[]> 
  * Contracts & Orders Delegations
  */
 export const getContracts = async (tenantId: string): Promise<Contract[]> => {
-  const tenant = await getTenantById(tenantId);
-  const resolvedId = tenant ? tenant.id : tenantId;
+  const resolvedId = await resolveId(tenantId);
   return contractRepository.listByTenant(resolvedId);
 };
 
 export const getOrders = async (tenantId: string): Promise<Order[]> => {
-  const tenant = await getTenantById(tenantId);
-  const resolvedId = tenant ? tenant.id : tenantId;
+  const resolvedId = await resolveId(tenantId);
   return orderRepository.listByTenant(resolvedId);
 };
 
@@ -131,8 +138,7 @@ export const getOrders = async (tenantId: string): Promise<Order[]> => {
  * Feature Toggles Delegations
  */
 export const getFeatureToggles = async (tenantId: string): Promise<Record<string, boolean>> => {
-  const tenant = await getTenantById(tenantId);
-  const resolvedId = tenant ? tenant.id : tenantId;
+  const resolvedId = await resolveId(tenantId);
   return featureToggleRepository.getTogglesForTenant(resolvedId);
 };
 
@@ -142,8 +148,7 @@ export const setFeatureToggle = async (
   isEnabled: boolean,
   updatedBy?: string
 ): Promise<void> => {
-  const tenant = await getTenantById(tenantId);
-  const resolvedId = tenant ? tenant.id : tenantId;
+  const resolvedId = await resolveId(tenantId);
   return featureToggleRepository.setToggle(resolvedId, featureKey, isEnabled, updatedBy);
 };
 
@@ -155,8 +160,7 @@ export const getScriptTemplates = async (): Promise<ScriptTemplate[]> => {
 };
 
 export const getClientScriptPreference = async (tenantId: string): Promise<ClientScriptPreference | null> => {
-  const tenant = await getTenantById(tenantId);
-  const resolvedId = tenant ? tenant.id : tenantId;
+  const resolvedId = await resolveId(tenantId);
   return scriptRepository.getPreference(resolvedId);
 };
 
@@ -166,8 +170,7 @@ export const setClientScriptPreference = async (
   customName?: string,
   customCompany?: string
 ): Promise<ClientScriptPreference> => {
-  const tenant = await getTenantById(tenantId);
-  const resolvedId = tenant ? tenant.id : tenantId;
+  const resolvedId = await resolveId(tenantId);
   return scriptRepository.setPreference(resolvedId, preference, customName, customCompany);
 };
 
@@ -175,8 +178,7 @@ export const setClientSelectedScripts = async (
   tenantId: string,
   selected: SelectedScripts
 ): Promise<ClientScriptPreference> => {
-  const tenant = await getTenantById(tenantId);
-  const resolvedId = tenant ? tenant.id : tenantId;
+  const resolvedId = await resolveId(tenantId);
   return scriptRepository.setSelectedScripts(resolvedId, selected);
 };
 
@@ -209,8 +211,7 @@ export const logAuditEvent = async (event: {
 
 export const listAuditLogs = async (tenantId?: string): Promise<AuditLog[]> => {
   if (tenantId) {
-    const tenant = await getTenantById(tenantId);
-    const resolvedId = tenant ? tenant.id : tenantId;
+    const resolvedId = await resolveId(tenantId);
     return auditLogRepository.list(resolvedId);
   }
   return auditLogRepository.list();
@@ -220,14 +221,12 @@ export const listAuditLogs = async (tenantId?: string): Promise<AuditLog[]> => {
  * Tenant Team & Integrations Delegations
  */
 export const getTeamMembers = async (tenantId: string): Promise<User[]> => {
-  const tenant = await getTenantById(tenantId);
-  const resolvedId = tenant ? tenant.id : tenantId;
+  const resolvedId = await resolveId(tenantId);
   return userRepository.listByTenant(resolvedId);
 };
 
 export const listTeamMemberInvitations = async (tenantId: string): Promise<UserInvitation[]> => {
-  const tenant = await getTenantById(tenantId);
-  const resolvedId = tenant ? tenant.id : tenantId;
+  const resolvedId = await resolveId(tenantId);
   const [members, invitations] = await Promise.all([
     userRepository.listByTenant(resolvedId),
     invitationRepository.listByTenant(resolvedId, { pendingOnly: true }),
@@ -244,7 +243,6 @@ export const listTeamMemberInvitations = async (tenantId: string): Promise<UserI
 };
 
 export const getTenantIntegrations = async (tenantId: string): Promise<IntegrationConfig[]> => {
-  const tenant = await getTenantById(tenantId);
-  const resolvedId = tenant ? tenant.id : tenantId;
+  const resolvedId = await resolveId(tenantId);
   return integrationConfigRepository.listByTenant(resolvedId);
 };

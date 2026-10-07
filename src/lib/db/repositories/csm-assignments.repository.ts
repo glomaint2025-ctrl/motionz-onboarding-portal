@@ -3,6 +3,7 @@ import { getSupabaseServiceClient } from '../supabase-client';
 import { getStore } from '../mock-db';
 import { CsmAssignment } from '../schema';
 import { DatabaseError } from '../../errors';
+import { fetchAllRows } from '../paging';
 
 const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -104,6 +105,26 @@ export class CsmAssignmentRepository {
 
     const store = getStore();
     return store.csmAssignments.find((a) => a.tenant_id === tenantId) || null;
+  }
+
+  /** Every CSM assignment, in one read (a client has at most one). Used to join lists in memory. */
+  async listAll(): Promise<CsmAssignment[]> {
+    const supabase = getSupabaseServiceClient();
+    if (supabase) {
+      return fetchAllRows<CsmAssignment>(
+        (from, to) =>
+          supabase
+            .from('csm_assignments')
+            .select('*', { count: 'exact' })
+            .order('tenant_id', { ascending: true })
+            .order('id', { ascending: true })
+            .range(from, to),
+        (error) => {
+          throw new DatabaseError(`Failed to list assignments: ${error.message}`, error);
+        }
+      );
+    }
+    return getStore().csmAssignments.slice();
   }
 
   async listByCsm(csmUserId: string): Promise<CsmAssignment[]> {
