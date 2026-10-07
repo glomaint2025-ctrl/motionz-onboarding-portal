@@ -143,6 +143,11 @@ export function DeleteClientDialog({ client, onClose, onDeleted }: DeleteClientD
           spellCheck={false}
           disabled={busy}
         />
+        {typedName.trim() !== '' && !nameMatches && (
+          <p role="status" style={{ margin: 'var(--space-1) 0 0', fontSize: 'var(--font-size-sm)', color: 'var(--color-text-secondary)' }}>
+            Type the client&apos;s name exactly to confirm.
+          </p>
+        )}
       </form>
     </Modal>
   );

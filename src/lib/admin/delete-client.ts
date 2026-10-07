@@ -302,8 +302,11 @@ export async function deleteClientPermanently(tenant: Tenant, actor: { email: st
   let driveAccessWarning: string | undefined;
   try {
     const access = await syncClientDriveAccess(tenant.id, { actorEmail: actor.email, actorRole: 'admin', clientRemoved: true });
-    if (!access.skipped && (!access.ok || access.warnings.length > 0)) {
-      driveAccessWarning = `Google Drive access could not be fully removed. Check who can open the folder in Drive. ${access.warnings.join(' ')}`.trim();
+    // Only problems with THIS client's files matter here. A staff address Google cannot share the main
+    // folder with (not a Google account) has nothing to do with the client being deleted.
+    const relevant = access.warnings.filter((w) => !/the main Drive folder/i.test(w));
+    if (!access.skipped && relevant.length > 0) {
+      driveAccessWarning = `Google Drive access could not be fully removed. Check who can open the folder in Drive. ${relevant.join(' ')}`.trim();
     }
   } catch (err: any) {
     driveAccessWarning = 'Google Drive access could not be removed. Check who can open the folder in Drive.';
