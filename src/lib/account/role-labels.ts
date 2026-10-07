@@ -1,6 +1,13 @@
+/**
+ * What people read for the "admin" role. Only the name changed: the role key in the database,
+ * in sessions, in URLs (/admin/...) and in the API is still `admin`.
+ */
+export const ADMIN_ROLE_LABEL = 'CSM Manager';
+export const ADMIN_ROLE_LABEL_PLURAL = 'CSM Managers';
+
 /** How each role is named to the person themselves (header, My profile). */
 export const VIEWER_ROLE_LABELS: Record<string, string> = {
-  admin: 'Admin',
+  admin: ADMIN_ROLE_LABEL,
   csm: 'CSM',
   client: 'Account owner',
   client_member: 'Team member',

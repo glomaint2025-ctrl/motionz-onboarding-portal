@@ -93,7 +93,7 @@ export async function middleware(request: NextRequest) {
     }
     if (session.role !== 'admin') {
       return secureResponse(
-        NextResponse.json({ error: 'Forbidden: Administrator privileges required.' }, { status: 403 })
+        NextResponse.json({ error: 'Forbidden: CSM Manager access required.' }, { status: 403 })
       );
     }
   }

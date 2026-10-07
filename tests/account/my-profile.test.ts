@@ -74,7 +74,7 @@ async function run() {
 
   // 2. GET returns the caller's own details for each role
   const expected: Array<[keyof typeof sessions, string, string, string, string]> = [
-    ['admin', 'admin@motionz.ai', 'Motionz Admin', 'admin', 'Admin'],
+    ['admin', 'admin@motionz.ai', 'Motionz Admin', 'admin', 'CSM Manager'],
     ['csm', 'csm@motionz.ai', 'Motionz CSM', 'csm', 'CSM'],
     ['client', 'john@abcroofing.com', 'John Smith', 'client', 'Account owner'],
     ['member', 'sarah@abcroofing.com', 'Sarah Connor', 'client_member', 'Team member'],

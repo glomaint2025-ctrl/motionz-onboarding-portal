@@ -257,7 +257,7 @@ async function run() {
   }
   assert.strictEqual(roleLabel('client'), 'Account owner');
   assert.strictEqual(roleLabel('client_member'), 'Team member');
-  assert.strictEqual(roleLabel('admin'), 'Admin');
+  assert.strictEqual(roleLabel('admin'), 'CSM Manager');
   assert.strictEqual(roleLabel('csm'), 'CSM');
   assert.deepStrictEqual(detailChips({ role: 'client_member' }), [{ label: 'Role', value: 'Team member' }], 'log details show the role in plain words');
   console.log(' PASS: Audit and security log entries, and roles, use plain labels.');

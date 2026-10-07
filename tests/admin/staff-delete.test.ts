@@ -149,7 +149,7 @@ async function run() {
   store.users.find((u) => u.id === second.id)!.role = 'csm';
   res = await del({ id: 'user-admin-1' }, secondCookie);
   assert.strictEqual(res.status, 400);
-  assert.ok(/only active admin/i.test((await res.json()).error));
+  assert.ok(/only active CSM Manager/i.test((await res.json()).error));
   assert.ok(has('user-admin-1'), 'the last active admin is kept');
 
   // A disabled second admin does not count as "another active admin".

@@ -6,6 +6,9 @@ import { securityEventRepository, auditLogRepository, userRepository, tenantRepo
 import { AppError } from '../errors';
 import { PERSONAL_ACCESS_OFF_MESSAGE, PORTAL_ARCHIVED_MESSAGE, isTenantArchived } from './edge-session';
 
+/** Shown to someone whose client was deleted permanently while they were still signed in. */
+export const PORTAL_DELETED_MESSAGE = 'This portal no longer exists. Contact your Motionz contact if you think this is a mistake.';
+
 /**
  * Anonymous access to the demo sandbox is a local-development convenience only:
  * never in production, and never for writes.
@@ -63,6 +66,11 @@ export async function assertActiveAccount(session: SessionPayload): Promise<void
   // 1. Client-level suspension first: it also suspends every person, and its reason is meant for them.
   if (session.tenantId) {
     const tenant = await tenantRepository.findById(session.tenantId, { includeArchived: true });
+    // A client that was deleted for good (Clients > Delete permanently): a session opened before
+    // that stops working on the next request.
+    if (!tenant) {
+      throw new AppError(PORTAL_DELETED_MESSAGE, 403, 'ACCOUNT_SUSPENDED');
+    }
     if (isTenantArchived(tenant)) {
       throw new AppError(PORTAL_ARCHIVED_MESSAGE, 403, 'TENANT_ARCHIVED');
     }

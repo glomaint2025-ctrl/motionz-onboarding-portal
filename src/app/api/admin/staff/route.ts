@@ -25,7 +25,7 @@ const SETUP_LINK_MINUTES = 72 * 60;
 
 function staffWelcomeEmail(to: string, name: string, role: string, url: string) {
   const esc = (v: string) => v.replace(/[&<>"']/g, (c) => `&#${c.charCodeAt(0)};`);
-  const roleLabel = role === 'admin' ? 'an Admin' : 'a CSM';
+  const roleLabel = role === 'admin' ? 'a CSM Manager' : 'a CSM';
   const text = `Hi ${name},\n\nYou have been added to the Motionz portal as ${roleLabel}.\nSet your password here (link valid for 72 hours): ${url}\n\nAfter that, sign in with ${to} and your password.`;
   const html = `<!doctype html><html><body style="font-family:Arial,Helvetica,sans-serif;background:#f9fafb;padding:24px;color:#111827">
 <div style="max-width:560px;margin:0 auto;background:#fff;border:1px solid #e5e7eb;border-radius:8px;padding:32px">
@@ -111,11 +111,11 @@ async function updateStaff(body: any, target: User, session: SessionIdentity) {
 
   if (body.role !== undefined) {
     if (body.role !== 'admin' && body.role !== 'csm') {
-      return NextResponse.json({ error: 'Role must be Admin or CSM.' }, { status: 400 });
+      return NextResponse.json({ error: 'Role must be CSM Manager or CSM.' }, { status: 400 });
     }
     if (body.role !== target.role) {
       if (self) {
-        return NextResponse.json({ error: 'You cannot change your own role. Ask another admin.' }, { status: 400 });
+        return NextResponse.json({ error: 'You cannot change your own role. Ask another CSM Manager.' }, { status: 400 });
       }
       updates.role = body.role;
       changed.push('role');
@@ -424,7 +424,7 @@ export async function PATCH(request: Request) {
     }
 
     if (body.action === 'disable') {
-      await userRepository.suspendUser(target.id, 'Staff access disabled by an administrator.', session!.email, 'admin');
+      await userRepository.suspendUser(target.id, 'Staff access disabled by a CSM Manager.', session!.email, 'admin');
     } else {
       await userRepository.unsuspendUser(target.id);
     }
@@ -475,7 +475,7 @@ export async function DELETE(request: Request) {
       const otherActiveAdmins = admins.filter((a) => a.id !== target.id && a.status !== 'suspended');
       if (otherActiveAdmins.length === 0) {
         return NextResponse.json(
-          { error: `${displayName} is the only active admin. Add or enable another admin first, then delete.` },
+          { error: `${displayName} is the only active CSM Manager. Add or enable another CSM Manager first, then delete.` },
           { status: 400 }
         );
       }

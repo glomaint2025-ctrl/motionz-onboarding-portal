@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { Icon } from '@/components/brand/Icon';
 import { MotionzWordmark } from '@/components/brand/MotionzLogo';
+import { ADMIN_ROLE_LABEL } from '@/lib/account/role-labels';
 import { getNavGroups, isNavItemActive, roleHomeHref } from './nav-config';
 
 export interface NavItem {
@@ -26,7 +27,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
 }) => {
   const pathname = usePathname();
   const groups = getNavGroups(role, clientId, featureToggles);
-  const tag = role === 'admin' ? 'Admin' : role === 'csm' ? 'CSM' : undefined;
+  const tag = role === 'admin' ? ADMIN_ROLE_LABEL : role === 'csm' ? 'CSM' : undefined;
 
   return (
     <aside className="desktop-sidebar" aria-label="Sidebar">

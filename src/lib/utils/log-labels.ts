@@ -3,13 +3,14 @@
  * Shared by the admin log pages (display) and /api/admin/logs (searching by label).
  */
 import { formatDateTime } from './format';
+import { ADMIN_ROLE_LABEL } from '../account/role-labels';
 
 export const SECURITY_EVENT_LABELS: Record<string, string> = {
   auth_logout: 'Signed out',
   staff_login_success: 'Staff signed in',
   staff_invalid_credentials: 'Wrong password (staff)',
   staff_unregistered_email_attempt: 'Staff sign-in with an unknown email',
-  staff_privilege_escalation_attempt: 'Blocked: admin access requested without approval',
+  staff_privilege_escalation_attempt: 'Blocked: CSM Manager access requested without approval',
   unauthorized_staff_domain_access: 'Blocked: staff sign-in from a non-Motionz email',
   staff_login_code_sent: 'Sign-in code emailed (staff)',
   staff_login_code_verified: 'Sign-in code accepted (staff)',
@@ -27,6 +28,7 @@ export const SECURITY_EVENT_LABELS: Record<string, string> = {
   role_privilege_escalation_attempt: 'Blocked: area not allowed for this role',
   unauthorized_capability_attempt: 'Blocked: action not allowed for this role',
   cross_tenant_access_attempt: "Blocked: tried to open another client's portal",
+  client_delete_incomplete: 'Client delete did not finish (needs attention)',
   ghl_webhook_invalid_secret: 'Blocked: GoHighLevel message with a wrong or missing secret',
 };
 
@@ -93,6 +95,7 @@ export const AUDIT_ACTION_LABELS: Record<string, string> = {
   'tenant.provision': 'Client portal created',
   'tenant.provisioned': 'Client portal created',
   'tenant.archived': 'Client archived',
+  'tenant.deleted_permanently': 'Client deleted permanently',
   'tenant.suspended': 'Client suspended',
   'tenant.unsuspended': 'Client reactivated',
   'tenant.features_updated': 'Portal modules updated',
@@ -181,6 +184,12 @@ const DETAIL_LABELS: Record<string, string> = {
   changed: 'Changed',
   title: 'Title',
   allowed_modules: 'Allowed sections',
+  client: 'Client',
+  clientEmail: 'Client email',
+  statusBefore: 'Status before',
+  people: 'People removed',
+  leads: 'Leads removed',
+  leadRequests: 'Lead requests removed',
   cascadedMembersDisabled: 'Team members locked out',
   unlockedMembersCount: 'Team members unlocked',
   revokedBy: 'Cancelled by',
@@ -196,7 +205,7 @@ const DETAIL_LABELS: Record<string, string> = {
 
 /** Plain names for the roles stored in the database. */
 const ROLE_LABELS: Record<string, string> = {
-  admin: 'Admin',
+  admin: ADMIN_ROLE_LABEL,
   csm: 'CSM',
   client: 'Account owner',
   client_member: 'Team member',

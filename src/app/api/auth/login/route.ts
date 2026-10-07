@@ -97,7 +97,7 @@ export async function POST(request: Request) {
             details: { email: staffUser.email, role: staffUser.role, ip, timestamp: new Date().toISOString() },
           });
           return NextResponse.json(
-            { error: 'We could not email your sign-in code. Please try again in a moment or contact a Motionz administrator.' },
+            { error: 'We could not email your sign-in code. Please try again in a moment or contact a CSM Manager.' },
             { status: 503 }
           );
         }

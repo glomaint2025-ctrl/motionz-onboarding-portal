@@ -90,7 +90,7 @@
   <tr>
     <td class="n">8</td>
     <td class="w">Slack<br><span class="muted">lead form requests to #reviews-team</span></td>
-    <td colspan="2">The test connection was made from my Slack user. For go-live: Slack → Apps → "Incoming WebHooks" → Add to Slack → pick the channel → copy the link → paste it in the portal under Admin → Settings &amp; Integrations → Slack messages.</td>
+    <td colspan="2">The test connection was made from my Slack user. For go-live: Slack → Apps → "Incoming WebHooks" → Add to Slack → pick the channel → copy the link → paste it in the portal under Settings &amp; Integrations → Slack messages.</td>
   </tr>
 </table>
 <p class="muted">Costs (approximate, check each provider): Vercel free to start, Pro about $20/month. Supabase free to start, Pro about $25/month (recommended for backups). Resend free up to 3,000 emails/month. Google Cloud (already set up) pay per use, small. Drive, GHL and Slack: nothing extra.</p>
@@ -98,18 +98,18 @@
 <h2>Good to know</h2>
 <ul>
   <li><strong>Google only shares with Google accounts.</strong> Every staff email you add to the portal must be a Google account (Workspace, or a free Google account created on that email), or that person cannot open client folders and sheets. Today <code>admin@motionz.ai</code> is not one. Same for a client who wants to open their sheets or an uploaded contract.</li>
-  <li><strong>Drive access follows the portal.</strong> Admins get every client folder, a CSM gets their own clients, a client gets their own files. Google emails each person a "shared with you" notice. Removing someone from the portal removes their Drive access.</li>
+  <li><strong>Drive access follows the portal.</strong> CSM Managers (admins) get every client folder, a CSM gets their own clients, a client gets their own files. Google emails each person a "shared with you" notice. Removing someone from the portal removes their Drive access.</li>
   <li><strong>The live portal starts empty.</strong> No test clients, leads or staff are carried over.</li>
 </ul>
 
 <h2>On go-live day, inside the portal (about 15 minutes)</h2>
 <ol>
-  <li>Change the admin password (the current one is a shared test password).</li>
-  <li>Admin → Staff: add your real admins and CSMs (<code>@motionz.ai</code> emails). Set each CSM's booking calendar under Edit.</li>
-  <li>Admin → Settings &amp; Integrations → Notification emails: who gets onboarding forms, website requests and lead forms.</li>
-  <li>Admin → Settings &amp; Integrations → Staff sign-in security: emailed sign-in code on or off.</li>
-  <li>Admin → Portal Templates and Video Scripts: check the wording new clients will see.</li>
-  <li>Add your first real client, then paste their GHL Location ID in Admin → GHL Connect.</li>
+  <li>Sign in as the CSM Manager (<code>admin@motionz.ai</code>) and change the password (the current one is a shared test password). "CSM Manager" is the new name of the Admin role; the sign-in and the web address (<code>/admin</code>) are unchanged.</li>
+  <li>Staff: add your real CSM Managers (admins) and CSMs (<code>@motionz.ai</code> emails). Set each CSM's booking calendar under Edit.</li>
+  <li>Settings &amp; Integrations → Notification emails: who gets onboarding forms, website requests and lead forms.</li>
+  <li>Settings &amp; Integrations → Staff sign-in security: emailed sign-in code on or off.</li>
+  <li>Portal Templates and Video Scripts: check the wording new clients will see.</li>
+  <li>Add your first real client, then paste their GHL Location ID in GHL Connect.</li>
 </ol>
 
 <div class="box">

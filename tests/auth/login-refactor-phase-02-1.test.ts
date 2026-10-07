@@ -98,7 +98,7 @@ async function runPhase021Tests() {
   const tamperingRes = await authLoginHandler(tamperingReq);
   assert.strictEqual(tamperingRes.status, 403, 'Role tampering elevation must be rejected with 403');
   const tamperingBody = await tamperingRes.json();
-  assert(tamperingBody.error.includes('Administrator privileges require designated staff approval'));
+  assert(tamperingBody.error.includes('CSM Manager access needs approval from Motionz'));
   assert(
     store.securityEvents.some((e) => e.event_type === 'staff_privilege_escalation_attempt'),
     'Tampering attempt must record a staff_privilege_escalation_attempt security event'

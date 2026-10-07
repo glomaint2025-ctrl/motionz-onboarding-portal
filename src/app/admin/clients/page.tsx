@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { Button, Input, Select, Modal, TableSkeleton, Pagination, buttonClasses } from '@/components/ui';
 import { Icon } from '@/components/brand';
 import { Notice, clientStatusLabel } from '@/components/admin/Notice';
+import { DeleteClientDialog, CLIENTS_NOTICE_KEY } from '@/components/admin/DeleteClientDialog';
 import { formatDate } from '@/lib/utils/format';
 
 interface ClientRecord {
@@ -68,6 +69,16 @@ export default function ClientsPage() {
     const status = query.get('status');
     if (status && ['active', 'onboarding', 'suspended', 'archived'].includes(status)) setStatusFilter(status);
     setUrlReady(true);
+    // A message left by the client page, e.g. "<name> was deleted." Shown once.
+    try {
+      const left = window.sessionStorage.getItem(CLIENTS_NOTICE_KEY);
+      if (left) {
+        setDeletedNotice(left);
+        window.sessionStorage.removeItem(CLIENTS_NOTICE_KEY);
+      }
+    } catch {
+      // No session storage: the list simply shows without the message.
+    }
   }, []);
 
   // Server-side pagination state
@@ -102,6 +113,9 @@ export default function ClientsPage() {
   const [isUnarchiving, setIsUnarchiving] = useState(false);
   const [unarchiveError, setUnarchiveError] = useState('');
   const [restoreNotice, setRestoreNotice] = useState('');
+
+  const [deleteTarget, setDeleteTarget] = useState<ClientRecord | null>(null);
+  const [deletedNotice, setDeletedNotice] = useState('');
 
   const [archiveTarget, setArchiveTarget] = useState<ClientRecord | null>(null);
   const [isArchiving, setIsArchiving] = useState(false);
@@ -480,6 +494,12 @@ export default function ClientsPage() {
         </Notice>
       )}
 
+      {deletedNotice && (
+        <Notice tone="success" style={{ marginBottom: 'var(--space-4)' }}>
+          {deletedNotice}
+        </Notice>
+      )}
+
       {restoreNotice && (
         <Notice tone="info" style={{ marginBottom: 'var(--space-4)' }}>
           {restoreNotice}
@@ -809,6 +829,26 @@ export default function ClientsPage() {
                                       </button>
                                     </>
                                   )}
+
+                                  <div className="ui-action-dropdown-divider" />
+
+                                  <button
+                                    type="button"
+                                    className="ui-action-dropdown-item ui-action-dropdown-item-danger"
+                                    onClick={() => {
+                                      setActiveMenuClientId(null);
+                                      setMenuCoords(null);
+                                      setDeleteTarget(client);
+                                    }}
+                                  >
+                                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                                      <polyline points="3 6 5 6 21 6" />
+                                      <path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6" />
+                                      <path d="M10 11v6M14 11v6" />
+                                      <path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2" />
+                                    </svg>
+                                    Delete permanently
+                                  </button>
                                 </div>
                               )}
                             </div>
@@ -837,6 +877,18 @@ export default function ClientsPage() {
       )}
 
       {/* 6. Modals */}
+
+      {/* Delete permanently (the same dialog as on the client page) */}
+      <DeleteClientDialog
+        client={deleteTarget}
+        onClose={() => setDeleteTarget(null)}
+        onDeleted={(message) => {
+          setDeleteTarget(null);
+          setRestoreNotice('');
+          setDeletedNotice(message);
+          fetchClients();
+        }}
+      />
 
       {/* Unarchive Client Portal Modal */}
       <Modal

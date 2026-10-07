@@ -46,7 +46,7 @@ export async function POST(request: Request) {
     const user = await userRepository.findById(challenge.userId);
     if (!user || user.status === 'suspended' || (user.role !== 'admin' && user.role !== 'csm')) {
       const disabled = NextResponse.json(
-        { error: 'Your staff access has been disabled. Contact a Motionz administrator.', restart: true },
+        { error: 'Your staff access has been disabled. Contact a CSM Manager.', restart: true },
         { status: 403 }
       );
       disabled.cookies.set(LOGIN_CHALLENGE_COOKIE, '', clearedChallengeCookieOptions());
@@ -64,7 +64,7 @@ export async function POST(request: Request) {
         details: { email: user.email, role: user.role, ip, timestamp: new Date().toISOString() },
       });
       return NextResponse.json(
-        { error: 'We could not email a new code. Please try again in a moment or contact a Motionz administrator.' },
+        { error: 'We could not email a new code. Please try again in a moment or contact a CSM Manager.' },
         { status: 503 }
       );
     }

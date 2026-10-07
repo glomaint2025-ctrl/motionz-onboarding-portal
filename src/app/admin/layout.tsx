@@ -13,7 +13,7 @@ export default function AdminLayout({
     <AppShell
       role="admin"
       companyName="Motionz Internal"
-      portalTitle="Admin Command Center"
+      portalTitle="CSM Manager workspace"
     >
       <div className="portal-container">{children}</div>
     </AppShell>

@@ -287,7 +287,7 @@ export default function CSMClientsPage() {
                   <tr>
                     <td colSpan={4} style={{ textAlign: 'center', justifyContent: 'center', padding: '48px 16px', color: 'var(--color-text-muted)' }}>
                       {totalClients === 0
-                        ? 'No clients are assigned to you yet. Ask a Motionz admin to assign clients to you.'
+                        ? 'No clients are assigned to you yet. Ask a CSM Manager to assign clients to you.'
                         : 'No clients match your search or filter.'}
                     </td>
                   </tr>

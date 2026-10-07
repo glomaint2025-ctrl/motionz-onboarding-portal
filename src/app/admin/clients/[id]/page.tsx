@@ -10,6 +10,7 @@ import { OnboardingAnswers, OnboardingSubmissionView } from '@/components/onboar
 import { ClientRecords } from '@/components/admin/ClientRecords';
 import { LeadRequestsCard } from '@/components/admin/LeadRequestsCard';
 import { Notice, clientStatusLabel, copyText, useRevealOnMessage } from '@/components/admin/Notice';
+import { DeleteClientDialog, CLIENTS_NOTICE_KEY } from '@/components/admin/DeleteClientDialog';
 import { MemberModulePicker, memberSelectableModules } from '@/components/admin/MemberModulePicker';
 import { formatDateTime } from '@/lib/utils/format';
 import { roleLabel } from '@/lib/utils/log-labels';
@@ -81,6 +82,7 @@ export default function ClientDetailPage() {
   const saveErrorRef = useRevealOnMessage(saveError);
   const saveErrorFor = (field: string) => (saveFieldError?.field === field ? saveFieldError.message : undefined);
   const clearSaveFieldError = (field: string) => setSaveFieldError((prev) => (prev?.field === field ? null : prev));
+  const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
   const [isArchiveModalOpen, setIsArchiveModalOpen] = useState(false);
   const [isArchiving, setIsArchiving] = useState(false);
   const [archiveError, setArchiveError] = useState('');
@@ -1319,6 +1321,38 @@ export default function ClientDetailPage() {
           </div>
         </Card>
       )}
+
+      {/* Danger zone: deliberately at the very bottom, away from Suspend and Archive. */}
+      <Card style={{ marginTop: 'var(--space-6)', borderColor: 'var(--color-status-danger-border)' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 'var(--space-4)', flexWrap: 'wrap' }}>
+          <div style={{ flex: '1 1 320px', minWidth: 0 }}>
+            <h2 style={{ margin: '0 0 var(--space-1)', fontSize: 'var(--font-size-base)', fontWeight: 'var(--font-weight-semibold)', color: 'var(--color-status-danger-text)' }}>
+              Danger zone
+            </h2>
+            <p style={{ margin: 0, fontSize: 'var(--font-size-sm)', color: 'var(--color-text-secondary)', lineHeight: 1.5 }}>
+              Delete this client, its people and all of its portal data for good. This cannot be undone.
+              If they might come back, archive them instead.
+            </p>
+          </div>
+          <Button type="button" variant="danger" onClick={() => setIsDeleteDialogOpen(true)}>
+            Delete permanently
+          </Button>
+        </div>
+      </Card>
+
+      <DeleteClientDialog
+        client={isDeleteDialogOpen ? { id: tenant.id, name: tenant.name } : null}
+        onClose={() => setIsDeleteDialogOpen(false)}
+        onDeleted={(message) => {
+          // The clients list shows the message once.
+          try {
+            window.sessionStorage.setItem(CLIENTS_NOTICE_KEY, message);
+          } catch {
+            // No session storage: the list still opens, without the message.
+          }
+          router.push('/admin/clients');
+        }}
+      />
 
       {/* Suspend client */}
       <Modal

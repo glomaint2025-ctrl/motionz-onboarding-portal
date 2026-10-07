@@ -11,7 +11,7 @@ Open **My PC > C: > Gloma > motionz-onboarding-portal > .env.local** with Notepa
 
 | Role | Email | Password |
 |---|---|---|
-| Admin | admin@motionz.ai | see **docs/HANDOVER.md**, line "Staging admin" |
+| CSM Manager (the role that used to be called Admin; its sign-in is still admin@motionz.ai) | admin@motionz.ai | see **docs/HANDOVER.md**, line "Staging admin" |
 | CSM | heshantharushka2002+csm@gmail.com | `.env.local` line `TEST_CSM_PASSWORD=` |
 | Client owner (Zydeco Roof Revival) | heshantharushka2002@gmail.com | `.env.local` line `TEST_CLIENT_PASSWORD=` |
 | Team member (Sam) | heshantharushka2002+team@gmail.com | `.env.local` line `TEST_MEMBER_PASSWORD=` |
@@ -28,9 +28,9 @@ Tips: use a normal window for one account and an **Incognito window** (Ctrl+Shif
 |---|---|---|
 | 1.1 | Open the site > click **Sign in** with both fields empty | Browser says "Please fill out this field" |
 | 1.2 | Email `admin@motionz.ai`, password `wrong123` > **Sign in** | "Incorrect password. Please try again." |
-| 1.3 | Admin email + right password > **Sign in** | Lands on **Dashboard** |
+| 1.3 | CSM Manager email + right password > **Sign in** | Lands on **Dashboard** |
 | 1.4 | Click the eye icon in the password field | Password becomes visible / hidden |
-| 1.5 | Signed out, open `.../admin/clients` directly > sign in as admin | After sign-in you land on **Clients** (back where you came from) |
+| 1.5 | Signed out, open `.../admin/clients` directly > sign in as a CSM Manager | After sign-in you land on **Clients** (back where you came from) |
 | 1.6 | Top-right initials > **Sign out** | Back on the sign-in page |
 | 1.7 | Sign in as CSM | Lands on **My Clients** |
 | 1.8 | Sign in as client owner | Lands on client **Home** |
@@ -44,7 +44,7 @@ Tips: use a normal window for one account and an **Incognito window** (Ctrl+Shif
 
 ---
 
-## 2. Admin: Dashboard (sign in as admin)
+## 2. CSM Manager: Dashboard (sign in as the CSM Manager, admin@motionz.ai)
 
 | # | Steps | Expected |
 |---|---|---|
@@ -56,7 +56,7 @@ Tips: use a normal window for one account and an **Incognito window** (Ctrl+Shif
 | 2.6 | Card "Lead requests to handle", next to "No contract attached" (do 13.26 to 13.44 first) | Lists each client that has open lead replacement or unresponsive lead requests, with "n open" beside the name and a yellow "n open" total at the top; or "No open lead replacement or unresponsive lead requests." Clicking a name opens that client's page |
 | 2.7 | Mark every request of one listed client done (13.47) > back to **Dashboard** | That client is no longer in the card and the total went down |
 
-## 3. Admin: Clients list
+## 3. CSM Manager: Clients list
 
 | # | Steps | Expected |
 |---|---|---|
@@ -66,11 +66,11 @@ Tips: use a normal window for one account and an **Incognito window** (Ctrl+Shif
 | 3.4 | **Status** dropdown: try All, Active, Onboarding, Suspended, Archived | List changes correctly each time |
 | 3.5 | **CSM** dropdown > pick a CSM | Only that CSM's clients |
 | 3.6 | **Clear Filters** | Everything back |
-| 3.7 | On a row click **…** | Menu: Manage client, Suspend, Archive. Fully visible on screen |
+| 3.7 | On a row click **…** | Menu: Manage client, Suspend, Archive, Delete permanently. Fully visible on screen |
 | 3.8 | **Open portal** on a row | Client portal opens in a **new tab** with bar "Viewing as staff · <client>" (no "Back to Admin" link); the Clients list is still open in the first tab |
 | 3.9 | Look under the company name of a client with no contract (e.g. TC Roofing Test before 5.8) | Small grey "No contract" under the name. Clients with a contract, and archived clients, do not show it. At 1024px wide the table still fits with no sideways scrolling |
 
-## 4. Admin: Add client (uses a NEW test client; do not use Zydeco)
+## 4. CSM Manager: Add client (uses a NEW test client; do not use Zydeco)
 
 Left menu > **Clients** > **Add client**.
 
@@ -85,7 +85,7 @@ Left menu > **Clients** > **Add client**.
 | 4.7 | Google Drive folder https://drive.google.com/drive/folders/1rfpLmUMN5AJqjN2oND5eQGeoH1KPmCGZ | New folder "TC Roofing Test" holding "TC Roofing Test - Tracking" and "TC Roofing Test - Money Leak Calculator", both shared with the client email as editor |
 | 4.8 | **Done** | Back on Clients; TC Roofing Test listed, Onboarding, 0% |
 
-## 5. Admin: Client detail (Clients > **…** on TC Roofing Test > **Manage client**)
+## 5. CSM Manager: Client detail (Clients > **…** on TC Roofing Test > **Manage client**)
 
 | # | Steps | Expected |
 |---|---|---|
@@ -106,7 +106,7 @@ Left menu > **Clients** > **Add client**.
 | 5.9f | Pick a real PDF under 4 MB, Signed on = today > **Upload contract** | "Uploading…" then a notice "Contract uploaded to TC Roofing Test's Google Drive folder. Only Motionz staff and the account owner can open it." Listed as "Signed … · Uploaded file in Google Drive · Open". **Open** shows the PDF in Google Drive. In Drive the file is inside the client's folder; its Share dialog lists the owner's email as **Viewer** and General access is **Restricted** |
 | 5.9g | Sign in as the TC owner > **Contract** | The contract with **Open document** and under it "Opens in Google Drive. Sign in to Google with <owner email> to view it." Signed in to Google with that email the PDF opens; in a browser signed in to another Google account Google says you need access |
 | 5.9h | A contract attached as a link (5.8), on the owner's Contract page | **Open document** with no Google Drive line under it |
-| 5.9i | As admin: **Remove** the uploaded contract > the dialog | It adds "The uploaded file is moved to the bin in Google Drive." Confirm: the row is gone; in Drive the file is in the bin; the owner's Contract page no longer lists it |
+| 5.9i | As a CSM Manager: **Remove** the uploaded contract > the dialog | It adds "The uploaded file is moved to the bin in Google Drive." Confirm: the row is gone; in Drive the file is in the bin; the owner's Contract page no longer lists it |
 | 5.9j | On a client with **no Drive folder yet** (Google files row shows a set-up button): upload a PDF | "This client has no Google Drive folder yet. Press "Set up Google files" under Company details first, then upload the contract again." Nothing is added. **Paste a link** still works for that client |
 | 5.10 | **Client team** > **Invitations waiting** > **Send again** > confirm | One sentence "We emailed a new invitation…". Gmail gets a new invite; the old link no longer works |
 | 5.11 | **Invite** button > email `heshantharushka2002+tc2@gmail.com` > send | "We emailed the invitation to …" |
@@ -126,8 +126,8 @@ Use **TC Roofing Test** (it has a Drive folder). Keep the client's Drive folder 
 |---|---|---|
 | 5.17 | **Company details > Google files** | Next to the links there is a **Re-sync Drive access** button (only when the client has a Drive folder) |
 | 5.18 | Press **Re-sync Drive access** | "Checking who can open this client's Google files…" then "Access is up to date. …" or "Added n, removed n. …". Press again: "Access is up to date." |
-| 5.19 | In Drive: the **parent folder** > Share | Every active portal admin is an **Editor**. General access: **Restricted** |
-| 5.20 | In Drive: the **client folder** > Share | The assigned CSM is an Editor (admins show too, passed down from the parent folder). The client owner and team are **not** on the folder |
+| 5.19 | In Drive: the **parent folder** > Share | Every active CSM Manager is an **Editor**. General access: **Restricted** |
+| 5.20 | In Drive: the **client folder** > Share | The assigned CSM is an Editor (CSM Managers show too, passed down from the parent folder). The client owner and team are **not** on the folder |
 | 5.21 | In Drive: the **tracking sheet** and the **calculator** > Share | The client owner is an Editor; so is every active team member who may see Results Tracking. General access: **Restricted** on both |
 | 5.22 | **Assigned CSM** > another CSM > Save | Saved. In Drive the new CSM is on the client folder and the previous one is gone. Change it back > Save: it swaps back |
 | 5.23 | **Client team**: untick **Results Tracking** for a team member > save | In Drive that member is no longer on the tracking sheet or calculator. Tick it again > save: they are back |
@@ -137,9 +137,9 @@ Use **TC Roofing Test** (it has a Drive folder). Keep the client's Drive folder 
 | 5.27 | **Audit Logs** | One "Google Drive access updated" entry for each step above that changed something; none for a re-sync that found nothing to change |
 | 5.28 | Only while the Google script has **not** been updated yet: press **Re-sync Drive access** | Red text "The Google script needs updating before Drive access can be managed." Nothing changes in Drive, and saving the client, changing the CSM or the team still works |
 
-While doing section 16 (suspend / reactivate / archive / unarchive) check Drive again: while the client is suspended or archived the owner and team are **off** both sheets and the contract, the CSM and admins still have access; after reactivating or unarchiving the owner and team are back.
+While doing section 16 (suspend / reactivate / archive / unarchive) check Drive again: while the client is suspended or archived the owner and team are **off** both sheets and the contract, the CSM and the CSM Managers still have access; after reactivating or unarchiving the owner and team are back.
 
-## 6. Admin: GHL Connect
+## 6. CSM Manager: GHL Connect
 
 | # | Steps | Expected |
 |---|---|---|
@@ -148,7 +148,7 @@ While doing section 16 (suspend / reactivate / archive / unarchive) check Drive 
 | 6.3 | **Cancel** | Editor closes, nothing saved |
 | 6.4 | Zydeco row shows Location ID `TG1QAGQkANvoJ3UdmZRZ` and "Last lead received" | Matches GHL |
 
-## 7. Admin: Staff
+## 7. CSM Manager: Staff
 
 | # | Steps | Expected |
 |---|---|---|
@@ -165,12 +165,12 @@ While doing section 16 (suspend / reactivate / archive / unarchive) check Drive 
 | 7.11 | **Delete** on a CSM who has clients | Dialog "Delete <name>? …"; pressing **Delete** shows inside the dialog "<name> still looks after N clients. Give those clients to another CSM first…"; nobody is deleted |
 | 7.12 | Add a throwaway staff member, then **Delete** > **Delete** | "<name> was deleted."; the row is gone; signing in with that email says it is not a staff account; Audit log shows "Staff member deleted" and their older entries are still there |
 | 7.13 | **Add a staff member** form at 1024px and wider | Name, email, Role and the **Add staff member** button sit on one row; the button is the same height as the boxes and level with them |
-| 7.14 | Drive access (needs the updated Google script): add a throwaway **Admin**, then look at the parent Drive folder > Share | The new admin is an Editor on the parent folder (and receives Google's "shared with you" email if the address is a Google account; otherwise the add still succeeds) |
-| 7.15 | **Edit** that admin > change Role to CSM > Save | They are no longer on the parent folder. Change back to Admin: they are on it again |
-| 7.16 | **Delete** the throwaway admin | Gone from the parent folder. Anyone you shared the parent folder with by hand, who is not portal staff, is still there |
+| 7.14 | Drive access (needs the updated Google script): add a throwaway **CSM Manager**, then look at the parent Drive folder > Share | The new CSM Manager is an Editor on the parent folder (and receives Google's "shared with you" email if the address is a Google account; otherwise the add still succeeds) |
+| 7.15 | **Edit** that CSM Manager > change Role to CSM > Save | They are no longer on the parent folder. Change back to CSM Manager: they are on it again |
+| 7.16 | **Delete** the throwaway CSM Manager | Gone from the parent folder. Anyone you shared the parent folder with by hand, who is not portal staff, is still there |
 | 7.17 | Disable, then enable, a CSM who has clients (a disabled row shows **Enable**; disabling is done from the database on staging) | Disabled: gone from the folder of every client they look after. Enabled: back on each |
 
-## 8. Admin: Portal Templates
+## 8. CSM Manager: Portal Templates
 
 | # | Steps | Expected |
 |---|---|---|
@@ -178,7 +178,7 @@ While doing section 16 (suspend / reactivate / archive / unarchive) check Drive 
 | 8.2 | Step 1 **Edit** > clear Step name > Save step | "Fill in every field before saving…" |
 | 8.3 | Put the name back > change Right now text > Save > then change it back | "Saved … New clients will get this wording." |
 
-## 9. Admin: Video Scripts library
+## 9. CSM Manager: Video Scripts library
 
 | # | Steps | Expected |
 |---|---|---|
@@ -188,7 +188,7 @@ While doing section 16 (suspend / reactivate / archive / unarchive) check Drive 
 | 9.4 | **Edit** on TEST script > change text > Save | Saved |
 | 9.5 | **Delete script** on TEST script > **Yes, delete** | Deleted; Pain Point back to (5) |
 
-## 10. Admin: Settings & Integrations
+## 10. CSM Manager: Settings & Integrations
 
 | # | Steps | Expected |
 |---|---|---|
@@ -198,11 +198,11 @@ While doing section 16 (suspend / reactivate / archive / unarchive) check Drive 
 | 10.2b | **Website change requests** box: `nope` > Save. Then **Lead forms** box: `also bad` > Save | Each time the red "Invalid email address: …" is under the box with the mistake, the other boxes are not marked, nothing saved |
 | 10.2c | Website change requests `heshantharushka2002+web@gmail.com`, Lead forms `heshantharushka2002+leads@gmail.com` > Save > reload the page | Saved; all three boxes keep their addresses. Audit Logs: "Notification settings updated" naming the lists that changed |
 | 10.2d | Sign in as the Zydeco owner > Home > **Website Change Request** > send one | Gmail: the request arrives at `+web` AND at the client's CSM (one email each). Nothing arrives at `+leads` |
-| 10.2e | As admin, empty the Website change requests box > Save > send another request as the owner | Only the CSM gets it (same as before this setting existed) |
+| 10.2e | As a CSM Manager, empty the Website change requests box > Save > send another request as the owner | Only the CSM gets it (same as before this setting existed) |
 | 10.3 | Staff sign-in security > **CSMs only** > Save > sign out > sign in as CSM | "Check your email" step |
 | 10.4 | Type `000000` > Verify | "That code is not correct. You have 4 tries left." |
 | 10.5 | Gmail "Your Motionz sign-in code" > type the code > Verify | Lands on My Clients |
-| 10.6 | Sign in as admin > Settings > **Off** > Save | Saved (admin signs in without a code) |
+| 10.6 | Sign in as a CSM Manager > Settings > **Off** > Save | Saved (the CSM Manager signs in without a code) |
 | 10.7 | "Onboarding forms without a client" | "Nothing to review." or a list with **Link** |
 | 10.8 | "Connected services" | Email, Client tracking sheets, GoHighLevel webhooks all **Connected** |
 
@@ -250,7 +250,7 @@ You need a Slack Incoming Webhook link for a test channel: in Slack open **Apps*
 
 | # | Steps | Expected |
 |---|---|---|
-| 10.29 | Admin > **Settings & Integrations** > card **Slack messages** | Sub-line "When a client sends a Lead Replacement or Unresponsive Lead form, post a message to a Slack channel." Badge **Off**, an empty box "Slack webhook link", the four steps to get the link under it, **Save** greyed out. No "Send a test message" and no "Remove" yet |
+| 10.29 | CSM Manager workspace > **Settings & Integrations** > card **Slack messages** | Sub-line "When a client sends a Lead Replacement or Unresponsive Lead form, post a message to a Slack channel." Badge **Off**, an empty box "Slack webhook link", the four steps to get the link under it, **Save** greyed out. No "Send a test message" and no "Remove" yet |
 | 10.30 | Type `hello` > **Save** | Red under the box: "That does not look like a link…". Nothing saved |
 | 10.31 | Type `http://hooks.slack.com/services/T0/B0/x` > Save | "The link must start with https://." |
 | 10.32 | Type `https://example.com/services/T0/B0/x` > Save | "That is not a Slack webhook link. It must start with https://hooks.slack.com/services/." |
@@ -267,7 +267,7 @@ You need a Slack Incoming Webhook link for a test channel: in Slack open **Apps*
 | 10.43 | **Remove** | "Removed. Lead forms are no longer posted to Slack." Badge **Off**, empty box. A new client request posts nothing and adds no "could not be posted" entry |
 | 10.44 | Sign in as a CSM and open `/admin/integrations` | You are sent to My Clients; a CSM cannot see or change this |
 
-## 11. Admin: Audit Logs and Security Alerts
+## 11. CSM Manager: Audit Logs and Security Alerts
 
 | # | Steps | Expected |
 |---|---|---|
@@ -288,7 +288,7 @@ You need a Slack Incoming Webhook link for a test channel: in Slack open **Apps*
 | 12.2 | Search `zydeco`, then the **Show** filter | Works |
 | 12.3 | Zydeco > **Update setup** | Onboarding answers + 4 steps |
 | 12.3a | **My Clients**: a client with no contract | Small grey "No contract" under the company name; not shown for clients that have one |
-| 12.3b | **Update setup** on a client with no contract | Blue notice near the top: "This client has no contract attached yet. Ask an admin to attach it (Admin → Clients → <client> → Contract)." After an admin attaches one and you reload, the notice is gone. The CSM has no way to attach it themselves |
+| 12.3b | **Update setup** on a client with no contract | Blue notice near the top: "This client has no contract attached yet. Ask a CSM Manager to attach it (Clients → <client> → Contract)." After a CSM Manager attaches one and you reload, the notice is gone. The CSM has no way to attach it themselves |
 | 12.4 | **Edit step** on step 2 > clear Right now > Save step | "\"Right now\" cannot be empty…" |
 | 12.5 | Type text, Status **In progress** > Save | Saved; progress unchanged; client Home shows it as current step |
 | 12.6 | **Open portal** | Opens in a **new tab**; staff bar "Viewing as staff · <client>" (no "Back to CSM" link); hero says "Welcome, Heshan." (client's name, not the CSM's) |
@@ -328,15 +328,15 @@ You need a Slack Incoming Webhook link for a test channel: in Slack open **Apps*
 | 13.25 | Fix phone > Save > reload (F5) | "Your changes were saved."; reload shows the NEW phone |
 | 13.25b | Click **My profile** (link under the Company Profile heading) > look at **Sign-in email** | Your email is shown as plain text with "This is the email you sign in with. To change it, ask your Motionz contact." There is no box to type in and no **Change email** button (staff see "…ask a Motionz admin.") |
 
-### 13b. Lead forms on the Leads page (built into the portal; no admin setup needed)
+### 13b. Lead forms on the Leads page (built into the portal; no CSM Manager setup needed)
 
-Before you start: Admin > Settings & Integrations > **Lead forms** box has `heshantharushka2002+leads@gmail.com`
+Before you start: CSM Manager workspace > Settings & Integrations > **Lead forms** box has `heshantharushka2002+leads@gmail.com`
 and "Also email the CSM" is ticked (10.2c). The forms need the database table from
 `supabase/migrations/20261007000004_lead_requests.sql` (see `docs/HANDOVER.md`).
 
 | # | Steps | Expected |
 |---|---|---|
-| 13.26 | Left menu > **Leads** | Under the page intro: "Need help with a lead?" with **Request a lead replacement** and **Report an unresponsive lead**. They are always there (no admin setting). Each lead row has two small links at the end: **Replace** and **Not responding**. Under the leads table: a card **Your requests** ("You have not sent any requests yet…" the first time) |
+| 13.26 | Left menu > **Leads** | Under the page intro: "Need help with a lead?" with **Request a lead replacement** and **Report an unresponsive lead**. They are always there (no CSM Manager setting). Each lead row has two small links at the end: **Replace** and **Not responding**. Under the leads table: a card **Your requests** ("You have not sent any requests yet…" the first time) |
 | 13.27 | Click **Request a lead replacement** | A full page "Lead replacement" opens (not a pop-up) with "← Back to Leads", the intro "Submit a lead you think should be replaced. It is checked against the replacement rules straight away and approved requests go to our marketing team.", a rules box (**Replaceable:** … / **Not replaceable:** … / "Every request is checked against these rules straight away…"), and the line "Submitting as *your name* · *your company*". There are **no** boxes for your own name, company or client id |
 | 13.28 | In the rules box click **Unresponsive Lead form** | The Unresponsive lead page opens. Its rules box says "**Before you submit:** you should have called **twice a day** … Submit the lead from **day 4** …" and its **Lead Replacement form** link goes back |
 | 13.29 | On Lead replacement click **Submit request** with everything empty | Nothing is sent. "Some answers need a second look. We have marked them for you." Red under each box: "Enter the lead's name.", "Enter the lead's phone number.", "Choose a reason.", "Choose an answer.", "Please answer this question." The cursor is in the first one |
@@ -355,10 +355,10 @@ and "Also email the CSM" is ticked (10.2c). The forms need the database table fr
 | 13.41 | Days `4.5` or empty > submit; then How have you tried `called` > submit | "Enter a whole number of days, from 0 to 365."; "Please give more detail (at least 20 characters)." |
 | 13.42 | **Back to Leads** > card **Your requests** | Every request you sent, newest first: lead name, "Lead replacement" or "Unresponsive lead", the date, the outcome badge and the reason. With more than 20 a **Show more** button loads the next 20 |
 | 13.43 | Sign in as another client (TC Roofing Test) > **Leads** | Their Your requests does not show Zydeco's requests |
-| 13.44 | As admin or the client's CSM open the client's portal ("Viewing as staff") > **Leads** > send a request | It works; the email says it was sent by the member of staff, and the staff list (13.45) shows them as the sender |
+| 13.44 | As a CSM Manager or the client's CSM open the client's portal ("Viewing as staff") > **Leads** > send a request | It works; the email says it was sent by the member of staff, and the staff list (13.45) shows them as the sender |
 | 13.45 | As a team member who does not have **Leads** ticked (15.x) | No Leads in the menu; opening `/portal/<client>/leads/replacement` directly sends you back to the portal home page, never the form |
 | 13.46 | Phone width (375px) > **Leads**, both forms, the result screen | Buttons wrap under "Need help with a lead?"; each lead card has **Replace · Not responding** on its own line at the bottom; the forms are one column; the dropdown options wrap; nothing is cut off and nothing scrolls sideways |
-| 13.46a | Admin points Texting registration form at another form link > as the client open **Setup Progress** > **Open texting form** | The pop-up shows the NEW form. Put the original link back afterwards |
+| 13.46a | A CSM Manager points Texting registration form at another form link > as the client open **Setup Progress** > **Open texting form** | The pop-up shows the NEW form. Put the original link back afterwards |
 
 **The instant result, for every combination** (A = Approved, R = Needs review):
 
@@ -380,18 +380,18 @@ wording under Your requests and on the staff card.
 
 | # | Steps | Expected |
 |---|---|---|
-| 13.47 | As admin: Clients > the client > card **Lead requests** (under the onboarding answers) | Every request, newest first: the form type, lead name and phone (the phone is a link), the outcome badge, **Open** or **Done**, the reason, the client's answers in full, "Sent by *email* · *date and time*", and a **Mark done** button. A yellow "n open" badge at the top of the card |
+| 13.47 | As a CSM Manager: Clients > the client > card **Lead requests** (under the onboarding answers) | Every request, newest first: the form type, lead name and phone (the phone is a link), the outcome badge, **Open** or **Done**, the reason, the client's answers in full, "Sent by *email* · *date and time*", and a **Mark done** button. A yellow "n open" badge at the top of the card |
 | 13.48 | **Mark done** on one | It turns to **Done** (slightly faded) with "marked done by *you* *time*" and the button becomes **Reopen**. The "n open" badge goes down. Audit Logs: "Lead request marked done or reopened" |
 | 13.49 | **Reopen** | Back to **Open** |
 | 13.50 | As the client's CSM: My Clients > the client > setup page > card **Lead requests** | The same list with the same buttons; marking done works |
 | 13.51 | As a CSM who is **not** assigned to this client, open `/csm/clients/<that client id>/setup` | "This client is not assigned to you."; no lead requests are shown |
 | 13.52 | As the client: **Leads** > Your requests after staff marked one done | The outcome badge and reason are unchanged (Open/Done is staff-only) |
-| 13.54 | As admin: the client's **Lead requests** card > on a **Lead replacement** request click **Change outcome** | A small form opens under that request: **Outcome** (Approved / Not replaceable / Needs review, the current one chosen), "Note for the client (optional)", **Save outcome** and **Cancel**. An **Unresponsive lead** request has no Change outcome button |
+| 13.54 | As a CSM Manager: the client's **Lead requests** card > on a **Lead replacement** request click **Change outcome** | A small form opens under that request: **Outcome** (Approved / Not replaceable / Needs review, the current one chosen), "Note for the client (optional)", **Save outcome** and **Cancel**. An **Unresponsive lead** request has no Change outcome button |
 | 13.55 | Choose **Not replaceable**, note `TEST We spoke to the homeowner and they still want the inspection.` > **Save outcome** | The badge turns red **Not replaceable** and the line under it is your note. The request stays **Open**. Audit Logs: "Lead request outcome changed by staff" with the old and new outcome and the note |
 | 13.56 | As the client: **Leads** > Your requests | That request now shows **Not replaceable** and your note |
 | 13.57 | **Change outcome** again > **Approved**, leave the note empty > Save | Green **Approved** with "This matches the replacement rules. It has been sent to our marketing team." (Not replaceable with no note reads "Our team looked at this request. It does not match the replacement rules."; Needs review reads "Our team will look at this one and get back to you.") |
 | 13.58 | As the client's CSM do 13.54 to 13.55 on the setup page; as a CSM who is not assigned, the card is not shown (13.51) | The assigned CSM can change the outcome; nobody else can |
-| 13.53 | Admin > Settings: empty the **Lead forms** box and untick "Also email the CSM" > Save > as the client send a request | The client's CSM still gets the email. For a client with no CSM, every admin gets it. Put the settings back afterwards |
+| 13.53 | CSM Manager workspace > Settings: empty the **Lead forms** box and untick "Also email the CSM" > Save > as the client send a request | The client's CSM still gets the email. For a client with no CSM, every CSM Manager gets it. Put the settings back afterwards |
 
 ### 13c. The onboarding form (built into the portal) and your answers on Setup Progress
 
@@ -413,12 +413,12 @@ CSV, a `.exe` or `.mp4` file, and a file larger than 4 MB.
 | 13.44 | **Back to Setup Progress** | The card shows "Submitted <date, time>"; the button now says **Update your answers**; a line says "Sending the form again replaces nothing — your CSM sees the newest answers first." |
 | 13.45 | Click **View your answers** | The answers open inside the same card in the order of the form (question in small grey text, your answer under it), "Sent from <your email>". The two uploads show the **file names as links** with their size; clicking one downloads that file. The button turns into **Hide your answers** |
 | 13.46 | Gmail | "Onboarding form submitted: <client>" to every address in Settings > Notification emails, plus the client's CSM when **Also email the CSM** is ticked. The email lists the answers (uploads by file name) and **Open client in portal** opens the client on staging |
-| 13.47 | As **admin**: Clients > the client > Manage client > **Onboarding form answers**. As the **CSM**: My Clients > the client > **Update setup** | Both show the same answers, "Submitted <date, time> by <client email>", and the file links download the files |
-| 13.48 | As admin: **Audit Logs** > Today | "Onboarding form sent from the portal", Client: the client, by the client's email |
+| 13.47 | As a **CSM Manager**: Clients > the client > Manage client > **Onboarding form answers**. As the **CSM**: My Clients > the client > **Update setup** | Both show the same answers, "Submitted <date, time> by <client email>", and the file links download the files |
+| 13.48 | As a CSM Manager: **Audit Logs** > Today | "Onboarding form sent from the portal", Client: the client, by the client's email |
 | 13.49 | As the client: **Update your answers** | The form opens with **your last answers filled in** and the line "We filled in the answers you sent on <date, time>…". The files you sent are listed as "· sent before" with **Remove** |
 | 13.50 | Change one answer > **Send updated answers** > Back to Setup Progress > **View your answers** | Two pills at the top: "Latest · <date, time>" and the older one. Clicking each shows that set of answers; nothing was overwritten. The newest one still lists the files you kept |
 | 13.51 | **Update your answers** > change nothing > **Send updated answers** (within 10 minutes of 13.50) | "Thanks…" with "We already have these answers. Nothing was sent twice." No new pill on Setup Progress and no new email |
-| 13.52 | As admin or the CSM open the client's portal ("Viewing as staff") > Setup Progress > **Update your answers** > send | Works; the new set says "Submitted … by <your staff email>" |
+| 13.52 | As a CSM Manager or the CSM open the client's portal ("Viewing as staff") > Setup Progress > **Update your answers** > send | Works; the new set says "Submitted … by <your staff email>" |
 | 13.53 | Phone width (375px): open the form, type, tick, upload, send; then Setup Progress with answers open | No sideways scrolling; the section buttons scroll sideways inside their own row; long questions and file names wrap; buttons stay on screen |
 | 13.54 | As a team member **without** Setup Progress: type `…/portal/<client>/onboarding/form` in the address bar; then open `/api/portal/<client>/onboarding-answers` | Sent to Home; the address answers 403 (no answers shown). Signed out: 401 |
 | 13.55 | Copy a file link from 13.45 > sign in as a **different client** (Incognito) > paste it | Refused (403). Signed out: sent to sign-in / 401 |
@@ -446,7 +446,7 @@ CSV, a `.exe` or `.mp4` file, and a file larger than 4 MB.
 | 15.3 | **Company Profile** | Read-only, "Only the account owner can change these details." |
 | 15.4 | Home | "Welcome, Sam."; no contract or setup tiles unless allowed |
 
-## 16. Suspend / reactivate / archive / unarchive (as admin, on TC Roofing Test)
+## 16. Suspend / reactivate / archive / unarchive (as a CSM Manager, on TC Roofing Test)
 
 Before this: accept the TC Roofing Test invite from Gmail (case 4.6) and set a password, so there is an owner to lock out.
 
@@ -457,7 +457,26 @@ Before this: accept the TC Roofing Test invite from Gmail (case 4.6) and set a p
 | 16.3 | **Reactivate** > confirm | Active; TC owner can sign in again |
 | 16.4 | **Archive** > confirm | Listed as Archived; TC owner sign-in refused ("Portal archived") |
 | 16.5 | Clients > Status **Archived** > **…** > **Unarchive** > confirm | Active again; TC owner can sign in |
-| 16.6 | When finished, tell Claude to delete TC Roofing Test (`scripts/clear-test-clients.mjs --only=<id> --apply --yes-this-is-staging`) and trash its Drive sheet | |
+| 16.6 | Open TC Roofing Test > scroll to the very bottom | A red-edged **Danger zone** block with **Delete permanently**. It is not next to Suspend / Archive at the top |
+| 16.7 | **Delete permanently** | Dialog "Delete client permanently": what is deleted, what is kept (Audit Logs history, the Google Drive folder), the hint "If they might come back, archive them instead.", and a box to type the client's name. The red button is greyed out. Clicking outside the dialog does not close it |
+| 16.8 | Type a wrong name, then `tc roofing test` (lower case) | Wrong name: button stays greyed out. Right name in any letter case: the button can be clicked |
+| 16.9 | **Cancel**. On the Clients list: **…** on the same row > **Delete permanently** | The same dialog opens from the list |
+| 16.10 | Type the name > **Delete permanently** | Button shows "Deleting...", then you are on the Clients list with a green message "TC Roofing Test was deleted. Their Google Drive folder was kept. Delete it in Drive if you no longer need it." The client is no longer in the list under any Status filter |
+| 16.11 | Incognito: sign in as the TC owner | "Incorrect email or password." A tab where the owner was still signed in shows "This portal no longer exists…" on the next click |
+| 16.12 | **Audit Logs** > Today | "Client deleted permanently" by you, with Client: TC Roofing Test. The older entries about TC Roofing Test are still there |
+| 16.13 | In Drive: the TC Roofing Test folder > Share | The folder and its files are still there. The owner, the team and the CSM are no longer on it (CSM Managers still reach it through the parent folder) |
+| 16.14 | Sign in as a CSM > My Clients > open a client | There is no Delete permanently button for a CSM; only CSM Managers can delete |
+| 16.15 | Add a throwaway client > **Archive** it > Status **Archived** > **…** > **Delete permanently** > type the name > confirm | An archived client can be deleted the same way |
+
+### 16b. The Admin role is now called "CSM Manager" (name only)
+
+| # | Steps | Expected |
+|---|---|---|
+| 16.20 | Sign in with admin@motionz.ai | Same sign-in and same address (`/admin`). Next to the logo the tag says **CSM Manager**; the header sub-title says **CSM Manager workspace** |
+| 16.21 | **My profile** | "You are signed in as CSM Manager." Under Sign-in email: "To change it, ask another CSM Manager." (a CSM sees "ask a CSM Manager") |
+| 16.22 | **Staff** | Role badge **CSM Manager**; the Role dropdown offers **CSM** and **CSM Manager**; the intro says "CSM Managers see everything" |
+| 16.23 | **Audit Logs** | Entries made by you show "(CSM Manager)" after your email |
+| 16.24 | Staff > add a staff member with Role **CSM Manager**, with a throwaway @motionz.ai address | The welcome email says "you have been added as a CSM Manager" |
 
 ---
 
@@ -468,11 +487,11 @@ GHL: top-left **sub-account switcher**. Only use the sub-account with Location I
 | # | Steps | Expected |
 |---|---|---|
 | 17.1 | Zydeco sub-account > **Automation > Workflows** | "Sync leads" / "Portal: sync leads" is **Published** |
-| 17.2 | **Contacts** > Add contact `Portal Test 2`, email `heshantharushka2002+ghl2@gmail.com` > **Opportunities** > add an opportunity for it in the pipeline | Within ~1 min: portal (owner) **Leads** shows Portal Test 2 with that stage; Admin > **GHL Connect** "Last lead received" updates |
+| 17.2 | **Contacts** > Add contact `Portal Test 2`, email `heshantharushka2002+ghl2@gmail.com` > **Opportunities** > add an opportunity for it in the pipeline | Within ~1 min: portal (owner) **Leads** shows Portal Test 2 with that stage; CSM Manager workspace > **GHL Connect** "Last lead received" updates |
 | 17.3 | In GHL drag the opportunity to another stage | Portal Leads shows the new stage, still ONE row |
 | 17.4 | Portal (owner) > **Book a Call** > book any free time | ~1 min: Home **Next CSM Call** shows it. GHL (Motionz Your Rejuvenation) > Calendars > Appointments shows it; Automation > Workflows > Portal: CSM calls > Execution Logs has a run |
 | 17.5 | The onboarding form no longer goes through GoHighLevel: it is tested in 13c (13.43 to 13.48). In GHL (Motionz Your Rejuvenation) > Contacts, after sending the form in the portal | **No** contact is created or updated by it, and the workflow `Portal: onboarding form` has no new run |
-| 17.6 | Admin > **Audit Logs** > Today | "New lead received from GoHighLevel", "Call booking received…", and "Onboarding form sent from the portal" (not "…received from GoHighLevel"), all Client: Zydeco Roof Revival |
+| 17.6 | CSM Manager workspace > **Audit Logs** > Today | "New lead received from GoHighLevel", "Call booking received…", and "Onboarding form sent from the portal" (not "…received from GoHighLevel"), all Client: Zydeco Roof Revival |
 | 17.6a | **Only in an approved test sub-account** (Zydeco is a real client now: do not test there) whose `Portal: sync leads` workflow has the **Opportunity Status Changed = Lost** trigger (see `docs/07-integrations/ghl-workflows.md`, "Removing a lead: mark the opportunity Lost"): open the test opportunity > set its status to **Lost** | Within ~1 min the lead is gone from the client's portal **Leads** page and the lead count drops by one. Audit Logs: "Lead removed (marked lost in GoHighLevel)" with the lead's name and the client. A lead request sent earlier about that lead is still under Your requests with its name and phone |
 | 17.6b | In the same test sub-account: move another opportunity to a stage whose name only contains the word (for example "Lost Contact Attempt") | The lead stays in the portal and shows that stage |
 | 17.6c | Set the lost opportunity back to **Open** and move it to another stage (or add a new opportunity for the same contact) | The lead is back on the Leads page |
@@ -480,7 +499,7 @@ GHL: top-left **sub-account switcher**. Only use the sub-account with Location I
 
 ## 18. Phone check
 
-On your phone (or Chrome > F12 > phone icon > iPhone): sign in as owner, admin and CSM and open every page above.
+On your phone (or Chrome > F12 > phone icon > iPhone): sign in as owner, CSM Manager and CSM and open every page above.
 Expected: no sideways scrolling, bottom bar works (**More** opens the rest), tables turn into cards, the **…** menu and dialogs stay on screen.
 
 ## 19. Emails you should have received (Gmail, `from:no-reply@mail.motionz.ai`)

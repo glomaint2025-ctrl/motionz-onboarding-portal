@@ -268,7 +268,7 @@ export default function StaffPage() {
       <div style={{ marginBottom: 'var(--space-6)' }}>
         <h1 style={{ marginBottom: 'var(--space-1)' }}>Staff</h1>
         <p style={{ color: 'var(--color-text-secondary)' }}>
-          Motionz team members who can sign in. CSMs see only the clients assigned to them; Admins see everything.
+          Motionz team members who can sign in. CSMs see only the clients assigned to them; CSM Managers see everything.
         </p>
       </div>
 
@@ -305,7 +305,7 @@ export default function StaffPage() {
             }}
           >
             <option value="csm">CSM</option>
-            <option value="admin">Admin (CSM manager)</option>
+            <option value="admin">CSM Manager</option>
           </Select>
           <Button type="submit" variant="primary" disabled={busy}>
             {busy ? 'Adding...' : 'Add staff member'}
@@ -406,7 +406,7 @@ export default function StaffPage() {
                         </td>
                         <td data-label="Role">
                           <div className="ui-staff-badges">
-                            <StatusBadge status={m.role === 'admin' ? 'Admin' : 'CSM'} variant="progress" dot={false} />
+                            <StatusBadge status={m.role === 'admin' ? 'CSM Manager' : 'CSM'} variant="progress" dot={false} />
                             {m.self && <StatusBadge status="You" variant="pending" dot={false} />}
                           </div>
                         </td>
@@ -531,10 +531,10 @@ export default function StaffPage() {
               value={editRole}
               disabled={editing.self}
               onChange={(e) => setEditRole(e.target.value === 'admin' ? 'admin' : 'csm')}
-              helperText={editing.self ? 'You cannot change your own role. Ask another admin.' : undefined}
+              helperText={editing.self ? 'You cannot change your own role. Ask another CSM Manager.' : undefined}
             >
               <option value="csm">CSM</option>
-              <option value="admin">Admin (CSM manager)</option>
+              <option value="admin">CSM Manager</option>
             </Select>
             {editRole === 'csm' && (
               <Input

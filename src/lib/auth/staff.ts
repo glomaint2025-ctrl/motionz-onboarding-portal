@@ -112,14 +112,14 @@ export const authenticateStaff = async (
         attemptedEmail: normalizedEmail,
         currentRole: user?.role || 'unassigned',
         requestedRole: 'admin',
-        reason: 'Non-designated admin requested administrative role',
+        reason: 'CSM Manager access was requested by someone who is not approved for it',
         timestamp: new Date().toISOString(),
       },
     });
 
     return {
       success: false,
-      error: 'Access denied. Administrator privileges require designated staff approval.',
+      error: 'Access denied. CSM Manager access needs approval from Motionz.',
     };
   }
 
@@ -143,7 +143,7 @@ export const authenticateStaff = async (
   if (user && user.status === 'suspended') {
     return {
       success: false,
-      error: 'Your staff access has been disabled. Contact a Motionz administrator.',
+      error: 'Your staff access has been disabled. Contact a CSM Manager.',
     };
   }
 
