@@ -243,6 +243,30 @@ For a quick test without GoHighLevel you can use a throw-away link from https://
 | 10.27 | Empty the box > Save | "Saved. Lead form submissions are no longer sent anywhere." Badge **Off**. A new client request calls nothing and adds no "could not be sent" entry |
 | 10.28 | Sign in as a CSM and open `/admin/integrations` | You are sent to My Clients; a CSM cannot see or change this |
 
+### 10d. Slack messages (lead forms)
+
+You need a Slack Incoming Webhook link for a test channel: in Slack open **Apps** > search
+**Incoming Webhooks** > **Add to Slack** > choose the channel > copy the **Webhook URL**.
+
+| # | Steps | Expected |
+|---|---|---|
+| 10.29 | Admin > **Settings & Integrations** > card **Slack messages** | Sub-line "When a client sends a Lead Replacement or Unresponsive Lead form, post a message to a Slack channel." Badge **Off**, an empty box "Slack webhook link", the four steps to get the link under it, **Save** greyed out. No "Send a test message" and no "Remove" yet |
+| 10.30 | Type `hello` > **Save** | Red under the box: "That does not look like a link…". Nothing saved |
+| 10.31 | Type `http://hooks.slack.com/services/T0/B0/x` > Save | "The link must start with https://." |
+| 10.32 | Type `https://example.com/services/T0/B0/x` > Save | "That is not a Slack webhook link. It must start with https://hooks.slack.com/services/." |
+| 10.33 | Paste the real Webhook URL > **Save** | "Saved. New lead forms are now posted to this Slack channel." Badge **On**. The box now shows `https://hooks.slack.com/services/T…/B…/••••` (the real link is hidden). **Send a test message** and **Remove** appear |
+| 10.34 | Reload the page (F5) | Still **On**, the box still shows the hidden version. The real link is nowhere on the page (also not in the browser's Network tab) |
+| 10.35 | **Send a test message** | "Test message sent. Check the Slack channel." The channel shows "Test message from the Motionz portal" |
+| 10.36 | **Audit Logs** | "Slack webhook link updated" by you. The details say Set / Off only, never the link |
+| 10.37 | As the client send a Lead Replacement request (13.31) | Slack shows, in bold, "Lead replacement request — Approved", then Client, Lead (name · phone), Reason, Appointment, What happened, Submitted by, and a link that opens the client's admin page |
+| 10.38 | As the client send a request whose What happened contains `<!channel> & <b>bold</b>` | The Slack message shows those characters as plain text. Nobody is notified by @channel and nothing turns into a link |
+| 10.39 | As the client send an Unresponsive Lead (13.40) | Slack shows "Unresponsive lead", Client, Lead, "Days since the lead was sent", "How they tried to reach them", Submitted by and the link |
+| 10.40 | Send the same request again within 10 minutes (13.37); send an Unresponsive Lead with Days `2` | No Slack message for either (a duplicate and a refused form are not posted) |
+| 10.41 | In Slack, remove the Incoming Webhook (or archive the channel) > **Send a test message** | Red: "Slack answered with an error (…)" with Slack's own short reason. As the client send another request: the client still sees the normal result and the email still arrives; **Audit Logs** has "Lead form could not be posted to Slack" with the reason |
+| 10.42 | Click in the box without typing anything new | **Save** stays greyed out (the hidden link cannot be saved over the real one) |
+| 10.43 | **Remove** | "Removed. Lead forms are no longer posted to Slack." Badge **Off**, empty box. A new client request posts nothing and adds no "could not be posted" entry |
+| 10.44 | Sign in as a CSM and open `/admin/integrations` | You are sent to My Clients; a CSM cannot see or change this |
+
 ## 11. Admin: Audit Logs and Security Alerts
 
 | # | Steps | Expected |
@@ -317,12 +341,13 @@ and "Also email the CSM" is ticked (10.2c). The forms need the database table fr
 | 13.28 | In the rules box click **Unresponsive Lead form** | The Unresponsive lead page opens. Its rules box says "**Before you submit:** you should have called **twice a day** … Submit the lead from **day 4** …" and its **Lead Replacement form** link goes back |
 | 13.29 | On Lead replacement click **Submit request** with everything empty | Nothing is sent. "Some answers need a second look. We have marked them for you." Red under each box: "Enter the lead's name.", "Enter the lead's phone number.", "Choose a reason.", "Choose an answer.", "Please answer this question." The cursor is in the first one |
 | 13.30 | Phone `call me`; What happened `didn't qualify` > **Submit request** | "Enter a valid phone number…" and "Please give more detail (at least 30 characters). Say exactly what happened." Under the big box, before typing, the grey help reads: Vague reasons like "didn't qualify" with no detail are not approved. Say which part didn't qualify and how you know. |
-| 13.31 | Click **Pick from your leads** > type part of a lead's name > click the lead. Reason **Wrong contact info**, appointment **No, there was no appointment**, What happened: `TEST Called three times, the number belongs to a different person who never filled in a form.` > **Submit request** | Picking fills the name and phone and shows "Picked: *name*" with **Clear**. After sending: a green **Approved** badge and "This matches the replacement rules. It has been sent to our marketing team.", with **Submit another** and **Back to Leads** |
+| 13.31 | Click **Pick from your leads** > type part of a lead's name > click the lead. Reason **Wrong contact information**, appointment **No, an appointment was never booked**, What happened: `TEST Called three times, the number belongs to a different person who never filled in a form.` > **Submit request** | Picking fills the name and phone and shows "Picked: *name*" with **Clear**. After sending: a green **Approved** badge and "This matches the replacement rules. It has been sent to our marketing team.", with **Submit another** and **Back to Leads** |
 | 13.32 | Gmail (`+leads`) and the CSM's inbox | One email each: subject "Lead replacement request (Approved): *lead name* — *client*". Body has the lead name and phone, the reason, the appointment answer, what happened, "Outcome: Approved", the reason text and who sent it. The button opens the client in the portal (admin page for the team address, the CSM's own page for the CSM) |
-| 13.33 | **Submit another** > type a name and phone by hand. Reason **I inspected the roof and they didn't buy**, appointment **Yes, and I inspected the roof**, 30+ characters > submit | Red **Not replaceable** badge: "You inspected a qualified roof and the homeowner didn't buy. That counts as a qualified appointment." Email subject says "(Not replaceable)" |
-| 13.34 | Again: reason **Not the homeowner**, appointment **Yes, and I inspected the roof** | **Not replaceable** (an inspected roof is a qualified appointment) |
-| 13.35 | Again: reason **Roof doesn't qualify (not asphalt shingle, or under 4 years old)**, appointment **Yes, and I inspected the roof** | **Approved** |
-| 13.36 | Again: reason **Something else**, any appointment answer | Yellow **Needs review** badge: "Our team will look at this one and get back to you." Email subject says "(Needs review)" |
+| 13.33 | Open the **Did you get to an appointment with this homeowner?** dropdown | Exactly three options, in this order: "No, an appointment was never booked" · "No, it was booked but cancelled / no-show before the inspection" · "Yes, I was at the appointment" |
+| 13.34 | Open the **Reason for replacement** dropdown | Exactly seven options, in this order: "No longer wants the inspection" · "Wrong contact information" · "Wrong roof material / doesn't qualify" · "Not the homeowner" · "Outside service area" · "Appointment didn't match qualification parameters" · "Other" |
+| 13.35 | **Submit another** > type a name and phone by hand. Reason **Wrong contact information**, appointment **Yes, I was at the appointment**, 30+ characters > submit | Yellow **Needs review** badge: "Our team will look at this one and get back to you." (the two answers do not fit together). Email subject says "(Needs review)" |
+| 13.36 | Again: reason **Other**, any appointment answer | Yellow **Needs review** badge with the same sentence |
+| 13.36a | Again, once for each of the other reasons with any appointment answer (see the table below) | Green **Approved**: "This matches the replacement rules. It has been sent to our marketing team." The form never answers "Not replaceable" by itself |
 | 13.37 | Send exactly the same request as 13.36 again within 10 minutes | The same result screen with "We already had this request, so nothing was sent twice." No second email, no second row under Your requests |
 | 13.38 | **Back to Leads** > on any lead row click **Replace** | The Lead replacement page opens with that lead already picked (name and phone filled). **Not responding** does the same on the other form, and "Days since lead was sent" is filled from the day the lead was added |
 | 13.39 | **Report an unresponsive lead**: name, phone, Days `2`, How have you tried: `TEST rang twice a day, texts delivered, no replies.` > **Submit lead** | Nothing is sent. Red under Days: "Submit this lead from day 4. Keep calling twice a day until then." No email, nothing new under Your requests |
@@ -335,6 +360,22 @@ and "Also email the CSM" is ticked (10.2c). The forms need the database table fr
 | 13.46 | Phone width (375px) > **Leads**, both forms, the result screen | Buttons wrap under "Need help with a lead?"; each lead card has **Replace · Not responding** on its own line at the bottom; the forms are one column; the dropdown options wrap; nothing is cut off and nothing scrolls sideways |
 | 13.46a | Admin points Texting registration form at another form link > as the client open **Setup Progress** > **Open texting form** | The pop-up shows the NEW form. Put the original link back afterwards |
 
+**The instant result, for every combination** (A = Approved, R = Needs review):
+
+| Reason for replacement | Never booked | Booked but cancelled / no-show | I was at the appointment |
+|---|---|---|---|
+| No longer wants the inspection | A | A | A |
+| Wrong contact information | A | A | **R** |
+| Wrong roof material / doesn't qualify | A | A | A |
+| Not the homeowner | A | A | A |
+| Outside service area | A | A | A |
+| Appointment didn't match qualification parameters | A | A | A |
+| Other | **R** | **R** | **R** |
+
+"Not replaceable" is only ever set by staff (13.54 to 13.58). Requests sent before 7 Oct with the
+earlier options (for example "I inspected the roof and they didn't buy") still show their original
+wording under Your requests and on the staff card.
+
 ### 13b-2. Staff: handling lead requests
 
 | # | Steps | Expected |
@@ -345,6 +386,11 @@ and "Also email the CSM" is ticked (10.2c). The forms need the database table fr
 | 13.50 | As the client's CSM: My Clients > the client > setup page > card **Lead requests** | The same list with the same buttons; marking done works |
 | 13.51 | As a CSM who is **not** assigned to this client, open `/csm/clients/<that client id>/setup` | "This client is not assigned to you."; no lead requests are shown |
 | 13.52 | As the client: **Leads** > Your requests after staff marked one done | The outcome badge and reason are unchanged (Open/Done is staff-only) |
+| 13.54 | As admin: the client's **Lead requests** card > on a **Lead replacement** request click **Change outcome** | A small form opens under that request: **Outcome** (Approved / Not replaceable / Needs review, the current one chosen), "Note for the client (optional)", **Save outcome** and **Cancel**. An **Unresponsive lead** request has no Change outcome button |
+| 13.55 | Choose **Not replaceable**, note `TEST We spoke to the homeowner and they still want the inspection.` > **Save outcome** | The badge turns red **Not replaceable** and the line under it is your note. The request stays **Open**. Audit Logs: "Lead request outcome changed by staff" with the old and new outcome and the note |
+| 13.56 | As the client: **Leads** > Your requests | That request now shows **Not replaceable** and your note |
+| 13.57 | **Change outcome** again > **Approved**, leave the note empty > Save | Green **Approved** with "This matches the replacement rules. It has been sent to our marketing team." (Not replaceable with no note reads "Our team looked at this request. It does not match the replacement rules."; Needs review reads "Our team will look at this one and get back to you.") |
+| 13.58 | As the client's CSM do 13.54 to 13.55 on the setup page; as a CSM who is not assigned, the card is not shown (13.51) | The assigned CSM can change the outcome; nobody else can |
 | 13.53 | Admin > Settings: empty the **Lead forms** box and untick "Also email the CSM" > Save > as the client send a request | The client's CSM still gets the email. For a client with no CSM, every admin gets it. Put the settings back afterwards |
 
 ### 13c. The onboarding form (built into the portal) and your answers on Setup Progress
@@ -427,7 +473,10 @@ GHL: top-left **sub-account switcher**. Only use the sub-account with Location I
 | 17.4 | Portal (owner) > **Book a Call** > book any free time | ~1 min: Home **Next CSM Call** shows it. GHL (Motionz Your Rejuvenation) > Calendars > Appointments shows it; Automation > Workflows > Portal: CSM calls > Execution Logs has a run |
 | 17.5 | The onboarding form no longer goes through GoHighLevel: it is tested in 13c (13.43 to 13.48). In GHL (Motionz Your Rejuvenation) > Contacts, after sending the form in the portal | **No** contact is created or updated by it, and the workflow `Portal: onboarding form` has no new run |
 | 17.6 | Admin > **Audit Logs** > Today | "New lead received from GoHighLevel", "Call booking received…", and "Onboarding form sent from the portal" (not "…received from GoHighLevel"), all Client: Zydeco Roof Revival |
-| 17.7 | Clean up: GHL delete the test opportunity + contact; cancel the test booking if wanted | Tell Claude to remove the test lead from the portal |
+| 17.6a | **Only in an approved test sub-account** (Zydeco is a real client now: do not test there) whose `Portal: sync leads` workflow has the **Opportunity Status Changed = Lost** trigger (see `docs/07-integrations/ghl-workflows.md`, "Removing a lead: mark the opportunity Lost"): open the test opportunity > set its status to **Lost** | Within ~1 min the lead is gone from the client's portal **Leads** page and the lead count drops by one. Audit Logs: "Lead removed (marked lost in GoHighLevel)" with the lead's name and the client. A lead request sent earlier about that lead is still under Your requests with its name and phone |
+| 17.6b | In the same test sub-account: move another opportunity to a stage whose name only contains the word (for example "Lost Contact Attempt") | The lead stays in the portal and shows that stage |
+| 17.6c | Set the lost opportunity back to **Open** and move it to another stage (or add a new opportunity for the same contact) | The lead is back on the Leads page |
+| 17.7 | Clean up: GHL delete the test opportunity + contact; cancel the test booking if wanted | Mark the test opportunity **Lost** first so it leaves the portal (deleting it outright is not detected) |
 
 ## 18. Phone check
 
@@ -436,4 +485,4 @@ Expected: no sideways scrolling, bottom bar works (**More** opens the rest), tab
 
 ## 19. Emails you should have received (Gmail, `from:no-reply@mail.motionz.ai`)
 
-Client invitation · team invitation (+ sent again) · password reset · staff sign-in code · website change request (with and without attachment) · onboarding form submitted (you + CSM) · lead replacement request (Approved, Not replaceable, Needs review) · unresponsive lead. Each: correct name, buttons open the **staging** site, nothing broken.
+Client invitation · team invitation (+ sent again) · password reset · staff sign-in code · website change request (with and without attachment) · onboarding form submitted (you + CSM) · lead replacement request (Approved, Needs review) · unresponsive lead. Each: correct name, buttons open the **staging** site, nothing broken.

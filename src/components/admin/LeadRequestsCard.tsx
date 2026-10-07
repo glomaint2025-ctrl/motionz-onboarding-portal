@@ -1,9 +1,16 @@
 'use client';
 
 import React, { useEffect, useState } from 'react';
-import { Card, CardHeader, Button, Skeleton, StatusBadge } from '@/components/ui';
+import { Card, CardHeader, Button, Input, Select, Skeleton, StatusBadge } from '@/components/ui';
 import { Notice } from '@/components/admin/Notice';
-import { decisionBadge, decisionLabel, detailLines, typeLabel } from '@/lib/lead-requests/definition';
+import {
+  OUTCOME_NOTE_MAX,
+  STAFF_OUTCOMES,
+  decisionBadge,
+  decisionLabel,
+  detailLines,
+  typeLabel,
+} from '@/lib/lead-requests/definition';
 import { formatDateTime } from '@/lib/utils/format';
 
 interface StaffLeadRequest {
@@ -25,7 +32,8 @@ const mutedStyle: React.CSSProperties = { color: 'var(--color-text-muted)', font
 
 /**
  * Staff view of one client's Lead Replacement and Unresponsive Lead requests (Admin → client page,
- * CSM → client setup page), newest first, with "Mark done" / "Reopen".
+ * CSM → client setup page), newest first, with "Mark done" / "Reopen" and, for replacement requests,
+ * "Change outcome" (the client sees the new outcome and reason under "Your requests").
  * Loads its own data, so a problem here never blocks the rest of the page.
  */
 export function LeadRequestsCard({ clientId }: { clientId: string }) {
@@ -34,6 +42,8 @@ export function LeadRequestsCard({ clientId }: { clientId: string }) {
   const [state, setState] = useState<'loading' | 'ready' | 'unavailable' | 'error'>('loading');
   const [busyId, setBusyId] = useState<string | null>(null);
   const [actionError, setActionError] = useState('');
+  // The request whose outcome is being changed, with what has been chosen so far.
+  const [outcome, setOutcome] = useState<{ id: string; decision: string; note: string } | null>(null);
 
   const load = async () => {
     setState('loading');
@@ -73,6 +83,30 @@ export function LeadRequestsCard({ clientId }: { clientId: string }) {
         await load();
       } else {
         setActionError(data.error || 'The request could not be updated. Please try again.');
+      }
+    } catch {
+      setActionError('Could not reach the server. Nothing was changed.');
+    } finally {
+      setBusyId(null);
+    }
+  };
+
+  const saveOutcome = async () => {
+    if (!outcome) return;
+    setBusyId(outcome.id);
+    setActionError('');
+    try {
+      const res = await fetch(`/api/csm/clients/${clientId}/lead-requests`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ requestId: outcome.id, decision: outcome.decision, note: outcome.note }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (res.ok && data.success) {
+        setOutcome(null);
+        await load();
+      } else {
+        setActionError(data.error || 'The outcome could not be changed. Please try again.');
       }
     } catch {
       setActionError('Could not reach the server. Nothing was changed.');
@@ -178,16 +212,76 @@ export function LeadRequestsCard({ clientId }: { clientId: string }) {
                       ? ` · marked done${r.resolved_by_name ? ` by ${r.resolved_by_name}` : ''} ${formatDateTime(r.resolved_at)}`
                       : ''}
                   </span>
-                  <Button
-                    type="button"
-                    variant={isDone ? 'outline' : 'secondary'}
-                    size="sm"
-                    disabled={busyId !== null}
-                    onClick={() => setStatus(r, isDone ? 'open' : 'done')}
-                  >
-                    {busyId === r.id ? 'Saving...' : isDone ? 'Reopen' : 'Mark done'}
-                  </Button>
+                  <div style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: 'var(--space-2)' }}>
+                    {r.type === 'replacement' && outcome?.id !== r.id && (
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        disabled={busyId !== null}
+                        onClick={() => {
+                          setActionError('');
+                          setOutcome({ id: r.id, decision: STAFF_OUTCOMES.includes(r.decision as any) ? r.decision : 'needs_review', note: '' });
+                        }}
+                      >
+                        Change outcome
+                      </Button>
+                    )}
+                    <Button
+                      type="button"
+                      variant={isDone ? 'outline' : 'secondary'}
+                      size="sm"
+                      disabled={busyId !== null}
+                      onClick={() => setStatus(r, isDone ? 'open' : 'done')}
+                    >
+                      {busyId === r.id && outcome?.id !== r.id ? 'Saving...' : isDone ? 'Reopen' : 'Mark done'}
+                    </Button>
+                  </div>
                 </div>
+
+                {outcome?.id === r.id && (
+                  <div
+                    style={{
+                      marginTop: 'var(--space-3)',
+                      paddingTop: 'var(--space-3)',
+                      borderTop: '1px solid var(--color-border-subtle)',
+                    }}
+                  >
+                    <div
+                      style={{
+                        display: 'grid',
+                        gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 220px), 1fr))',
+                        gap: '0 var(--space-3)',
+                      }}
+                    >
+                      <Select
+                        id={`lead-request-outcome-${r.id}`}
+                        label="Outcome"
+                        size="sm"
+                        value={outcome.decision}
+                        onChange={(e) => setOutcome({ ...outcome, decision: e.target.value })}
+                        options={STAFF_OUTCOMES.map((key) => ({ value: key, label: decisionLabel(key) }))}
+                      />
+                      <Input
+                        id={`lead-request-outcome-note-${r.id}`}
+                        label="Note for the client (optional)"
+                        value={outcome.note}
+                        onChange={(e) => setOutcome({ ...outcome, note: e.target.value })}
+                        maxLength={OUTCOME_NOTE_MAX}
+                        placeholder="e.g. We spoke to the homeowner and they still want the inspection."
+                        helperText="The client sees the outcome and this note under Your requests. Leave it empty to use the standard sentence."
+                      />
+                    </div>
+                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 'var(--space-2)' }}>
+                      <Button type="button" variant="primary" size="sm" disabled={busyId !== null} onClick={saveOutcome}>
+                        {busyId === r.id ? 'Saving...' : 'Save outcome'}
+                      </Button>
+                      <Button type="button" variant="outline" size="sm" disabled={busyId !== null} onClick={() => setOutcome(null)}>
+                        Cancel
+                      </Button>
+                    </div>
+                  </div>
+                )}
               </div>
             );
           })}

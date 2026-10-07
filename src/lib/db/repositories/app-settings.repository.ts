@@ -96,11 +96,18 @@ export interface AutomationSettings {
   lead_request_webhook_url: string;
 }
 
+/** Where the portal posts a Slack message when a client sends a lead form. */
+export interface SlackSettings {
+  /** A Slack Incoming Webhook link (https://hooks.slack.com/services/...). Empty = off. Never sent to the browser. */
+  lead_request_slack_webhook_url: string;
+}
+
 const DEFAULTS: {
   notifications: NotificationSettings;
   security: SecuritySettings;
   forms: FormSettings;
   automation: AutomationSettings;
+  slack: SlackSettings;
 } = {
   notifications: {
     onboarding_form_recipients: [],
@@ -113,6 +120,7 @@ const DEFAULTS: {
   // GoHighLevel form ids shown in the client portal. Admins change them on Settings & Integrations.
   forms: FORM_SETTING_DEFAULTS,
   automation: { lead_request_webhook_url: '' },
+  slack: { lead_request_slack_webhook_url: '' },
 };
 
 type SettingKey = keyof typeof DEFAULTS;
@@ -139,6 +147,7 @@ export class AppSettingsRepository {
       }
     }
     if (key === 'automation' && typeof merged.lead_request_webhook_url !== 'string') merged.lead_request_webhook_url = '';
+    if (key === 'slack' && typeof merged.lead_request_slack_webhook_url !== 'string') merged.lead_request_slack_webhook_url = '';
     return merged as (typeof DEFAULTS)[K];
   }
 

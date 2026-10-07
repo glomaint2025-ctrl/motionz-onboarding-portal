@@ -7,7 +7,7 @@ import { GET as getCsms } from '../../src/app/api/admin/csms/route';
 import { POST as logout } from '../../src/app/api/auth/logout/route';
 import { GET as getPortalData } from '../../src/app/api/portal/[clientId]/data/route';
 import { getStore, resetStore } from '../../src/lib/db';
-import { tenantRepository, userRepository, appSettingsRepository } from '../../src/lib/db/repositories';
+import { tenantRepository, userRepository, appSettingsRepository, leadRepository, leadRequestRepository } from '../../src/lib/db/repositories';
 import { createSessionToken, SESSION_COOKIE_NAME } from '../../src/lib/auth/session';
 import { nextUpcomingCall } from '../../src/lib/utils/appointments';
 import { auditActionLabel, securityEventLabel, detailChips } from '../../src/lib/utils/log-labels';
@@ -184,6 +184,124 @@ async function run() {
   assert.strictEqual(leadAudit.details?.matched, true);
   assert.strictEqual(leadAudit.resource_id, DEMO_LOCATION);
   assert.strictEqual(leadAudit.actor_role, 'webhook');
+
+  // ───────────── 2b. A lead marked Lost / Abandoned in GoHighLevel leaves the portal ─────────────
+  // Every shape the handler accepts, each on its own lead.
+  const lostShapes: [string, string, Record<string, any>, Record<string, any>][] = [
+    ['the lead_lost event', 'lead_lost', {}, {}],
+    ['customData.status = lost', 'lead', {}, { status: 'lost' }],
+    ['customData.status = Abandoned', 'lead', {}, { status: 'Abandoned' }],
+    ['status = LOST', 'lead', { status: 'LOST' }, {}],
+    ['status = abandoned', 'lead', { status: 'abandoned' }, {}],
+    ['opportunity.status = Lost', 'lead', { opportunity: { status: 'Lost', pipeline_stage: 'Inspection Booked' } }, {}],
+    ['opportunity_status = lost', 'lead', { opportunity_status: 'lost', pipeline_stage: 'Inspection Booked' }, {}],
+    ['a status of lost next to a normal stage', 'lead', { status: 'lost' }, { stage: 'Contacted' }],
+    ['a stage named exactly Lost', 'lead', {}, { stage: 'Lost' }],
+    ['a stage named exactly abandoned', 'lead', { pipeline_stage: ' abandoned ' }, {}],
+  ];
+  for (const [index, [what, event, body, custom]] of Array.from(lostShapes.entries())) {
+    const contactId = `br-lost-${index}`;
+    await send('lead', demoLead(contactId, { first_name: 'Lena', last_name: `Lost ${index}` }), { stage: 'New Lead' });
+    assert.strictEqual(leadsFor(contactId).length, 1);
+    const removedBefore = audits('ghl.webhook.lead_removed').length;
+    const res = await send(event, demoLead(contactId, body), custom);
+    assert.strictEqual(res.status, 200, what);
+    assert.strictEqual(res.json.removed, true, `${what}: the reply says the lead was removed`);
+    assert.strictEqual(leadsFor(contactId).length, 0, `${what} removes the lead from the portal`);
+    assert.strictEqual(audits('ghl.webhook.lead_removed').length, removedBefore + 1, `${what} is audited`);
+    const removedAudit = audits('ghl.webhook.lead_removed')[0];
+    assert.strictEqual(removedAudit.tenant_id, DEMO_TENANT);
+    assert.strictEqual(removedAudit.details?.leadName, `Lena Lost ${index}`);
+    assert.strictEqual(removedAudit.details?.client, 'ABC Roofing');
+    assert.strictEqual(removedAudit.details?.event, event);
+    assert.strictEqual(removedAudit.actor_role, 'webhook');
+  }
+  assert.strictEqual(auditActionLabel('ghl.webhook.lead_removed'), 'Lead removed (marked lost in GoHighLevel)');
+
+  // A stage that only contains the word is a normal stage; so is any other status.
+  const keptShapes: [string, Record<string, any>, Record<string, any>][] = [
+    ['a stage called "Lost Contact Attempt"', {}, { stage: 'Lost Contact Attempt' }],
+    ['a stage called "Abandoned Cart Follow-up"', { pipeline_stage: 'Abandoned Cart Follow-up' }, {}],
+    ['a stage called "Not Lost"', { opportunity: { pipeline_stage: 'Not Lost' } }, {}],
+    ['status = open', { status: 'open' }, { stage: 'Contacted' }],
+    ['status = won', { opportunity: { status: 'won' } }, { stage: 'Sold' }],
+    ['a contact field that happens to say lost', { contact: { status: 'lost' }, notes: 'lost' }, { stage: 'Contacted' }],
+  ];
+  await send('lead', demoLead('br-kept'), { stage: 'New Lead' });
+  const removedSoFar = audits('ghl.webhook.lead_removed').length;
+  for (const [what, body, custom] of keptShapes) {
+    const res = await send('lead', demoLead('br-kept', body), custom);
+    assert.strictEqual(res.status, 200, what);
+    assert.strictEqual(res.json.removed, undefined, `${what} does not remove the lead`);
+    assert.strictEqual(leadsFor('br-kept').length, 1, `${what} keeps the lead`);
+  }
+  assert.strictEqual((await send('lead', demoLead('br-kept'), { stage: 'Lost Contact Attempt' })).status, 200);
+  assert.strictEqual(leadsFor('br-kept')[0].status, 'Lost Contact Attempt', 'it is stored as the lead\'s stage like any other');
+  assert.strictEqual(audits('ghl.webhook.lead_removed').length, removedSoFar);
+
+  // A lead the portal never had: answered 200, ignored, and written to the audit log.
+  const ignoredBefore = audits('ghl.webhook.ignored').length;
+  const neverHad = await send('lead_lost', demoLead('br-never-seen'));
+  assert.strictEqual(neverHad.status, 200);
+  assert.strictEqual(neverHad.json.ignored, true);
+  assert.strictEqual(neverHad.json.removed, undefined);
+  assert.strictEqual(leadsFor('br-never-seen').length, 0, 'a lost event never creates a lead');
+  assert.strictEqual(audits('ghl.webhook.ignored').length, ignoredBefore + 1);
+  assert.strictEqual(audits('ghl.webhook.ignored')[0].details?.eventType, 'lead_lost');
+  assert.match(audits('ghl.webhook.ignored')[0].details?.reason, /not in the portal/);
+  assert.strictEqual(audits('ghl.webhook.ignored')[0].tenant_id, DEMO_TENANT);
+  // The same lost event twice: the second finds nothing and is ignored.
+  await send('lead', demoLead('br-lost-twice'), { stage: 'New Lead' });
+  assert.strictEqual((await send('lead_lost', demoLead('br-lost-twice'))).json.removed, true);
+  assert.strictEqual((await send('lead_lost', demoLead('br-lost-twice'))).json.ignored, true);
+  // Still needs a location the portal knows and a contact id.
+  assert.strictEqual((await send('lead_lost', { contact_id: 'br-kept', location: { id: 'loc_nobody_has_this' } })).json.ignored, true);
+  assert.strictEqual((await send('lead_lost', { location: { id: DEMO_LOCATION } })).status, 400, 'lead_lost without contact_id is rejected');
+  assert.strictEqual(leadsFor('br-kept').length, 1, 'a lost event for another location never touches this client\'s lead');
+
+  // Only that client's lead goes: the same contact id under another client stays.
+  const lostCo = await tenantRepository.create({ name: 'Lost Co Roofing', slug: 'lost-co-roofing', primary_email: 'office@lostco.test', status: 'active', ghl_location_id: 'loc_lost_co' });
+  await send('lead', demoLead('br-shared-id'), { stage: 'New Lead' });
+  await send('lead', { ...demoLead('br-shared-id'), location: { id: 'loc_lost_co' } }, { stage: 'New Lead' });
+  assert.strictEqual(leadsFor('br-shared-id').length, 2);
+  await send('lead_lost', demoLead('br-shared-id'));
+  assert.deepStrictEqual(leadsFor('br-shared-id').map((l) => l.tenant_id), [lostCo.id], 'the other client keeps their lead');
+
+  // Lead requests about the removed lead survive, with their own copy of the name and phone number.
+  await send('lead', demoLead('br-requested', { first_name: 'Rhea', last_name: 'Requested', phone: '+1 555 010 7777' }), { stage: 'New Lead' });
+  const requestedLead = leadsFor('br-requested')[0];
+  const keptRequest = await leadRequestRepository.create({
+    tenant_id: DEMO_TENANT, lead_id: requestedLead.id, type: 'replacement', lead_name: 'Rhea Requested', lead_phone: '+1 555 010 7777',
+    details: { reason: 'not_homeowner', reason_label: 'Not the homeowner' }, decision: 'approved', decision_reason: 'ok',
+    submitted_by: 'user-client-1', submitter_email: 'john@abcroofing.com',
+  });
+  const otherRequest = await leadRequestRepository.create({
+    tenant_id: DEMO_TENANT, lead_id: leadsFor('br-kept')[0].id, type: 'unresponsive', lead_name: 'Stage Tester', lead_phone: '555',
+    details: {}, decision: 'sent', decision_reason: null, submitted_by: null, submitter_email: null,
+  });
+  assert.strictEqual((await send('lead', demoLead('br-requested'), { status: 'lost' })).json.removed, true);
+  assert.strictEqual(await leadRepository.findById(DEMO_TENANT, requestedLead.id), null);
+  const survivor = (await leadRequestRepository.findById(keptRequest.id))!;
+  assert.ok(survivor, 'the lead request is still there');
+  assert.strictEqual(survivor.lead_id, null, 'it no longer points at the removed lead');
+  assert.strictEqual(survivor.lead_name, 'Rhea Requested');
+  assert.strictEqual(survivor.lead_phone, '+1 555 010 7777');
+  assert.strictEqual((await leadRequestRepository.findById(otherRequest.id))!.lead_id, leadsFor('br-kept')[0].id, 'requests about other leads are untouched');
+
+  // The same contact gets a new open opportunity later: the lead is created again as usual.
+  const reopened = await send('lead', demoLead('br-requested', { first_name: 'Rhea', last_name: 'Requested', status: 'open' }), { stage: 'New Lead' });
+  assert.strictEqual(reopened.status, 200);
+  assert.strictEqual(reopened.json.removed, undefined);
+  assert.strictEqual(leadsFor('br-requested').length, 1, 're-opened in GoHighLevel, the lead is back');
+  assert.notStrictEqual(leadsFor('br-requested')[0].id, requestedLead.id, 'as a new row');
+  assert.strictEqual(leadsFor('br-requested')[0].status, 'New Lead');
+  assert.strictEqual((await leadRequestRepository.findById(keptRequest.id))!.lead_id, null);
+
+  // The repository on its own: removes only that client's lead and says what it removed.
+  assert.deepStrictEqual(await leadRepository.deleteByGhlContactId(DEMO_TENANT, 'br-no-such-contact'), []);
+  assert.deepStrictEqual(await leadRepository.deleteByGhlContactId(lostCo.id, 'br-kept'), [], 'another client\'s id removes nothing');
+  assert.deepStrictEqual((await leadRepository.deleteByGhlContactId(DEMO_TENANT, 'br-requested')).map((l) => l.ghl_contact_id), ['br-requested']);
+  console.log(' PASS: a lead marked Lost or Abandoned is removed and audited; look-alike stages are kept; unknown leads are ignored; a re-opened lead comes back; lead requests survive.');
 
   // ───────────── 3. CSM calls ─────────────
   // A second client whose company email belongs to no portal user, with one team member.

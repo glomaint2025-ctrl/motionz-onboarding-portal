@@ -1,6 +1,6 @@
 /**
  * What happens around a saved lead form (server only): the duplicate check, the email to the lead
- * review team and the optional automation webhook.
+ * review team, the Slack message and the optional automation webhook.
  */
 import {
   appSettingsRepository,
@@ -14,6 +14,8 @@ import { sendEmail, leadRequestEmail } from '../email';
 import { leadFormRecipients, uniqueEmails, DUPLICATE_WINDOW_MS } from '../onboarding/submissions';
 import { checkWebhookUrl } from './automation';
 import { decisionLabel, detailLines, type LeadRequestType } from './definition';
+import { leadRequestSlackText } from './slack';
+import { postToSlack, savedSlackWebhookUrl } from './slack-send';
 
 export const WEBHOOK_TIMEOUT_MS = 5000;
 
@@ -173,6 +175,45 @@ export async function sendLeadRequestWebhook(params: {
     });
   } catch (err: any) {
     console.error('[lead-requests] Could not record the webhook failure:', err?.message);
+  }
+  return 'failed';
+}
+
+/**
+ * Posts a saved request to the Slack channel set under Admin → Settings & Integrations, when one is
+ * set. Never throws: a failure is written to the audit log and the request stays saved.
+ * Returns 'off' when no Slack link is set.
+ */
+export async function sendLeadRequestSlack(params: {
+  request: LeadRequest;
+  tenant: Pick<Tenant, 'id' | 'name'>;
+  baseUrl: string;
+}): Promise<'off' | 'sent' | 'failed'> {
+  const { request, tenant, baseUrl } = params;
+  let failure = '';
+  try {
+    const url = await savedSlackWebhookUrl();
+    if (!url) return 'off';
+    const result = await postToSlack(url, leadRequestSlackText(request, tenant.name, `${baseUrl}/admin/clients/${tenant.id}`));
+    if (result.ok) return 'sent';
+    failure = result.error;
+  } catch (err: any) {
+    failure = `The Slack setting could not be read: ${String(err?.message || err).slice(0, 200)}`;
+  }
+
+  console.error('[lead-requests] Slack message failed:', failure);
+  try {
+    await auditLogRepository.create({
+      tenant_id: tenant.id,
+      actor_email: 'system',
+      actor_role: 'system',
+      action: 'lead_request.slack_failed',
+      resource_type: 'lead_request',
+      resource_id: request.id,
+      details: { reason: failure, type: request.type, leadName: request.lead_name },
+    });
+  } catch (err: any) {
+    console.error('[lead-requests] Could not record the Slack failure:', err?.message);
   }
   return 'failed';
 }

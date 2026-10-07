@@ -15,9 +15,11 @@ Read this first, then `docs/FINAL-REPORT.md` (what the portal does), `docs/CLIEN
 - Optional SQL (app works without): `ALTER TABLE user_invitations ADD COLUMN IF NOT EXISTS full_name TEXT; ALTER TABLE user_invitations ADD COLUMN IF NOT EXISTS allowed_modules TEXT[];`
 - **Contract reminder (staff only):** while a client has no contract, admins see a notice on the client's Contract card, a "No contract attached" dashboard card and a "No contract" tag in the Clients list; CSMs see the tag and an "ask an admin" notice on the setup page (`hasContract` in the staff APIs, one query via `contractRepository.listTenantIdsWithContract()`; never sent to clients).
 - **Notification emails per team:** the `notifications` setting has three lists (onboarding form, `website_request_recipients`, `lead_form_recipients`) edited on Settings & Integrations; website change requests go to the CSM (or all admins if none) plus the website list; the lead list (`leadFormRecipients()` in `src/lib/onboarding/submissions.ts`) is emailed every Lead Replacement and Unresponsive Lead form.
-- **Lead Replacement and Unresponsive Lead forms are built into the portal (7 Oct)**, on the client's Leads page; see the section "Lead Replacement and Unresponsive Lead forms" below. **The database owner must run `supabase/migrations/20261007000004_lead_requests.sql` first**; until then the forms say "This form is not available yet. Please tell your CSM." and staff lists are empty (nothing crashes). The dropdown options are a **first proposal awaiting the client's confirmation**.
+- **Lead Replacement and Unresponsive Lead forms are built into the portal (7 Oct)**, on the client's Leads page; see the section "Lead Replacement and Unresponsive Lead forms" below. **The database owner must run `supabase/migrations/20261007000004_lead_requests.sql` first**; until then the forms say "This form is not available yet. Please tell your CSM." and staff lists are empty (nothing crashes). The dropdown options and the instant decision use **the client's own wording (confirmed 7 Oct)**; no new SQL was needed for that.
+- **Slack messages for lead forms (7 Oct):** Settings & Integrations → "Slack messages". The owner pastes a Slack Incoming Webhook link; every saved Lead Replacement / Unresponsive Lead form is then posted to that channel. **Nothing is posted until a link is saved.** No SQL, no env var.
+- **A lead marked Lost in GoHighLevel leaves the portal (7 Oct):** the webhook accepts `event = lead_lost`. **The GHL side is not set up yet**: the `Portal: sync leads` workflow needs the extra trigger described in `docs/07-integrations/ghl-workflows.md` ("Removing a lead: mark the opportunity Lost"), once a test sub-account exists. No SQL.
 - Test results: `docs/E2E-TEST-REPORT.md`.
-- **Waiting on the client:** media buyer email(s); second CSM calendar id; contract-signed automation; Discord item 27 ("7 days then delete"); confirmation of the Lead Replacement dropdown options and rules (built as a first proposal); the GoHighLevel Inbound Webhook link for the lead-form automation; CSM account for the client; production accounts; Google API key restriction; production Google account for the Apps Script.
+- **Waiting on the client:** media buyer email(s); second CSM calendar id; contract-signed automation; Discord item 27 ("7 days then delete"); a Slack Incoming Webhook link for the lead-form channel (to paste under Settings & Integrations → Slack messages); a test GoHighLevel sub-account (needed before the Lost trigger can be added and tested); CSM account for the client; production accounts; Google API key restriction; production Google account for the Apps Script.
 
 ## Where things are
 | Item | Value |
@@ -191,32 +193,80 @@ CSM.", "Your requests" is hidden, and the staff cards and the dashboard card are
 - **One place for the questions, checks and rules:** `src/lib/lead-requests/` —
   `definition.ts` (options, limits, labels), `validation.ts` (used by the page and the API),
   `decision.ts` (the instant decision, one pure function), `submissions.ts` (duplicate check, email,
-  webhook), `automation.ts` (the link check).
+  Slack, webhook), `slack.ts` (Slack link check, masked link, message text), `slack-send.ts` (the
+  call to Slack), `automation.ts` (the dormant automation link check).
+- **The dropdown options are the client's exact wording (answered 7 Oct)**, in his order.
+  "Did you get to an appointment with this homeowner?": `never_booked` "No, an appointment was never
+  booked" · `cancelled_no_show` "No, it was booked but cancelled / no-show before the inspection" ·
+  `attended` "Yes, I was at the appointment". "Reason for replacement":
+  `no_longer_wants_inspection` "No longer wants the inspection" · `wrong_contact_info` "Wrong contact
+  information" · `wrong_roof_material` "Wrong roof material / doesn't qualify" · `not_homeowner` "Not
+  the homeowner" · `outside_service_area` "Outside service area" · `qualification_mismatch`
+  "Appointment didn't match qualification parameters" · `other` "Other".
 - **The instant decision (Lead Replacement)**, in this order:
-  1. reason "I inspected the roof and they didn't buy" → **Not replaceable**
-  2. reason "Something else" → **Needs review**
-  3. appointment "Yes, and I inspected the roof" with any reason except "Roof doesn't qualify…" → **Not replaceable**
-  4. any of the six replaceable reasons → **Approved**
+  1. reason "Other" → **Needs review**
+  2. "Yes, I was at the appointment" with "Wrong contact information" → **Needs review** (the two
+     answers do not fit together)
+  3. every other combination → **Approved**
 
-  All three outcomes are saved and emailed; the client sees the outcome and its reason straight away.
+  | Reason | Never booked | Cancelled / no-show | Was at the appointment |
+  |---|---|---|---|
+  | No longer wants the inspection | Approved | Approved | Approved |
+  | Wrong contact information | Approved | Approved | **Needs review** |
+  | Wrong roof material / doesn't qualify | Approved | Approved | Approved |
+  | Not the homeowner | Approved | Approved | Approved |
+  | Outside service area | Approved | Approved | Approved |
+  | Appointment didn't match qualification parameters | Approved | Approved | Approved |
+  | Other | **Needs review** | **Needs review** | **Needs review** |
+
+  **"Not replaceable" is never worked out automatically** (none of the client's reasons means
+  "inspected and didn't buy"). The value stays in the type, the database check and the badge because
+  staff can set it by hand (see "Change outcome" below). The rules box on the form is unchanged.
+  Every outcome is saved and emailed; the client sees the outcome and its reason straight away.
   **Unresponsive Lead:** fewer than 4 days → refused with "Submit this lead from day 4. Keep calling
   twice a day until then." and **not saved**; otherwise saved as "Sent to the marketing team".
-- **The dropdown options are a first proposal awaiting the client's confirmation.** To change the
-  wording, edit the `label`s in `definition.ts` (keep the `key`s: they are what is stored and what the
-  decision uses). A new reason needs a key there and a line in `decision.ts` if it should not be
-  "Approved". Stored rows keep the label that was shown at the time (`details.reason_label`).
+- **Requests saved with the earlier options still display.** Each row stores the key and the label
+  that was shown at the time (`details.reason_label`, `details.appointment_label`), and the label is
+  what is shown. The retired keys (`cancelled_before_inspection`, `roof_not_qualified`,
+  `refused_inspection`, `inspected_no_sale`; `none`, `not_inspected`, `inspected`) are kept in
+  `definition.ts` for display only and are refused by the form and the API. To change wording later,
+  edit the `label`s (keep the `key`s); a new reason needs a key there and a line in `decision.ts` if
+  it should not be "Approved".
 - **API:** `GET/POST /api/portal/[clientId]/lead-requests` (signed in, own client only, `leads`
   module, 30 an hour per person; the same form for the same lead with the same answers within 10
   minutes returns the earlier result). Staff may submit for a client they can open; whoever is signed
   in is stored as the submitter. Staff: `GET/PATCH /api/csm/clients/[id]/lead-requests` (admins every
-  client, CSMs only assigned clients) for the list and **Mark done / Reopen**.
+  client, CSMs only assigned clients) for the list, **Mark done / Reopen**
+  (`{ requestId, status }`) and **Change outcome** (`{ requestId, decision, note? }`).
+- **Change outcome (staff):** on the Lead requests card every Lead Replacement request has a
+  "Change outcome" control: Approved / Not replaceable / Needs review, with an optional note of up to
+  300 characters. The note is saved as the request's reason (`decision_reason`), so the client reads
+  it under "Your requests"; with no note the standard sentence for that outcome is used. Unresponsive
+  Lead requests have no outcome to change. Audited as `lead_request.outcome_changed`. It does not
+  email anyone and does not mark the request done.
 - **Emails:** template `leadRequestEmail`; recipients are the **Lead forms** list on Settings &
   Integrations plus the client's CSM when that box is ticked; if that is nobody, the assigned CSM;
   with no CSM, every admin (`resolveLeadRequestRecipients`).
 - **Staff:** a **Lead requests** card on the admin client page and the CSM setup page
   (`src/components/admin/LeadRequestsCard.tsx`), and a dashboard card "Lead requests to handle"
   (open requests per client).
-- **Automations (optional):** Settings & Integrations → "Automations (optional)". An admin pastes a
+- **Slack messages:** Settings & Integrations → "Slack messages". An admin pastes a Slack
+  **Incoming Webhook** link (Slack → Apps → Incoming Webhooks → Add to Slack → choose the channel →
+  copy the Webhook URL). Stored in the app setting `slack.lead_request_slack_webhook_url` (its own
+  key, so the link never travels with any other setting). API `GET/PUT /api/admin/settings/slack`
+  (admin only) returns only `{ configured, lead_request_slack_webhook_url: "https://hooks.slack.com/services/T…/B…/••••" }`;
+  the real link never goes back to the browser, and saving the masked value changes nothing. Accepted:
+  https, host exactly `hooks.slack.com`, path starting `/services/`, 300 characters at most; empty
+  clears it. `POST /api/admin/settings/slack/test` posts "Test message from the Motionz portal" and
+  returns Slack's own error when it fails (10 tests per 10 minutes per admin). After every saved
+  submission (not for duplicates or refused forms) the portal POSTs `{ text }`: a bold heading
+  ("Lead replacement request — *outcome*" or "Unresponsive lead"), the client, the lead's name and
+  phone, the answers (long text cut to 500 characters), who sent it and a link to the admin client
+  page. `&`, `<` and `>` in anything a person typed are escaped, so nothing can become a mention or
+  a link. 5 second limit, redirects not followed, no retry. A failure never fails the client's
+  request; it is written to the audit log (`lead_request.slack_failed`). Saving or removing the link
+  is audited as `settings.slack_updated` (never with the link).
+- **Automations (optional, hidden and dormant):** Settings & Integrations → "Automations (optional)". An admin pastes a
   GoHighLevel **Inbound Webhook** link (app setting `automation.lead_request_webhook_url`, API
   `GET/PUT /api/admin/settings/automation`). After every saved submission the portal POSTs JSON
   `{ type, decision, decision_reason, lead: { name, phone, ghl_contact_id? }, details, client: { id,
@@ -225,7 +275,16 @@ CSM.", "Your requests" is hidden, and the staff cards and the dashboard card are
   A failure never fails the client's request; it is written to the audit log
   (`lead_request.webhook_failed`). No retry is attempted.
 - **Audit log:** `lead_request.submitted`, `lead_request.status_changed`,
-  `lead_request.webhook_failed`, `settings.automation_updated`.
+  `lead_request.outcome_changed`, `lead_request.slack_failed`, `lead_request.webhook_failed`,
+  `settings.slack_updated`, `settings.automation_updated`.
+- **A lead marked Lost in GoHighLevel:** `handleLead` in `src/app/api/webhooks/ghl/route.ts` removes
+  the lead (`leadRepository.deleteByGhlContactId`) when the event is `lead_lost`, when a `lead` event
+  carries a status of `lost` / `abandoned` (`customData.status`, `status`, `opportunity.status`,
+  `opportunity_status`), or when the stage is named exactly "Lost" / "Abandoned". Audited as
+  `ghl.webhook.lead_removed`; an unknown lead is ignored (`ghl.webhook.ignored`). Lead requests about
+  it keep their own name and phone; their `lead_id` becomes empty (`ON DELETE SET NULL`, already in
+  the `lead_requests` migration). A later open opportunity for the same contact creates the lead
+  again. GHL setup: `docs/07-integrations/ghl-workflows.md`.
 - **Removed:** the "Lead replacement form" and "Unresponsive lead form" rows of the GoHighLevel forms
   card, their keys in the `forms` setting and `LeadHelpForms.tsx`. A saved `forms` value that still
   has those keys is simply ignored.

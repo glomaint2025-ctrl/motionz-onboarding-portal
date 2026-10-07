@@ -11,7 +11,7 @@ Every webhook action needs these **Custom Data** entries (GHL's standard Webhook
 | Key | Value |
 |---|---|
 | `secret` | the `GHL_WEBHOOK_SECRET` value |
-| `event` | `lead`, `csm_call` or `onboarding_form` (see below) |
+| `event` | `lead`, `lead_lost`, `csm_call` or `onboarding_form` (see below) |
 
 Requests with a missing or wrong secret are rejected with 401 and recorded under **Admin → Security Events**. Events the portal cannot place (unknown sub-account, unknown email) return 200 and are ignored, so GHL does not retry them forever; each one is recorded under **Admin → Audit Logs** as "GoHighLevel event ignored" with the reason.
 
@@ -33,6 +33,47 @@ Shows each client's leads and their pipeline stage on the client's **Leads** pag
 Add this workflow to the **snapshot** used for new clients, so every new sub-account sends leads automatically.
 
 **Routing:** by the sub-account's **Location ID**. An admin pastes it under **Admin → GHL Connect** (it is the id in the sub-account URL after `/location/`). A Location ID can be connected to only one live client; saving one that another client already uses is refused.
+
+### Removing a lead: mark the opportunity Lost
+
+A lead whose opportunity is marked **Lost** (or **Abandoned**) in GoHighLevel disappears from the
+client's **Leads** page in the portal. This is how the reviews team removes a lead: they do not
+delete anything, they set the opportunity's status to Lost.
+
+Set it up once, in the same `Portal: sync leads` workflow:
+
+1. Open `Portal: sync leads` in the client's sub-account.
+2. **Add Trigger → Opportunity Status Changed.** Add the filter **Status = Lost**. If Abandoned
+   opportunities should also be removed, add a second **Opportunity Status Changed** trigger with
+   **Status = Abandoned**.
+3. This trigger must send a different `event` from the other two, so give it its own branch: after
+   the triggers add an **If / Else** on "Opportunity status is Lost (or Abandoned)". In that branch
+   add a **Webhook** action, method `POST`, the same URL as above, with **Custom Data**:
+   - `secret` = the secret
+   - `event` = `lead_lost`
+
+   The other branch keeps the existing Webhook action (`event` = `lead`, `stage` = the Pipeline
+   Stage merge field). If your GoHighLevel plan has no If / Else, make a second workflow
+   `Portal: remove lost leads` with only this trigger and this Webhook action; the result is the same.
+4. **Save → Publish.**
+5. **Update the snapshot** so new sub-accounts get it too.
+
+What the portal does with it:
+
+- The lead is removed from that client's Leads page and counts. Audit Logs: "Lead removed (marked
+  lost in GoHighLevel)" with the lead's name and the client.
+- Lead Replacement and Unresponsive Lead requests the client already sent about that lead stay under
+  "Your requests" and on the staff "Lead requests" card: each keeps its own copy of the lead's name
+  and phone number.
+- If the portal never had that lead, nothing happens (Audit Logs: "GoHighLevel event ignored: Lead
+  marked lost, but it is not in the portal.").
+- **Re-opening:** if the same contact later gets a new open opportunity, or the opportunity is set
+  back to Open and its stage changes, the normal `lead` event creates the lead again.
+
+The portal also treats an ordinary `lead` event as "lost" when it carries an opportunity status of
+`lost` or `abandoned` (Custom Data `status`, or the standard `status` / opportunity status fields),
+or when the pipeline stage is named exactly **Lost** or **Abandoned**. A stage that only contains
+the word, such as "Lost Contact Attempt", is a normal stage and the lead stays.
 
 ## 2. CSM calls: in Motionz's own sub-account (the one with the CSM booking calendar)
 
@@ -103,6 +144,7 @@ Saved the answers to the client's portal and emailed the notification list (clie
 
 GHL workflows have a **Test Workflow** button. After running it:
 - **Leads:** the lead appears on that client's Leads page.
+- **Lost lead:** mark a test opportunity Lost; within about a minute the lead is gone from that client's Leads page and Audit Logs shows "Lead removed (marked lost in GoHighLevel)".
 - **CSM call:** the date appears on the client's home page.
 - **Onboarding form (old workflow only, see section 3):** the answers appear on Admin → Clients → (client) and the notification email arrives.
 
@@ -114,7 +156,8 @@ Every received event is also recorded in **Admin → Audit Logs** (`ghl.webhook.
 
 The portal only stores what a workflow sends it. It never reads from GHL and never writes to GHL.
 
-- **Deletions in GHL are not mirrored.** A lead, contact or opportunity deleted in GHL stays in the portal. An appointment deleted in GHL also stays (a *cancelled* one is updated and no longer shown as the next call; a deleted one sends nothing).
+- **Deleting outright in GHL is not detected.** A contact or opportunity that is *deleted* in GHL sends nothing, so the lead stays in the portal. To remove a lead from the portal, mark its opportunity **Lost** (see "Removing a lead: mark the opportunity Lost" above); that is detected. An appointment deleted in GHL also stays (a *cancelled* one is updated and no longer shown as the next call; a deleted one sends nothing).
+- **A lead marked Lost before the Lost trigger was published stays.** Only status changes made after the trigger is live reach the portal.
 - **Contact edits arrive late.** A changed name, email or phone reaches the portal only with that lead's next stage change, because the workflow fires on Opportunity Created and Pipeline Stage Changed, not on contact edits.
 - **Older leads are not imported.** Leads that existed before the workflow was published appear only once their stage changes.
 - **A booking under a different email is ignored.** A CSM call is matched by the booking email. If it matches no portal user and no client's primary email, nothing is shown to the client; the booking email and start time are recorded under **Admin → Audit Logs** ("GoHighLevel event ignored: No client matches this contact email.").

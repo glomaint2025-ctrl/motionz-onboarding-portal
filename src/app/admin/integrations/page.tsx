@@ -5,6 +5,7 @@ import { Card, CardHeader, Button, StatusBadge, Skeleton, Select } from '@/compo
 import { Notice } from '@/components/admin/Notice';
 import { formatDateTime } from '@/lib/utils/format';
 import { GhlFormsCard } from '../_components/GhlFormsCard';
+import { SlackCard } from '../_components/SlackCard';
 
 interface Submission {
   id: string;
@@ -326,6 +327,8 @@ export default function AdminSettingsPage() {
       </Card>
 
       <GhlFormsCard />
+
+      <SlackCard />
 
       {/* The optional "send lead forms to a GoHighLevel webhook" card (AutomationCard) is hidden until the client asks for it. */}
 

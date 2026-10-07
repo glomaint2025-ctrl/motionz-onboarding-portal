@@ -283,6 +283,37 @@ export class LeadRepository {
     }
     return this.create({ tenant_id: tenantId, ghl_contact_id: ghlContactId, status: 'New', ...fields });
   }
+
+  /**
+   * Removes a client's lead by its GoHighLevel contact id (every row, should old duplicates exist).
+   * Returns what was removed; an empty list when the portal never had that lead.
+   * Lead requests that point at it keep their own copy of the name and phone number: the database
+   * clears their lead_id (lead_requests.lead_id is ON DELETE SET NULL).
+   */
+  async deleteByGhlContactId(tenantId: string, ghlContactId: string): Promise<Lead[]> {
+    const supabase = getSupabaseServiceClient();
+    if (supabase) {
+      const { data, error } = await supabase
+        .from('leads')
+        .delete()
+        .eq('tenant_id', tenantId)
+        .eq('ghl_contact_id', ghlContactId)
+        .select('*');
+      if (error) throw new DatabaseError(`Failed to remove lead: ${error.message}`, error);
+      return (data || []) as Lead[];
+    }
+
+    const store = getStore();
+    const removed = store.leads.filter((l) => l.tenant_id === tenantId && l.ghl_contact_id === ghlContactId);
+    if (removed.length === 0) return [];
+    const ids = new Set(removed.map((l) => l.id));
+    for (let i = store.leads.length - 1; i >= 0; i--) if (ids.has(store.leads[i].id)) store.leads.splice(i, 1);
+    // What the database does through ON DELETE SET NULL.
+    if (Array.isArray(store.leadRequests)) {
+      for (const r of store.leadRequests) if (r.lead_id && ids.has(r.lead_id)) r.lead_id = null;
+    }
+    return removed;
+  }
 }
 
 export const leadRepository = new LeadRepository();

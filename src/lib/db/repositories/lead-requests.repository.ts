@@ -148,6 +148,24 @@ export class LeadRequestRepository {
     Object.assign(row, change);
     return row;
   }
+
+  /** Sets the outcome of a request and the reason the client reads. Returns null when it does not exist. */
+  async setDecision(id: string, decision: LeadRequest['decision'], reason: string | null): Promise<LeadRequest | null> {
+    const change = { decision, decision_reason: reason };
+
+    const supabase = getSupabaseServiceClient();
+    if (supabase) {
+      if (!UUID.test(id)) return null;
+      const { data, error } = await supabase.from('lead_requests').update(change).eq('id', id).select('*').maybeSingle();
+      if (error) fail('update the lead request', error);
+      return (data as LeadRequest) || null;
+    }
+
+    const row = mockRows().find((r) => r.id === id);
+    if (!row) return null;
+    Object.assign(row, change);
+    return row;
+  }
 }
 
 export const leadRequestRepository = new LeadRequestRepository();

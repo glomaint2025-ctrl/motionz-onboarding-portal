@@ -1,10 +1,12 @@
 /**
  * The two lead forms built into the portal (Leads page): Lead Replacement and Unresponsive Lead.
+ *  - the client's own dropdown options; options offered before are refused but still display
  *  - the instant decision on a replacement request, for every reason and appointment answer
  *  - validation: missing answers, short text, bad phone, days before day 4 (refused, not saved)
  *  - what is saved, who is emailed (lead team list, CSM tick box, fallbacks), duplicates
  *  - sign-in, the Leads section, tenant isolation and the rate limit
- *  - staff handling: list, Mark done / Reopen, CSMs only for their assigned clients
+ *  - staff handling: list, Mark done / Reopen, Change outcome, CSMs only for their assigned clients
+ *  - Slack messages: the link checks, the masked link, the message text, failures, the test message
  *  - the optional automation link: payload, off when empty, failures never fail the request,
  *    private addresses refused by the settings API
  *  - soft failure while the lead_requests table does not exist yet
@@ -18,19 +20,25 @@ import { globalRateLimiter } from '../../src/lib/security/rate-limiter';
 import { GET as portalGet, POST as portalPost } from '../../src/app/api/portal/[clientId]/lead-requests/route';
 import { GET as staffGet, PATCH as staffPatch } from '../../src/app/api/csm/clients/[id]/lead-requests/route';
 import { GET as automationGet, PUT as automationPut } from '../../src/app/api/admin/settings/automation/route';
+import { GET as slackGet, PUT as slackPut } from '../../src/app/api/admin/settings/slack/route';
+import { POST as slackTest } from '../../src/app/api/admin/settings/slack/test/route';
 import { GET as dashboardGet } from '../../src/app/api/admin/dashboard/route';
 import {
   APPOINTMENT_OUTCOMES,
   FORM_UNAVAILABLE,
   REPLACEMENT_REASONS,
   UNRESPONSIVE_TOO_EARLY,
+  appointmentLabel,
   daysSince,
+  detailLines,
+  reasonLabel,
   type AppointmentOutcome,
   type ReplacementReason,
 } from '../../src/lib/lead-requests/definition';
 import { decideReplacement, APPROVED_TEXT, NEEDS_REVIEW_TEXT, NOT_REPLACEABLE_TEXT } from '../../src/lib/lead-requests/decision';
 import { validateLeadRequest } from '../../src/lib/lead-requests/validation';
 import { checkWebhookUrl } from '../../src/lib/lead-requests/automation';
+import { checkSlackWebhookUrl, escapeSlack, leadRequestSlackText, maskSlackWebhookUrl } from '../../src/lib/lead-requests/slack';
 import { leadRequestEmail } from '../../src/lib/email';
 import { auditActionLabel } from '../../src/lib/utils/log-labels';
 
@@ -45,6 +53,10 @@ for (const key of [
 const BASE_URL = process.env.NEXTAUTH_URL || 'http://localhost:3000';
 const clientId = 'abc-roofing';
 const HOOK = 'https://services.leadconnectorhq.com/hooks/abc123/webhook-trigger/xyz';
+// Made up: the shape of a Slack Incoming Webhook link, not a real one.
+// Built from parts so secret scanners do not mistake this made-up link for a real one.
+const SLACK = ['https://hooks.slack.com', 'services', 'T0TESTTEAM', 'B0TESTCHAN', 'notARealSlackSecretValue'].join('/');
+const SLACK_MASK = 'https://hooks.slack.com/services/T…/B…/••••';
 
 function request(path: string, method: string, session?: string, body?: unknown): NextRequest {
   const headers = new Headers({ 'content-type': 'application/json' });
@@ -108,8 +120,8 @@ const replacement = (overrides: Record<string, unknown> = {}) => ({
   type: 'replacement',
   leadName: 'Mary Major',
   leadPhone: '+1 555 010 2030',
-  reason: 'cancelled_before_inspection',
-  appointment: 'none',
+  reason: 'no_longer_wants_inspection',
+  appointment: 'never_booked',
   whatHappened: WHAT_HAPPENED,
   ...overrides,
 });
@@ -143,55 +155,89 @@ async function run() {
   const robert = store.leads.find((l) => l.id === 'lead-1')!;
   assert(robert && robert.tenant_id === tenant.id, 'the demo client has a lead to pick');
 
-  // ---- 1. The definition ---------------------------------------------------------------------
+  // ---- 1. The definition: the client's own wording, in the client's order -------------------
   assert.deepStrictEqual(
-    REPLACEMENT_REASONS.map((r) => r.label),
+    APPOINTMENT_OUTCOMES.map((a) => a.label),
     [
-      "Cancelled before the inspection and can't be rebooked",
-      'Wrong contact info',
-      'Not the homeowner',
-      'Outside my service area',
-      "Roof doesn't qualify (not asphalt shingle, or under 4 years old)",
-      'Homeowner refused the inspection when I arrived',
-      "I inspected the roof and they didn't buy",
-      'Something else',
+      'No, an appointment was never booked',
+      'No, it was booked but cancelled / no-show before the inspection',
+      'Yes, I was at the appointment',
     ]
   );
   assert.deepStrictEqual(
-    APPOINTMENT_OUTCOMES.map((a) => a.label),
-    ['No, there was no appointment', 'Yes, but I could not inspect the roof', 'Yes, and I inspected the roof']
+    REPLACEMENT_REASONS.map((r) => r.label),
+    [
+      'No longer wants the inspection',
+      'Wrong contact information',
+      "Wrong roof material / doesn't qualify",
+      'Not the homeowner',
+      'Outside service area',
+      "Appointment didn't match qualification parameters",
+      'Other',
+    ]
   );
-  console.log(' PASS: the dropdowns offer the agreed options.');
+  assert.deepStrictEqual(APPOINTMENT_OUTCOMES.map((a) => a.key), ['never_booked', 'cancelled_no_show', 'attended']);
+  assert.deepStrictEqual(
+    REPLACEMENT_REASONS.map((r) => r.key),
+    ['no_longer_wants_inspection', 'wrong_contact_info', 'wrong_roof_material', 'not_homeowner', 'outside_service_area', 'qualification_mismatch', 'other']
+  );
+
+  // Requests saved with the options offered before still read properly: the label stored with the
+  // request is shown, and without one the old wording is used. Those options cannot be chosen any more.
+  assert.deepStrictEqual(
+    detailLines('replacement', {
+      reason: 'inspected_no_sale', reason_label: "I inspected the roof and they didn't buy",
+      appointment: 'inspected', appointment_label: 'Yes, and I inspected the roof', what_happened: 'Old row.',
+    }),
+    [['Reason for replacement', "I inspected the roof and they didn't buy"], ['Got to an appointment?', 'Yes, and I inspected the roof'], ['What happened', 'Old row.']]
+  );
+  // A key that is still offered keeps the wording it was saved with.
+  assert.strictEqual(detailLines('replacement', { reason: 'wrong_contact_info', reason_label: 'Wrong contact info' })[0][1], 'Wrong contact info');
+  assert.strictEqual(detailLines('replacement', { reason: 'cancelled_before_inspection', appointment: 'not_inspected' })[0][1], "Cancelled before the inspection and can't be rebooked");
+  assert.strictEqual(detailLines('replacement', { reason: 'cancelled_before_inspection', appointment: 'not_inspected' })[1][1], 'Yes, but I could not inspect the roof');
+  assert.strictEqual(reasonLabel('roof_not_qualified'), "Roof doesn't qualify (not asphalt shingle, or under 4 years old)");
+  assert.strictEqual(reasonLabel('refused_inspection'), 'Homeowner refused the inspection when I arrived');
+  assert.strictEqual(appointmentLabel('none'), 'No, there was no appointment');
+  assert.strictEqual(reasonLabel('wrong_contact_info'), 'Wrong contact information');
+  for (const retired of ['cancelled_before_inspection', 'roof_not_qualified', 'refused_inspection', 'inspected_no_sale']) {
+    assert.ok(validateLeadRequest('replacement', replacement({ reason: retired })).errors.reason, `${retired} can no longer be chosen`);
+  }
+  for (const retired of ['none', 'not_inspected', 'inspected']) {
+    assert.ok(validateLeadRequest('replacement', replacement({ appointment: retired })).errors.appointment, `${retired} can no longer be chosen`);
+  }
+  console.log(' PASS: the dropdowns offer the client\'s options in order; the earlier options still display but cannot be chosen.');
 
   // ---- 2. The decision table -----------------------------------------------------------------
   const A = 'approved';
-  const N = 'not_replaceable';
   const R = 'needs_review';
-  // Columns: no appointment · appointment but not inspected · inspected.
+  // Columns: never booked · booked but cancelled / no-show · I was at the appointment.
   const table: Record<ReplacementReason, [string, string, string]> = {
-    cancelled_before_inspection: [A, A, N],
-    wrong_contact_info: [A, A, N],
-    not_homeowner: [A, A, N],
-    outside_service_area: [A, A, N],
-    roof_not_qualified: [A, A, A],
-    refused_inspection: [A, A, N],
-    inspected_no_sale: [N, N, N],
+    no_longer_wants_inspection: [A, A, A],
+    wrong_contact_info: [A, A, R],
+    wrong_roof_material: [A, A, A],
+    not_homeowner: [A, A, A],
+    outside_service_area: [A, A, A],
+    qualification_mismatch: [A, A, A],
     other: [R, R, R],
   };
-  const columns: AppointmentOutcome[] = ['none', 'not_inspected', 'inspected'];
-  const texts: Record<string, string> = { [A]: APPROVED_TEXT, [N]: NOT_REPLACEABLE_TEXT, [R]: NEEDS_REVIEW_TEXT };
-  assert.deepStrictEqual(Object.keys(table).sort(), REPLACEMENT_REASONS.map((r) => r.key).sort(), 'the table covers every reason');
+  const columns: AppointmentOutcome[] = ['never_booked', 'cancelled_no_show', 'attended'];
+  const texts: Record<string, string> = { [A]: APPROVED_TEXT, [R]: NEEDS_REVIEW_TEXT };
+  assert.deepStrictEqual(Object.keys(table), REPLACEMENT_REASONS.map((r) => r.key), 'the table covers every reason');
+  assert.deepStrictEqual(columns, APPOINTMENT_OUTCOMES.map((a) => a.key), 'and every appointment answer');
+  let combinations = 0;
   for (const reason of Object.keys(table) as ReplacementReason[]) {
     columns.forEach((appointment, i) => {
       const result = decideReplacement(reason, appointment);
       assert.strictEqual(result.decision, table[reason][i], `${reason} + ${appointment}`);
       assert.strictEqual(result.reason, texts[table[reason][i]], `${reason} + ${appointment}: the explanation`);
+      assert.notStrictEqual(result.decision, 'not_replaceable', '"Not replaceable" is never worked out automatically');
+      combinations++;
     });
   }
-  assert.strictEqual(NOT_REPLACEABLE_TEXT, "You inspected a qualified roof and the homeowner didn't buy. That counts as a qualified appointment.");
+  assert.strictEqual(combinations, 21);
   assert.strictEqual(NEEDS_REVIEW_TEXT, 'Our team will look at this one and get back to you.');
   assert.strictEqual(APPROVED_TEXT, 'This matches the replacement rules. It has been sent to our marketing team.');
-  console.log(' PASS: the decision is right for all 24 reason and appointment combinations.');
+  console.log(' PASS: the decision is right for all 21 reason and appointment combinations.');
 
   // ---- 3. Validation (shared by the page and the API) ----------------------------------------
   assert.deepStrictEqual(Object.keys(validateLeadRequest('replacement', {}).errors).sort(), ['appointment', 'leadName', 'leadPhone', 'reason', 'whatHappened']);
@@ -210,7 +256,9 @@ async function run() {
     [replacement({ leadPhone: '12345' }), 'leadPhone', /valid phone number/],
     [replacement({ reason: '' }), 'reason', /Choose a reason/],
     [replacement({ reason: 'because' }), 'reason', /Choose a reason/],
-    [replacement({ reason: 'Wrong contact info' }), 'reason', /Choose a reason/],
+    [replacement({ reason: 'Wrong contact information' }), 'reason', /Choose a reason/],
+    [replacement({ reason: 'inspected_no_sale' }), 'reason', /Choose a reason/],
+    [replacement({ appointment: 'inspected' }), 'appointment', /Choose an answer/],
     [replacement({ appointment: undefined }), 'appointment', /Choose an answer/],
     [replacement({ appointment: 'maybe' }), 'appointment', /Choose an answer/],
     [replacement({ whatHappened: '' }), 'whatHappened', /answer this question/],
@@ -284,10 +332,10 @@ async function run() {
       lead_name: 'Robert Johnson',
       lead_phone: robert.phone,
       details: {
-        reason: 'cancelled_before_inspection',
-        reason_label: "Cancelled before the inspection and can't be rebooked",
-        appointment: 'none',
-        appointment_label: 'No, there was no appointment',
+        reason: 'no_longer_wants_inspection',
+        reason_label: 'No longer wants the inspection',
+        appointment: 'never_booked',
+        appointment_label: 'No, an appointment was never booked',
         what_happened: WHAT_HAPPENED,
       },
       decision: 'approved',
@@ -308,14 +356,14 @@ async function run() {
   const mail = sent.emails.find((e) => e.to === 'leads@motionz.ai')!;
   assert.strictEqual(mail.subject, `Lead replacement request (Approved): Robert Johnson — ${tenant.name}`);
   for (const part of [
-    'Robert Johnson', robert.phone!, "Cancelled before the inspection and can't be rebooked", 'No, there was no appointment',
+    'Robert Johnson', robert.phone!, 'No longer wants the inspection', 'No, an appointment was never booked',
     WHAT_HAPPENED, 'Outcome: Approved', APPROVED_TEXT, 'john@abcroofing.com', `${BASE_URL}/admin/clients/${tenant.id}`,
   ]) {
     assert.ok(mail.text.includes(part), `the email says "${part}"`);
   }
   assert.ok(mail.html.includes(`${BASE_URL}/admin/clients/${tenant.id}`), 'the button opens the admin client page');
   assert.ok(sent.emails.find((e) => e.to === 'csm@motionz.ai')!.text.includes(`${BASE_URL}/csm/clients/${tenant.id}/setup`), 'the CSM gets a link they can open');
-  assert.strictEqual(sent.hooks.length, 0, 'no automation link is set, so nothing else is called');
+  assert.strictEqual(sent.hooks.length, 0, 'no Slack link and no automation link are set, so nothing else is called');
   assert.strictEqual(sent.result.body.notified, 3);
 
   let audit = audits('lead_request.submitted')[0];
@@ -325,27 +373,30 @@ async function run() {
   assert.deepStrictEqual(audit.details, { type: 'replacement', leadName: 'Robert Johnson', decision: 'approved', notified: 3, webhook: 'off' });
   console.log(' PASS: an approved replacement request is saved, audit-logged and emailed to the lead team and the CSM.');
 
-  // ---- 6. The other outcomes are saved and emailed too, and the subject says which -------------
-  sent = await captured(() => post(replacement({ reason: 'inspected_no_sale', appointment: 'inspected', leadName: 'Nora No-Sale' }), owner));
+  // ---- 6. Needs review is saved and emailed too, and the subject says which ------------------
+  sent = await captured(() => post(replacement({ reason: 'other', appointment: 'never_booked', leadName: 'Odd Olga' }), owner));
   assert.strictEqual(sent.result.status, 200);
-  assert.strictEqual(sent.result.body.request.decision, 'not_replaceable');
-  assert.strictEqual(sent.result.body.request.decision_reason, NOT_REPLACEABLE_TEXT);
-  assert.strictEqual(sent.emails[0].subject, `Lead replacement request (Not replaceable): Nora No-Sale — ${tenant.name}`);
-  assert.strictEqual(rows()[0].lead_id, null, 'a typed-in lead has no lead id');
-
-  sent = await captured(() => post(replacement({ reason: 'wrong_contact_info', appointment: 'inspected', leadName: 'Ian Inspected' }), owner));
-  assert.strictEqual(sent.result.body.request.decision, 'not_replaceable', 'an inspected roof is a qualified appointment');
-
-  sent = await captured(() => post(replacement({ reason: 'roof_not_qualified', appointment: 'inspected', leadName: 'Metal Mike' }), owner));
-  assert.strictEqual(sent.result.body.request.decision, 'approved', 'unless the inspection showed the roof does not qualify');
-
-  sent = await captured(() => post(replacement({ reason: 'other', appointment: 'inspected', leadName: 'Odd Olga' }), owner));
   assert.strictEqual(sent.result.body.request.decision, 'needs_review');
   assert.strictEqual(sent.result.body.request.decision_reason, NEEDS_REVIEW_TEXT);
   assert.strictEqual(sent.emails[0].subject, `Lead replacement request (Needs review): Odd Olga — ${tenant.name}`);
   assert.strictEqual(sent.emails.length, 3);
-  assert.strictEqual(rows().length, before + 5, 'all three outcomes are saved');
-  console.log(' PASS: Not replaceable and Needs review are saved and emailed, and the subject says which.');
+  assert.strictEqual(rows()[0].lead_id, null, 'a typed-in lead has no lead id');
+  assert.strictEqual(rows()[0].details.reason_label, 'Other');
+
+  sent = await captured(() => post(replacement({ reason: 'wrong_contact_info', appointment: 'attended', leadName: 'Ian Met-Them' }), owner));
+  assert.strictEqual(sent.result.body.request.decision, 'needs_review', 'being at the appointment does not fit "wrong contact information"');
+  assert.strictEqual(sent.result.body.request.decision_reason, NEEDS_REVIEW_TEXT);
+  assert.strictEqual(rows()[0].details.appointment_label, 'Yes, I was at the appointment');
+
+  sent = await captured(() => post(replacement({ reason: 'wrong_roof_material', appointment: 'attended', leadName: 'Metal Mike' }), owner));
+  assert.strictEqual(sent.result.body.request.decision, 'approved', 'the visit showed the roof does not qualify');
+  assert.strictEqual(sent.emails[0].subject, `Lead replacement request (Approved): Metal Mike — ${tenant.name}`);
+
+  sent = await captured(() => post(replacement({ reason: 'qualification_mismatch', appointment: 'cancelled_no_show', leadName: 'Paula Params' }), owner));
+  assert.strictEqual(sent.result.body.request.decision, 'approved');
+  assert.strictEqual(rows().length, before + 5, 'every outcome is saved');
+  assert.ok(!rows().some((r) => r.decision === 'not_replaceable'), 'nothing is marked "Not replaceable" automatically');
+  console.log(' PASS: Needs review and Approved are saved and emailed, and the subject says which.');
 
   // ---- 7. A saved unresponsive lead ----------------------------------------------------------
   sent = await captured(() => post(unresponsive({ daysSinceSent: '4' }), member));
@@ -543,6 +594,64 @@ async function run() {
   assert.strictEqual((await list(owner)).body.requests[0].decision, 'sent');
   console.log(' PASS: admins and the assigned CSM can list, mark done and reopen; everyone else is refused.');
 
+  // ---- 12b. Staff handling: Change outcome (Lead Replacement requests only) --------------------
+  const reviewed = rows().find((r) => r.lead_name === 'Odd Olga')!;
+  assert.strictEqual(reviewed.decision, 'needs_review');
+  assert.strictEqual((await mark({ requestId: reviewed.id, decision: 'not_replaceable' })).status, 401);
+  assert.strictEqual((await mark({ requestId: reviewed.id, decision: 'not_replaceable' }, owner)).status, 403, 'a client cannot change an outcome');
+  assert.strictEqual((await mark({ requestId: reviewed.id, decision: 'not_replaceable' }, otherCsm)).status, 403);
+  for (const bad of ['sent', 'rejected', '', null, 7]) {
+    assert.strictEqual((await mark({ requestId: reviewed.id, decision: bad }, admin)).status, 400, `${JSON.stringify(bad)} is not an outcome staff can set`);
+  }
+  assert.strictEqual((await mark({ requestId: reviewed.id, decision: 'approved', note: 'x'.repeat(301) }, admin)).status, 400, 'the note is short');
+  assert.strictEqual((await mark({ requestId: reviewed.id, decision: 'approved', note: { text: 'no' } }, admin)).status, 400);
+  assert.strictEqual((await mark({ requestId: betaRequest.id, decision: 'approved' }, assignedCsm)).status, 404);
+  const unresponsiveRow = rows().find((r) => r.type === 'unresponsive')!;
+  const notReplacement = await mark({ requestId: unresponsiveRow.id, decision: 'approved' }, admin);
+  assert.strictEqual(notReplacement.status, 400, 'an unresponsive lead has no outcome to change');
+  assert.match(notReplacement.body.error, /Only a Lead Replacement request/);
+  assert.strictEqual(unresponsiveRow.decision, 'sent');
+  assert.strictEqual(reviewed.decision, 'needs_review', 'a refused change changes nothing');
+  assert.strictEqual(audits('lead_request.outcome_changed').length, 0);
+
+  // Not replaceable with a note: the note becomes the reason the client reads.
+  const NOTE = 'We called the homeowner: they met you and the roof qualified.';
+  let outcome = await mark({ requestId: reviewed.id, decision: 'not_replaceable', note: `  ${NOTE}  ` }, assignedCsm);
+  assert.strictEqual(outcome.status, 200);
+  assert.strictEqual(outcome.body.changed, true);
+  assert.strictEqual(reviewed.decision, 'not_replaceable');
+  assert.strictEqual(reviewed.decision_reason, NOTE);
+  assert.strictEqual(reviewed.status, 'open', 'changing the outcome does not mark the request done');
+  audit = audits('lead_request.outcome_changed')[0];
+  assert.strictEqual(audit.actor_email, 'csm@motionz.ai');
+  assert.strictEqual(audit.tenant_id, tenant.id);
+  assert.strictEqual(audit.resource_id, reviewed.id);
+  assert.deepStrictEqual(audit.details, { decision: 'not_replaceable', previous: 'needs_review', note: NOTE, type: 'replacement', leadName: 'Odd Olga' });
+  // The client sees the new outcome and reason under "Your requests".
+  const seen = (await list(owner, clientId, '?limit=50')).body.requests.find((r: any) => r.id === reviewed.id);
+  assert.strictEqual(seen.decision, 'not_replaceable');
+  assert.strictEqual(seen.decision_reason, NOTE);
+  assert.strictEqual((await staffList(admin)).body.requests.find((r: any) => r.id === reviewed.id).decision, 'not_replaceable');
+
+  // The same outcome and note again changes nothing and is not logged twice.
+  outcome = await mark({ requestId: reviewed.id, decision: 'not_replaceable', note: NOTE }, admin);
+  assert.strictEqual(outcome.body.changed, false);
+  assert.strictEqual(audits('lead_request.outcome_changed').length, 1);
+
+  // Without a note the standard sentence for that outcome is used.
+  outcome = await mark({ requestId: reviewed.id, decision: 'not_replaceable' }, admin);
+  assert.strictEqual(reviewed.decision_reason, NOT_REPLACEABLE_TEXT);
+  assert.strictEqual(NOT_REPLACEABLE_TEXT, 'Our team looked at this request. It does not match the replacement rules.');
+  outcome = await mark({ requestId: reviewed.id, decision: 'approved', note: '   ' }, admin);
+  assert.strictEqual(reviewed.decision, 'approved');
+  assert.strictEqual(reviewed.decision_reason, APPROVED_TEXT);
+  outcome = await mark({ requestId: reviewed.id, decision: 'needs_review' }, admin);
+  assert.strictEqual(reviewed.decision, 'needs_review');
+  assert.strictEqual(reviewed.decision_reason, NEEDS_REVIEW_TEXT);
+  assert.strictEqual(audits('lead_request.outcome_changed').length, 4);
+  assert.strictEqual(audits('lead_request.outcome_changed')[0].details?.note, undefined, 'no note, nothing recorded as one');
+  console.log(' PASS: staff can change the outcome of a replacement request with an optional note; the client sees it; it is audited.');
+
   // ---- 13. Admin dashboard: lead requests to handle ------------------------------------------
   const dash = await (await dashboardGet(request('/api/admin/dashboard', 'GET', admin))).json();
   const openNow = store.leadRequests.filter((r) => r.status === 'open');
@@ -703,6 +812,253 @@ async function run() {
   assert.strictEqual(audits('lead_request.submitted')[0].details?.webhook, 'off');
   console.log(' PASS: a failing, slow or unsafe automation link is logged and never fails the request; empty means off.');
 
+  // ---- 16b. Slack: the link checks and the masked link ----------------------------------------
+  const refusedSlack: unknown[] = [
+    'http://hooks.slack.com/services/T0/B0/x', // not https
+    'https://example.com/services/T0/B0/x', // not Slack
+    'https://hooks.slack.com.evil.example/services/T0/B0/x',
+    'https://evil.example/hooks.slack.com/services/T0/B0/x',
+    'https://slack.com/services/T0/B0/x',
+    'https://api.slack.com/services/T0/B0/x',
+    'https://user:pw@hooks.slack.com/services/T0/B0/x',
+    'https://hooks.slack.com:8443/services/T0/B0/x',
+    'https://hooks.slack.com/', // no /services/ path
+    'https://hooks.slack.com/services/',
+    'https://hooks.slack.com/workflows/T0/B0/x',
+    'https://localhost/services/T0/B0/x',
+    'https://127.0.0.1/services/T0/B0/x',
+    `https://hooks.slack.com/services/${'x'.repeat(300)}`, // over 300 characters
+    'not a link',
+    12345,
+    { url: SLACK },
+  ];
+  for (const link of refusedSlack) assert.strictEqual(checkSlackWebhookUrl(link).ok, false, `${JSON.stringify(link)} is not a Slack link`);
+  assert.deepStrictEqual(checkSlackWebhookUrl(`  ${SLACK}  `), { ok: true, url: SLACK });
+  assert.deepStrictEqual(checkSlackWebhookUrl('https://HOOKS.SLACK.COM/services/T0/B0/x'), { ok: true, url: 'https://hooks.slack.com/services/T0/B0/x' });
+  assert.deepStrictEqual(checkSlackWebhookUrl(''), { ok: true, url: '' }, 'empty means off');
+  assert.deepStrictEqual(checkSlackWebhookUrl(undefined), { ok: true, url: '' });
+  assert.strictEqual(checkSlackWebhookUrl(SLACK_MASK).ok, false, 'the masked link is never accepted as a link');
+
+  assert.strictEqual(maskSlackWebhookUrl(SLACK), SLACK_MASK);
+  assert.strictEqual(maskSlackWebhookUrl(''), '');
+  assert.strictEqual(maskSlackWebhookUrl(undefined), '');
+  assert.ok(!maskSlackWebhookUrl(SLACK).includes('notARealSlackSecretValue') && !maskSlackWebhookUrl(SLACK).includes('0TESTTEAM'));
+  assert.strictEqual(maskSlackWebhookUrl('garbage'), SLACK_MASK, 'whatever is stored, nothing of it leaks through the mask');
+
+  const getSlack = async (session?: string) => {
+    const r = await slackGet(request('/api/admin/settings/slack', 'GET', session));
+    return { status: r.status, body: await r.json() };
+  };
+  const putSlack = async (url: unknown, session: string | null = admin) => {
+    const r = await slackPut(request('/api/admin/settings/slack', 'PUT', session ?? undefined, { lead_request_slack_webhook_url: url }));
+    return { status: r.status, body: await r.json() };
+  };
+  const testSlack = async (session?: string) => {
+    const r = await slackTest(request('/api/admin/settings/slack/test', 'POST', session));
+    return { status: r.status, body: await r.json() };
+  };
+  const savedSlack = () => store.appSettings.find((s) => s.key === 'slack');
+
+  assert.deepStrictEqual((await getSlack(admin)).body.slack, { configured: false, lead_request_slack_webhook_url: '' }, 'off by default');
+  assert.strictEqual((await getSlack()).status, 401);
+  assert.strictEqual((await putSlack(SLACK, null)).status, 401);
+  assert.strictEqual((await testSlack()).status, 401);
+  for (const session of [assignedCsm, owner, member]) {
+    assert.strictEqual((await getSlack(session)).status, 403);
+    assert.strictEqual((await putSlack(SLACK, session)).status, 403);
+    assert.strictEqual((await testSlack(session)).status, 403);
+  }
+  for (const link of refusedSlack) {
+    const refused = await putSlack(link);
+    assert.strictEqual(refused.status, 400, `${JSON.stringify(link)} is refused`);
+    assert.strictEqual(refused.body.field, 'lead_request_slack_webhook_url');
+  }
+  assert.match((await putSlack('http://hooks.slack.com/services/T0/B0/x')).body.error, /https/);
+  assert.match((await putSlack('https://example.com/services/T0/B0/x')).body.error, /not a Slack webhook link/);
+  assert.strictEqual(savedSlack(), undefined, 'a refused link is never saved');
+  assert.strictEqual(audits('settings.slack_updated').length, 0);
+
+  // With nothing saved there is nothing to test.
+  let slackTestRun = await captured(() => testSlack(admin));
+  assert.strictEqual(slackTestRun.result.status, 400);
+  assert.match(slackTestRun.result.body.error, /Save a Slack webhook link first/);
+  assert.strictEqual(slackTestRun.hooks.length, 0);
+
+  let slackPutRes = await putSlack(`  ${SLACK}  `);
+  assert.strictEqual(slackPutRes.status, 200);
+  assert.strictEqual(slackPutRes.body.changed, true);
+  assert.deepStrictEqual(slackPutRes.body.slack, { configured: true, lead_request_slack_webhook_url: SLACK_MASK });
+  assert.ok(!JSON.stringify(slackPutRes.body).includes('notARealSlackSecretValue'), 'the saved link is never sent back to the browser');
+  assert.deepStrictEqual(savedSlack()!.value, { lead_request_slack_webhook_url: SLACK });
+  assert.strictEqual(savedSlack()!.updated_by, 'admin@motionz.ai');
+  const slackRead = await getSlack(admin);
+  assert.deepStrictEqual(slackRead.body.slack, { configured: true, lead_request_slack_webhook_url: SLACK_MASK });
+  assert.ok(!JSON.stringify(slackRead.body).includes('notARealSlackSecretValue'));
+  audit = audits('settings.slack_updated')[0];
+  assert.strictEqual(audit.actor_email, 'admin@motionz.ai');
+  assert.deepStrictEqual(audit.details, { lead_request_slack: 'Set', previous: 'Off' });
+  assert.ok(!JSON.stringify(audit).includes('notARealSlackSecretValue'), 'the link is not written to the audit log');
+
+  // Saving the page again with the masked link it was given keeps the stored link.
+  slackPutRes = await putSlack(SLACK_MASK);
+  assert.strictEqual(slackPutRes.status, 200);
+  assert.strictEqual(slackPutRes.body.changed, false);
+  assert.deepStrictEqual(slackPutRes.body.slack, { configured: true, lead_request_slack_webhook_url: SLACK_MASK });
+  assert.deepStrictEqual(savedSlack()!.value, { lead_request_slack_webhook_url: SLACK }, 'the masked link never overwrites the real one');
+  slackPutRes = await putSlack(SLACK);
+  assert.strictEqual(slackPutRes.body.changed, false, 'the same link again is not a change');
+  assert.strictEqual(audits('settings.slack_updated').length, 1);
+  // The automation setting is a different setting and never carries the Slack link.
+  assert.ok(!JSON.stringify((await getAutomation(admin)).body).includes('hooks.slack.com'));
+  console.log(' PASS: only a https://hooks.slack.com/services/ link is accepted; the browser only ever gets the masked link.');
+
+  // ---- 16c. Slack: the message for both forms ------------------------------------------------
+  const TRICKY = 'Homeowner said <!channel> "not interested" & hung up -> see <https://evil.example|this>. It was cancelled twice.';
+  sent = await captured(() =>
+    post(replacement({ leadName: 'Jane <Doe> & Co', leadPhone: '+1 555 234 5678', reason: 'wrong_contact_info', whatHappened: TRICKY }), owner)
+  );
+  assert.strictEqual(sent.result.status, 200);
+  assert.strictEqual(sent.hooks.length, 1, 'Slack is called once (the automation link is off)');
+  assert.strictEqual(sent.hooks[0].url, SLACK);
+  assert.strictEqual(sent.hooks[0].init.method, 'POST');
+  assert.strictEqual(sent.hooks[0].init.redirect, 'error', 'redirects are never followed');
+  assert.ok(sent.hooks[0].init.signal, 'the call has a time limit');
+  assert.deepStrictEqual(Object.keys(sent.hooks[0].body), ['text']);
+  assert.strictEqual(
+    sent.hooks[0].body.text,
+    [
+      '*Lead replacement request — Approved*',
+      `Client: ${tenant.name}`,
+      'Lead: Jane &lt;Doe&gt; &amp; Co · +1 555 234 5678',
+      'Reason: Wrong contact information',
+      'Appointment: No, an appointment was never booked',
+      'What happened: Homeowner said &lt;!channel&gt; "not interested" &amp; hung up -&gt; see &lt;https://evil.example|this&gt;. It was cancelled twice.',
+      'Submitted by: john@abcroofing.com',
+      `${BASE_URL}/admin/clients/${tenant.id}`,
+    ].join('\n')
+  );
+  assert.ok(!/<[!@#h]/.test(sent.hooks[0].body.text), 'nothing a client typed can become a mention or a link');
+  assert.strictEqual(audits('lead_request.slack_failed').length, 0, 'a message that went through writes nothing extra');
+  assert.deepStrictEqual(Object.keys(audits('lead_request.submitted')[0].details || {}).sort(), ['decision', 'leadName', 'notified', 'type', 'webhook']);
+
+  sent = await captured(() => post(replacement({ leadName: 'Review Rita', reason: 'other' }), owner));
+  assert.ok(sent.hooks[0].body.text.startsWith('*Lead replacement request — Needs review*\n'), 'the heading says the outcome');
+  assert.ok(sent.hooks[0].body.text.includes('Reason: Other'));
+
+  sent = await captured(() => post(unresponsive({ leadName: 'Silent Sam', daysSinceSent: 6 }), member));
+  assert.strictEqual(
+    sent.hooks[0].body.text,
+    [
+      '*Unresponsive lead*',
+      `Client: ${tenant.name}`,
+      'Lead: Silent Sam · (555) 303-4040',
+      'Days since the lead was sent: 6',
+      `How they tried to reach them: ${ATTEMPTS}`,
+      'Submitted by: sarah@abcroofing.com',
+      `${BASE_URL}/admin/clients/${tenant.id}`,
+    ].join('\n')
+  );
+
+  // Long answers are cut to 500 characters; the rest is in the portal and the email.
+  sent = await captured(() => post(replacement({ leadName: 'Long Larry', whatHappened: 'y'.repeat(1200) }), owner));
+  assert.ok(sent.hooks[0].body.text.includes(`What happened: ${'y'.repeat(500)}…\n`));
+  assert.ok(!sent.hooks[0].body.text.includes('y'.repeat(501)));
+
+  // The message builder on its own: a client name with control characters, a missing submitter, an old row.
+  const builtText = leadRequestSlackText(
+    {
+      type: 'replacement', lead_name: 'Old Row', lead_phone: '555', decision: 'not_replaceable', submitter_email: null,
+      details: { reason: 'inspected_no_sale', reason_label: "I inspected the roof and they didn't buy", appointment: 'inspected', what_happened: 'Before the new options.' },
+    },
+    'A & B <Roofing>',
+    'https://portal.example/admin/clients/1'
+  );
+  assert.ok(builtText.startsWith('*Lead replacement request — Not replaceable*\nClient: A &amp; B &lt;Roofing&gt;\n'));
+  assert.ok(builtText.includes("Reason: I inspected the roof and they didn't buy\nAppointment: Yes, and I inspected the roof\n"));
+  assert.ok(builtText.endsWith('Submitted by: unknown\nhttps://portal.example/admin/clients/1'));
+  assert.strictEqual(escapeSlack('a < b && c > d'), 'a &lt; b &amp;&amp; c &gt; d');
+
+  // Refused and duplicate submissions are not posted.
+  sent = await captured(() => post(unresponsive({ leadName: 'Too Early For Slack', daysSinceSent: 1 }), owner));
+  assert.strictEqual(sent.hooks.length, 0, 'a refused form is not posted');
+  sent = await captured(() => post(unresponsive({ leadName: 'Silent Sam', daysSinceSent: 6 }), member));
+  assert.strictEqual(sent.result.body.duplicate, true);
+  assert.strictEqual(sent.hooks.length, 0, 'a duplicate that was ignored is not posted');
+
+  // With the automation link set as well, each gets its own call.
+  await putAutomation(HOOK);
+  sent = await captured(() => post(replacement({ leadName: 'Both Links' }), owner));
+  assert.deepStrictEqual(sent.hooks.map((h) => h.url).sort(), [SLACK, HOOK].sort());
+  await putAutomation('');
+  console.log(' PASS: with a Slack link set, both forms post a complete, escaped message; duplicates and refusals do not.');
+
+  // ---- 16d. Slack: failures never fail the request -------------------------------------------
+  const slackFailures: [string, () => Promise<Response> | Response, RegExp][] = [
+    ["Slack's own error", () => new Response('channel_not_found', { status: 404 }), /Slack answered with an error \(404: channel_not_found\)/],
+    ['a server error', () => new Response('', { status: 500 }), /Slack answered with an error \(500\)/],
+    ['a network error', () => { throw new TypeError('fetch failed'); }, /could not be reached/],
+    ['a timeout', () => { throw new DOMException('The operation was aborted due to timeout', 'TimeoutError'); }, /within 5 seconds/],
+  ];
+  for (const [what, hook, reason] of slackFailures) {
+    const name = `Slack ${what}`;
+    const failedBefore = audits('lead_request.slack_failed').length;
+    sent = await captured(() => post(replacement({ leadName: name }), owner), hook);
+    assert.strictEqual(sent.result.status, 200, `${what} does not fail the client's request`);
+    assert.strictEqual(sent.result.body.success, true);
+    assert.strictEqual(rows()[0].lead_name, name, 'the request is saved');
+    assert.ok(sent.emails.length > 0, 'and still emailed');
+    assert.strictEqual(audits('lead_request.slack_failed').length, failedBefore + 1);
+    const failed = audits('lead_request.slack_failed')[0];
+    assert.strictEqual(failed.resource_id, rows()[0].id);
+    assert.strictEqual(failed.tenant_id, tenant.id);
+    assert.match(failed.details?.reason, reason);
+    assert.ok(!JSON.stringify(failed.details).includes('notARealSlackSecretValue'), 'the link itself is not written to the log');
+  }
+
+  // A link that got into the setting some other way is checked again before anything is sent.
+  savedSlack()!.value = { lead_request_slack_webhook_url: 'https://169.254.169.254/services/T0/B0/x' };
+  sent = await captured(() => post(replacement({ leadName: 'Bad Stored Slack' }), owner));
+  assert.strictEqual(sent.result.status, 200);
+  assert.strictEqual(sent.hooks.length, 0, 'anything that is not Slack is never called');
+  assert.match(audits('lead_request.slack_failed')[0].details?.reason, /not a Slack webhook link/);
+  savedSlack()!.value = { lead_request_slack_webhook_url: SLACK };
+  console.log(' PASS: a failing, slow or wrong Slack link is logged and never fails the request.');
+
+  // ---- 16e. Slack: "Send a test message" and Remove ------------------------------------------
+  slackTestRun = await captured(() => testSlack(admin));
+  assert.strictEqual(slackTestRun.result.status, 200);
+  assert.deepStrictEqual(slackTestRun.result.body, { success: true });
+  assert.strictEqual(slackTestRun.hooks.length, 1);
+  assert.strictEqual(slackTestRun.hooks[0].url, SLACK);
+  assert.deepStrictEqual(slackTestRun.hooks[0].body, { text: 'Test message from the Motionz portal' });
+
+  slackTestRun = await captured(() => testSlack(admin), () => new Response('no_service', { status: 404 }));
+  assert.strictEqual(slackTestRun.result.status, 502);
+  assert.match(slackTestRun.result.body.error, /Slack answered with an error \(404: no_service\)/, "Slack's own answer is shown");
+  slackTestRun = await captured(() => testSlack(admin), () => { throw new TypeError('fetch failed'); });
+  assert.strictEqual(slackTestRun.result.status, 502);
+  assert.match(slackTestRun.result.body.error, /could not be reached/);
+  assert.ok(!JSON.stringify(slackTestRun.result.body).includes('notARealSlackSecretValue'));
+
+  // Remove: an empty value clears the link, and nothing is posted any more.
+  slackPutRes = await putSlack('');
+  assert.strictEqual(slackPutRes.status, 200);
+  assert.strictEqual(slackPutRes.body.changed, true);
+  assert.deepStrictEqual(slackPutRes.body.slack, { configured: false, lead_request_slack_webhook_url: '' });
+  assert.deepStrictEqual(savedSlack()!.value, { lead_request_slack_webhook_url: '' });
+  assert.deepStrictEqual(audits('settings.slack_updated')[0].details, { lead_request_slack: 'Off', previous: 'Set' });
+  const slackFailedCount = audits('lead_request.slack_failed').length;
+  sent = await captured(() => post(replacement({ leadName: 'Slack Off' }), owner));
+  assert.strictEqual(sent.result.status, 200);
+  assert.strictEqual(sent.hooks.length, 0, 'nothing is posted when no Slack link is set');
+  assert.strictEqual(audits('lead_request.slack_failed').length, slackFailedCount);
+  // With nothing saved, the masked link is refused like any other text that is not a real link.
+  const maskWithNothingSaved = await putSlack(SLACK_MASK);
+  assert.strictEqual(maskWithNothingSaved.status, 400);
+  assert.match(maskWithNothingSaved.body.error, /hidden version/);
+  assert.deepStrictEqual(savedSlack()!.value, { lead_request_slack_webhook_url: '' });
+  console.log(' PASS: the test message reports success or Slack\'s error; Remove switches Slack messages off.');
+
   // ---- 17. The rate limit: 30 an hour per person ---------------------------------------------
   globalRateLimiter.reset();
   for (let i = 1; i <= 30; i++) {
@@ -731,6 +1087,9 @@ async function run() {
   assert.strictEqual(auditActionLabel('lead_request.status_changed'), 'Lead request marked done or reopened');
   assert.strictEqual(auditActionLabel('lead_request.webhook_failed'), 'Lead form could not be sent to the automation link');
   assert.strictEqual(auditActionLabel('settings.automation_updated'), 'Automation link updated');
+  assert.strictEqual(auditActionLabel('lead_request.outcome_changed'), 'Lead request outcome changed by staff');
+  assert.strictEqual(auditActionLabel('lead_request.slack_failed'), 'Lead form could not be posted to Slack');
+  assert.strictEqual(auditActionLabel('settings.slack_updated'), 'Slack webhook link updated');
   console.log(' PASS: the email escapes what was typed, and the new audit entries have friendly names.');
 
   // ---- 19. Before the table exists: a friendly message, never a 500 ---------------------------

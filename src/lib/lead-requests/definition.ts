@@ -3,8 +3,8 @@
  * Everything a form shows and everything the API accepts comes from this folder, so the two always
  * agree. This file has no server-only imports: pages and API routes can both use it.
  *
- * The dropdown options are a first proposal and may change once the client confirms them. Each
- * option has a short key (stored) and a label (shown); change a label freely, but keep the keys.
+ * The dropdown options are the client's own wording (confirmed 7 Oct). Each option has a short key
+ * (stored) and a label (shown, and stored next to the key at the time of sending).
  */
 
 export type LeadRequestType = 'replacement' | 'unresponsive';
@@ -19,33 +19,48 @@ export interface LeadRequestOption<K extends string = string> {
 }
 
 export type ReplacementReason =
-  | 'cancelled_before_inspection'
+  | 'no_longer_wants_inspection'
   | 'wrong_contact_info'
+  | 'wrong_roof_material'
   | 'not_homeowner'
   | 'outside_service_area'
-  | 'roof_not_qualified'
-  | 'refused_inspection'
-  | 'inspected_no_sale'
+  | 'qualification_mismatch'
   | 'other';
 
 export const REPLACEMENT_REASONS: LeadRequestOption<ReplacementReason>[] = [
-  { key: 'cancelled_before_inspection', label: "Cancelled before the inspection and can't be rebooked" },
-  { key: 'wrong_contact_info', label: 'Wrong contact info' },
+  { key: 'no_longer_wants_inspection', label: 'No longer wants the inspection' },
+  { key: 'wrong_contact_info', label: 'Wrong contact information' },
+  { key: 'wrong_roof_material', label: "Wrong roof material / doesn't qualify" },
   { key: 'not_homeowner', label: 'Not the homeowner' },
-  { key: 'outside_service_area', label: 'Outside my service area' },
-  { key: 'roof_not_qualified', label: "Roof doesn't qualify (not asphalt shingle, or under 4 years old)" },
-  { key: 'refused_inspection', label: 'Homeowner refused the inspection when I arrived' },
-  { key: 'inspected_no_sale', label: "I inspected the roof and they didn't buy" },
-  { key: 'other', label: 'Something else' },
+  { key: 'outside_service_area', label: 'Outside service area' },
+  { key: 'qualification_mismatch', label: "Appointment didn't match qualification parameters" },
+  { key: 'other', label: 'Other' },
 ];
 
-export type AppointmentOutcome = 'none' | 'not_inspected' | 'inspected';
+export type AppointmentOutcome = 'never_booked' | 'cancelled_no_show' | 'attended';
 
 export const APPOINTMENT_OUTCOMES: LeadRequestOption<AppointmentOutcome>[] = [
-  { key: 'none', label: 'No, there was no appointment' },
-  { key: 'not_inspected', label: 'Yes, but I could not inspect the roof' },
-  { key: 'inspected', label: 'Yes, and I inspected the roof' },
+  { key: 'never_booked', label: 'No, an appointment was never booked' },
+  { key: 'cancelled_no_show', label: 'No, it was booked but cancelled / no-show before the inspection' },
+  { key: 'attended', label: 'Yes, I was at the appointment' },
 ];
+
+/**
+ * Options the form offered before the client sent their own wording. They can no longer be chosen;
+ * they stay here only so a request saved with one of them still reads properly if its stored label
+ * is ever missing.
+ */
+const RETIRED_REASON_LABELS: Record<string, string> = {
+  cancelled_before_inspection: "Cancelled before the inspection and can't be rebooked",
+  roof_not_qualified: "Roof doesn't qualify (not asphalt shingle, or under 4 years old)",
+  refused_inspection: 'Homeowner refused the inspection when I arrived',
+  inspected_no_sale: "I inspected the roof and they didn't buy",
+};
+const RETIRED_APPOINTMENT_LABELS: Record<string, string> = {
+  none: 'No, there was no appointment',
+  not_inspected: 'Yes, but I could not inspect the roof',
+  inspected: 'Yes, and I inspected the roof',
+};
 
 export const LEAD_NAME_MAX = 120;
 export const WHAT_HAPPENED_MIN = 30;
@@ -112,8 +127,14 @@ export const DECISION_BADGE: Record<LeadRequestDecision, 'done' | 'danger' | 'wa
 export const typeLabel = (type: string): string => LEAD_REQUEST_TYPE_LABELS[type as LeadRequestType] || type;
 export const decisionLabel = (decision: string): string => DECISION_LABELS[decision as LeadRequestDecision] || decision;
 export const decisionBadge = (decision: string) => DECISION_BADGE[decision as LeadRequestDecision] || 'pending';
-export const reasonLabel = (key: string): string => REPLACEMENT_REASONS.find((r) => r.key === key)?.label || key;
-export const appointmentLabel = (key: string): string => APPOINTMENT_OUTCOMES.find((a) => a.key === key)?.label || key;
+export const reasonLabel = (key: string): string =>
+  REPLACEMENT_REASONS.find((r) => r.key === key)?.label || RETIRED_REASON_LABELS[key] || key;
+export const appointmentLabel = (key: string): string =>
+  APPOINTMENT_OUTCOMES.find((a) => a.key === key)?.label || RETIRED_APPOINTMENT_LABELS[key] || key;
+
+/** The outcomes staff can set by hand on a Lead Replacement request. */
+export const STAFF_OUTCOMES: Exclude<LeadRequestDecision, 'sent'>[] = ['approved', 'not_replaceable', 'needs_review'];
+export const OUTCOME_NOTE_MAX = 300;
 
 /** The answers of a request as label → text, in form order (used by the email and the staff list). */
 export function detailLines(type: string, details: Record<string, any> | null | undefined): [string, string][] {

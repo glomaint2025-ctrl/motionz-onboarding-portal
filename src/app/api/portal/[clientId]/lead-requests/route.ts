@@ -14,7 +14,12 @@ import {
 } from '@/lib/lead-requests/definition';
 import { decideReplacement, UNRESPONSIVE_SENT_TEXT } from '@/lib/lead-requests/decision';
 import { validateLeadRequest, firstLeadRequestError } from '@/lib/lead-requests/validation';
-import { findRecentLeadRequestDuplicate, notifyLeadRequest, sendLeadRequestWebhook } from '@/lib/lead-requests/submissions';
+import {
+  findRecentLeadRequestDuplicate,
+  notifyLeadRequest,
+  sendLeadRequestSlack,
+  sendLeadRequestWebhook,
+} from '@/lib/lead-requests/submissions';
 import type { Lead, LeadRequest } from '@/lib/db/schema';
 
 export const runtime = 'nodejs';
@@ -127,9 +132,10 @@ export async function GET(
  * Body: { type: 'replacement' | 'unresponsive', leadId?, leadName, leadPhone, ...answers }
  * (see LeadRequestInput in src/lib/lead-requests/definition.ts).
  *
- * A Lead Replacement request is checked against the replacement rules straight away; all three
- * outcomes are saved. An Unresponsive Lead before day 4 is refused and not saved. Every saved
- * request is audit-logged, emailed to the lead review team and sent to the automation link (if set).
+ * A Lead Replacement request is checked against the replacement rules straight away; whatever the
+ * outcome, it is saved. An Unresponsive Lead before day 4 is refused and not saved. Every saved
+ * request is audit-logged, emailed to the lead review team, posted to Slack (if a Slack link is set)
+ * and sent to the automation link (if set).
  * Staff may submit on a client's behalf; whoever is signed in is recorded as the submitter.
  */
 export async function POST(
@@ -237,14 +243,16 @@ export async function POST(
       return NextResponse.json({ error: FORM_UNAVAILABLE, code: 'FORM_UNAVAILABLE' }, { status: 503 });
     }
 
-    // Tell the lead review team and the automation link. Neither can undo or fail the saved request.
+    // Tell the lead review team, Slack and the automation link. None of them can undo or fail the saved request.
     const tenantForNotice = targetTenant || { id: tenantId, name: 'Demo Portal', ghl_location_id: undefined };
+    const baseUrl = resolveBaseUrl(request);
     const [notified, webhook] = await Promise.all([
-      notifyLeadRequest({ request: saved, tenant: tenantForNotice, baseUrl: resolveBaseUrl(request) }).catch((err: any) => {
+      notifyLeadRequest({ request: saved, tenant: tenantForNotice, baseUrl }).catch((err: any) => {
         console.error('[lead-requests] Failed to notify staff:', err?.message);
         return 0;
       }),
       sendLeadRequestWebhook({ request: saved, tenant: tenantForNotice, lead }),
+      sendLeadRequestSlack({ request: saved, tenant: tenantForNotice, baseUrl }),
     ]);
 
     try {

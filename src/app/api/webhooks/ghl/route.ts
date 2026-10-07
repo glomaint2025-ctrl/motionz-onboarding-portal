@@ -19,6 +19,9 @@ import type { Tenant } from '@/lib/db/schema';
  *
  * Events (from `customData.event` on GHL workflow "Webhook" actions, or `type` on marketplace events):
  * - lead            Opportunity created / stage changed in a client's sub-account. Routed by location id.
+ * - lead_lost       Opportunity marked Lost (or Abandoned) in a client's sub-account: the lead is
+ *                   removed from the portal. A `lead` event whose status says lost / abandoned,
+ *                   or whose stage is named exactly "Lost" / "Abandoned", does the same.
  * - csm_call        Call booked with a CSM on the Motionz calendar. Routed by the client's email.
  * - onboarding_form Onboarding form submitted in GoHighLevel. Routed by the submitter's email.
  *                   (Clients now fill the form in inside the portal; this stays for an old workflow.)
@@ -41,6 +44,9 @@ interface HandlerResult {
   ignored?: string;
   error?: string;
   notified?: number;
+  /** Audit action to record instead of `ghl.webhook.<event>`, with extra facts for that entry. */
+  action?: string;
+  auditDetails?: Record<string, string | number | undefined>;
   /** Extra facts for the audit entry of an ignored or rejected event (e.g. the booking email). */
   info?: Record<string, string | undefined>;
 }
@@ -88,7 +94,22 @@ async function tenantByEmail(email: string | undefined): Promise<Tenant | null> 
 
 const contactEmail = (p: Payload) => str(p.email) || str(p.contact?.email);
 
-async function handleLead(p: Payload): Promise<HandlerResult> {
+const CLOSED_STATUSES = ['lost', 'abandoned'];
+const isClosedWord = (value: string | undefined): boolean => Boolean(value) && CLOSED_STATUSES.includes(value!.toLowerCase());
+
+/**
+ * True when the event says the opportunity was marked Lost or Abandoned in GoHighLevel:
+ * the `lead_lost` event, an opportunity status of lost / abandoned, or a pipeline stage named
+ * exactly "Lost" / "Abandoned". A stage that only contains the word ("Lost Contact Attempt") is a
+ * normal stage.
+ */
+function isLostOpportunity(event: string, p: Payload, stage: string | undefined): boolean {
+  if (event === 'lead_lost') return true;
+  const statuses = [p.customData?.status, p.status, p.opportunity?.status, p.opportunity_status];
+  return statuses.some((status) => isClosedWord(str(status))) || isClosedWord(stage);
+}
+
+async function handleLead(p: Payload, event: string): Promise<HandlerResult> {
   const tenant = await tenantByLocation(str(p.location?.id) || str(p.locationId));
   if (!tenant) return { ignored: 'Unknown or missing location id.' };
 
@@ -97,6 +118,22 @@ async function handleLead(p: Payload): Promise<HandlerResult> {
 
   const stage =
     str(p.customData?.stage) || str(p.pipeline_stage) || str(p.pipleline_stage) || str(p.opportunity?.pipeline_stage) || str(p.status);
+
+  // Marked Lost / Abandoned in GoHighLevel: the lead leaves the portal. If the same contact gets a
+  // new open opportunity later, the next `lead` event creates it again.
+  if (isLostOpportunity(event, p, stage)) {
+    const removed = await leadRepository.deleteByGhlContactId(tenant.id, contactId);
+    if (removed.length === 0) return { tenant, ignored: 'Lead marked lost, but it is not in the portal.' };
+    const lead = removed[0];
+    return {
+      tenant,
+      action: 'ghl.webhook.lead_removed',
+      auditDetails: {
+        leadName: clip(`${lead.first_name || ''} ${lead.last_name || ''}`.trim() || 'Unnamed lead', 200),
+        client: clip(tenant.name, 200),
+      },
+    };
+  }
 
   await leadRepository.upsertByGhlContactId(tenant.id, contactId, {
     first_name: str(p.first_name),
@@ -258,7 +295,7 @@ export async function POST(request: NextRequest) {
     const event = clip(str(payload?.customData?.event) || str(payload?.type), 50) || 'unknown';
     let result: HandlerResult;
 
-    if (event === 'lead') result = await handleLead(payload);
+    if (event === 'lead' || event === 'lead_lost') result = await handleLead(payload, event);
     else if (event === 'csm_call') result = await handleCsmCall(payload);
     else if (event === 'onboarding_form') result = await handleOnboardingForm(request, payload);
     else result = await handleMarketplaceEvent(event, payload);
@@ -277,13 +314,18 @@ export async function POST(request: NextRequest) {
       tenantId: result.tenant?.id,
       actorEmail: 'webhook@gohighlevel.com',
       actorRole: 'webhook',
-      action: `ghl.webhook.${event}`,
+      action: result.action || `ghl.webhook.${event}`,
       resourceType: 'webhook',
       resourceId: locationOf(payload) || 'n/a',
-      details: { event, matched: Boolean(result.tenant), notified: result.notified },
+      details: { event, matched: Boolean(result.tenant), notified: result.notified, ...result.auditDetails },
     });
 
-    return NextResponse.json({ received: true, eventType: event, matched: Boolean(result.tenant) });
+    return NextResponse.json({
+      received: true,
+      eventType: event,
+      matched: Boolean(result.tenant),
+      ...(result.action === 'ghl.webhook.lead_removed' ? { removed: true } : {}),
+    });
   } catch (err: any) {
     console.error('[ghl-webhook] Failed to process event:', err?.message);
     return NextResponse.json({ error: 'Failed to process GoHighLevel webhook' }, { status: 500 });
