@@ -175,6 +175,20 @@ export function desiredDriveAccess(ctx: DriveAccessContext): DriveAccessEntry[] 
  *   that access is given and taken away on the folder.
  * - `parentRemovable` limits who may be taken off the parent folder (default: anyone not wanted).
  */
+/**
+ * The Google account behind an address. Google treats name+anything@… as the mailbox name@…, and
+ * ignores dots in gmail.com names, so those are one account and are shared with only once.
+ */
+export function googleAccountOf(email: string | null | undefined): string {
+  const value = norm(email);
+  const at = value.lastIndexOf('@');
+  if (at <= 0) return value;
+  let local = value.slice(0, at).split('+')[0];
+  const domain = value.slice(at + 1);
+  if (domain === 'gmail.com' || domain === 'googlemail.com') local = local.split('.').join('');
+  return `${local}@${domain === 'googlemail.com' ? 'gmail.com' : domain}`;
+}
+
 export function diffDriveAccess(input: {
   targets: DriveTargetRef[];
   desired: DriveAccessEntry[];
@@ -184,7 +198,7 @@ export function diffDriveAccess(input: {
   /** Ids that are only read, to know what the level below inherits. Nothing is changed on them. */
   readOnlyIds?: string[];
 }): DriveAccessChange[] {
-  const isProtected = new Set((input.protectedEmails || []).map(norm).filter(Boolean));
+  const isProtected = new Set((input.protectedEmails || []).map(googleAccountOf).filter(Boolean));
   const currentById = new Map(input.current.map((c) => [c.id, c]));
   const changes: DriveAccessChange[] = [];
 
@@ -201,7 +215,7 @@ export function diffDriveAccess(input: {
     const listed = currentById.get(ref.id);
     if (!listed || listed.ok === false) continue; // not found or not readable: change nothing there
 
-    const owner = norm(listed.owner);
+    const owner = googleAccountOf(listed.owner);
     const have = new Map<string, DriveRole>();
     for (const email of listed.viewers || []) if (norm(email)) have.set(norm(email), 'viewer');
     for (const email of listed.editors || []) if (norm(email)) have.set(norm(email), 'editor');
@@ -219,6 +233,17 @@ export function diffDriveAccess(input: {
       });
     if (LEVEL[ref.target] >= 1) inherit(parentAfter);
     if (LEVEL[ref.target] >= 2 && ref.group) inherit(folderAfter.get(ref.group));
+    // The same people by Google account, so an alias of somebody already there is not shared with again.
+    const byAccount = (from: Map<string, DriveRole>) => {
+      const out = new Map<string, DriveRole>();
+      from.forEach((role, email) => {
+        const account = googleAccountOf(email);
+        if (!out.has(account) || RANK[role] > RANK[out.get(account)!]) out.set(account, role);
+      });
+      return out;
+    };
+    const haveAccounts = byAccount(have);
+    const inheritedAccounts = byAccount(inherited);
 
     const want = new Map<string, DriveRole>();
     for (const entry of input.desired) {
@@ -229,16 +254,19 @@ export function diffDriveAccess(input: {
 
     const after = new Map(have);
     want.forEach((role, email) => {
-      if (email === owner || isProtected.has(email)) return;
-      const fromAbove = inherited.get(email);
+      const account = googleAccountOf(email);
+      if (account === owner || isProtected.has(account)) return;
+      const fromAbove = inheritedAccounts.get(account);
       if (fromAbove && RANK[fromAbove] >= RANK[role]) return; // already reaches it through the folder above
-      if (have.get(email) === role) return;
+      if (haveAccounts.get(account) === role) return;
       changes.push({ ...ref, email, role });
       after.set(email, role);
     });
+    const wantAccounts = byAccount(want);
     have.forEach((_role, email) => {
-      if (want.has(email) || email === owner || isProtected.has(email)) return;
-      if (inherited.has(email)) return; // comes from the folder above; handled there
+      const account = googleAccountOf(email);
+      if (wantAccounts.has(account) || account === owner || isProtected.has(account)) return;
+      if (inheritedAccounts.has(account)) return; // comes from the folder above; handled there
       if (ref.target === 'parent' && input.parentRemovable && !input.parentRemovable(email)) return;
       changes.push({ ...ref, email, role: 'none' });
       after.delete(email);
