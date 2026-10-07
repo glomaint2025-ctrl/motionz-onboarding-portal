@@ -92,7 +92,7 @@ export function staffLoginCodeEmail(params: { to: string; code: string; expiresI
       `This code expires in ${params.expiresInMinutes} minutes and works once.`,
     ],
     undefined,
-    "If this wasn't you, someone has your password. Change your password right away and tell a Motionz administrator.",
+    "If this wasn't you, someone has your password. Change your password right away and tell a CSM Manager.",
     ['staff-login-code']
   );
   // Same content as the text part, with the code shown large.

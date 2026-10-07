@@ -317,7 +317,7 @@ export function MyProfile() {
               <CardHeader title="Sign-in email" />
               <p style={{ margin: '0 0 var(--space-2)', fontWeight: 600, wordBreak: 'break-all' }}>{profile.email}</p>
               <p style={{ margin: 0, color: 'var(--color-text-secondary)', fontSize: 'var(--font-size-sm)' }}>
-                This is the email you sign in with. To change it, ask {profile.role === 'admin' ? 'another Motionz admin' : isStaff ? 'a Motionz admin' : 'your Motionz contact'}.
+                This is the email you sign in with. To change it, ask {profile.role === 'admin' ? 'another CSM Manager' : isStaff ? 'a CSM Manager' : 'your Motionz contact'}.
               </p>
             </Card>
           </>

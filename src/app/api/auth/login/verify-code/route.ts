@@ -81,7 +81,7 @@ export async function POST(request: Request) {
     // The account may have been disabled or changed since the password step.
     const user = await userRepository.findById(challenge.userId);
     if (!user || user.status === 'suspended' || (user.role !== 'admin' && user.role !== 'csm')) {
-      return fail('Your staff access has been disabled. Contact a Motionz administrator.', 403, {
+      return fail('Your staff access has been disabled. Contact a CSM Manager.', 403, {
         clearCookie: true,
         extra: { restart: true },
       });

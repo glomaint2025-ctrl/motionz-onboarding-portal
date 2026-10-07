@@ -226,7 +226,7 @@ export default function CSMClientSetupEditorPage() {
 
       {!hasContract && (
         <Notice tone="info" style={{ marginBottom: 'var(--space-5)' }}>
-          This client has no contract attached yet. Ask an admin to attach it (Admin → Clients → {tenant.name} → Contract).
+          This client has no contract attached yet. Ask a CSM Manager to attach it (Clients → {tenant.name} → Contract).
         </Notice>
       )}
 

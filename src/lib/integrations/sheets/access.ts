@@ -99,6 +99,8 @@ export interface DriveSyncOptions {
   budgetMs?: number;
   /** Addresses that just stopped being staff (deleted, or an old email), to take off the parent folder. */
   removeEmails?: string[];
+  /** The client is being deleted for good: nobody keeps access to its folder and files (the folder itself stays). */
+  clientRemoved?: boolean;
 }
 
 export const OLD_SCRIPT_WARNING = 'The Google script needs updating before Drive access can be managed.';
@@ -442,7 +444,7 @@ async function runSync(tenantIds: string[], clientOnly: boolean, options: DriveS
 
     const desired = [
       ...desiredDriveAccess({ parentFolderId: parent.id, admins }),
-      ...scopes.flatMap((s) => desiredDriveAccess(s.context)),
+      ...(options.clientRemoved ? [] : scopes.flatMap((s) => desiredDriveAccess(s.context))),
     ];
 
     for (const ref of refs) {

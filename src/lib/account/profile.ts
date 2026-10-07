@@ -10,7 +10,8 @@ import { userRepository } from '../db/repositories';
 import { User } from '../db/schema';
 import { AppError } from '../errors';
 import { getAvatarUrl } from '../storage/avatars';
-import { VIEWER_ROLE_LABELS } from './role-labels';
+import { staffRoleLabel } from './role-labels';
+import { resolveStaffTitle } from '../db/repositories/app-settings.repository';
 
 /**
  * The signed-in, active person behind this request. Suspended people and suspended or archived
@@ -32,7 +33,8 @@ export async function presentProfile(user: User) {
     email: user.email,
     phone: user.phone || '',
     role: user.role,
-    roleLabel: VIEWER_ROLE_LABELS[user.role] || '',
+    // An admin with the title "tech" reads "Tech"; the role itself is unchanged.
+    roleLabel: staffRoleLabel(user.role, user.role === 'admin' ? await resolveStaffTitle(user.id) : null),
     avatarUrl: await getAvatarUrl(user.id, user.avatar_path),
   };
 }

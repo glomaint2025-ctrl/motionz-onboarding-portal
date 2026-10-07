@@ -17,6 +17,7 @@ import { provisionClientSheet, renameClientFiles } from '@/lib/integrations/shee
 import { describeDriveSync, driveSyncWarning, syncClientDriveAccess } from '@/lib/integrations/sheets/access';
 import { createInvitation, resendInvitation, revokeInvitation } from '@/lib/auth/invitations';
 import { PORTAL_MODULES } from '@/lib/portal-modules';
+import { CONFIRM_NAME_ERROR, confirmNameMatches, deleteClientPermanently } from '@/lib/admin/delete-client';
 
 /** Only real portal sections are ever returned or saved; legacy switches such as "orders" are ignored. */
 const MODULE_KEYS = new Set(PORTAL_MODULES.map((m) => m.key));
@@ -134,7 +135,7 @@ export async function PUT(
       // One sub-account feeds one client: leads are routed by this id, so two live clients sharing it
       // would send every lead to whichever is found first. An archived client holding it does not block.
       if (loc && loc !== tenant.ghl_location_id) {
-        const holders = (await tenantRepository.list({ includeArchived: true, limit: 1000 })).filter(
+        const holders = (await tenantRepository.listByGhlLocationId(loc, { includeArchived: true })).filter(
           (t) => t.id !== tenant.id && t.ghl_location_id === loc
         );
         const liveHolder = holders.find((t) => !t.deleted_at && t.status !== 'cancelled');
@@ -272,8 +273,32 @@ export async function PATCH(
       return NextResponse.json({ error: 'Client portal not found.' }, { status: 404 });
     }
 
-    const body = await request.json();
+    const body = await request.json().catch(() => ({}));
     const { action, invitationId, memberId, reason } = body;
+
+    // Delete permanently: the client, its people and all of its portal data. The client's name
+    // must be typed out. Works whatever state the client is in. The Google Drive folder is kept.
+    if (action === 'delete_client_permanently') {
+      if (!confirmNameMatches(tenant, body.confirmName)) {
+        return NextResponse.json({ error: CONFIRM_NAME_ERROR, field: 'confirmName' }, { status: 400 });
+      }
+      const result = await deleteClientPermanently(tenant, { email: actorEmail });
+      if (!result.ok) {
+        return NextResponse.json(
+          { error: result.error, deleted: result.deleted, notDeleted: result.notDeleted },
+          { status: result.status }
+        );
+      }
+      return NextResponse.json({
+        success: true,
+        message: `${result.name} was deleted.`,
+        removed: result.counts,
+        driveNote: result.driveNote,
+        driveFolderUrl: result.driveFolderUrl,
+        ...(result.driveAccessWarning ? { driveAccessWarning: result.driveAccessWarning } : {}),
+        ...(result.warnings.length ? { warnings: result.warnings } : {}),
+      });
+    }
 
     // Google Drive access follows the change just made. A Drive problem is only ever a warning.
     const driveAccessNote = async (): Promise<{ driveAccessWarning?: string }> => {
@@ -526,7 +551,7 @@ export async function PATCH(
       // Two live clients must never share one, so the restored client comes back without it.
       let locationNotice: string | undefined;
       if (tenant.ghl_location_id) {
-        const liveHolder = (await tenantRepository.list({ limit: 1000 })).find(
+        const liveHolder = (await tenantRepository.listByGhlLocationId(tenant.ghl_location_id)).find(
           (t) => t.id !== tenant.id && t.ghl_location_id === tenant.ghl_location_id && t.status !== 'cancelled'
         );
         if (liveHolder) {

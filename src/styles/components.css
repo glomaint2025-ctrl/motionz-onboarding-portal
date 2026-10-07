@@ -1858,6 +1858,7 @@ a:has(> .ui-btn):hover { text-decoration: none; }
   padding: 2px 7px;
   border-radius: var(--radius-full);
   letter-spacing: 0.01em;
+  white-space: nowrap;
 }
 
 .logo-tile {

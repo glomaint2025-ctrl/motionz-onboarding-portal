@@ -11,7 +11,8 @@ import {
   integrationConfigRepository,
   invitationRepository,
 } from '@/lib/db/repositories';
-import { resolveBookingCalendarId, resolveFormSettings } from '@/lib/db/repositories/app-settings.repository';
+import { resolveBookingCalendarId, resolveFormSettings, resolveStaffTitle } from '@/lib/db/repositories/app-settings.repository';
+import { staffRoleLabel } from '@/lib/account/role-labels';
 import { assertPortalAccess, handleAuthError, getSessionUser } from '@/lib/auth/guard';
 import { hasPermission } from '@/lib/auth/permissions';
 import { PORTAL_MODULES } from '@/lib/portal-modules';
@@ -65,6 +66,7 @@ export async function GET(
       pendingInvitations,
       { csmUser, bookingCalendarId },
       forms,
+      viewerTitle,
     ] = await Promise.all([
       // The signed-in person (not the account owner), for the greeting and the header.
       session ? getSessionUser(session) : Promise.resolve(null),
@@ -80,6 +82,11 @@ export async function GET(
       loadCsm(),
       // GoHighLevel form ids set by an admin (only the Texting registration form; the rest are built in).
       resolveFormSettings(),
+      // A staff viewer's title ("Tech"), so the header names them correctly. Uses the person already
+      // read above (no second read of them) and never fails the page.
+      session?.role === 'admin'
+        ? getSessionUser(session).then((u) => resolveStaffTitle(u?.id)).catch(() => null)
+        : Promise.resolve(null),
     ]);
 
     // Invitations still waiting: not accepted, revoked or expired, and not for somebody already on the team.
@@ -160,7 +167,13 @@ export async function GET(
       bookingCalendarId,
       forms,
       viewer: session
-        ? { email: session.email, role: session.role, full_name: viewerUser?.full_name || '' }
+        ? {
+            email: session.email,
+            role: session.role,
+            full_name: viewerUser?.full_name || '',
+            // Staff looking at a portal are named by their own role ("CSM Manager", "Tech").
+            role_label: staffRoleLabel(session.role, viewerTitle),
+          }
         : null,
     });
   } catch (error: any) {

@@ -12,6 +12,8 @@ export interface ShellViewer {
   name?: string;
   /** Their real role: admin, csm, client or client_member. */
   role?: string | null;
+  /** How their role is named ("CSM Manager", "Tech"…), when the server said so. */
+  roleLabel?: string | null;
   /** Their profile picture (a short-lived link), when they have one. */
   avatarUrl?: string | null;
 }
@@ -71,7 +73,7 @@ export const AppShell: React.FC<AppShellProps> = ({
           return;
         }
         if (isMounted && res.ok) {
-          setFetchedViewer({ name: data.fullName || '', role: data.role || null, avatarUrl: data.avatarUrl || null });
+          setFetchedViewer({ name: data.fullName || '', role: data.role || null, roleLabel: data.roleLabel || null, avatarUrl: data.avatarUrl || null });
         }
       })
       .catch(() => {
@@ -92,7 +94,7 @@ export const AppShell: React.FC<AppShellProps> = ({
   const person = needsLookup ? fetchedViewer : viewer;
   const personRole = person?.role || (role === 'client' ? '' : role);
   // Staff looking at a client portal are still shown as themselves, never as the client.
-  const roleLabel = VIEWER_ROLE_LABELS[personRole] || (role === 'client' ? 'Client' : '');
+  const roleLabel = person?.roleLabel || VIEWER_ROLE_LABELS[personRole] || (role === 'client' ? 'Client' : '');
   const isClientPerson = personRole === 'client' || personRole === 'client_member' || (!personRole && role === 'client');
   const userName = (person?.name || '').trim() || (isClientPerson ? companyName : '');
 

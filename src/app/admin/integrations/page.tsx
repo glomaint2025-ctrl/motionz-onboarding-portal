@@ -23,8 +23,8 @@ type LoginCodeMode = 'off' | 'csm' | 'all_staff';
 
 const LOGIN_CODE_OPTIONS: { value: LoginCodeMode; label: string; detail: string }[] = [
   { value: 'off', label: 'Off', detail: 'Staff sign in with their password only.' },
-  { value: 'csm', label: 'CSMs only', detail: 'CSMs enter an emailed code every time they log in. Admins sign in with their password only.' },
-  { value: 'all_staff', label: 'All staff', detail: 'CSMs and admins, including you, enter an emailed code every time they log in.' },
+  { value: 'csm', label: 'CSMs only', detail: 'CSMs enter an emailed code every time they log in. CSM Managers sign in with their password only.' },
+  { value: 'all_staff', label: 'All staff', detail: 'CSMs and CSM Managers, including you, enter an emailed code every time they log in.' },
 ];
 
 type ListKey = 'onboarding_form_recipients' | 'website_request_recipients' | 'lead_form_recipients';
@@ -316,7 +316,7 @@ export default function AdminSettingsPage() {
               Also email the CSM assigned to that client
             </label>
             <span className="ui-helper-text" style={{ display: 'block', marginBottom: 'var(--space-4)' }}>
-              Applies to onboarding forms and lead forms. Website change requests always go to the client&rsquo;s CSM (or to every admin when
+              Applies to onboarding forms and lead forms. Website change requests always go to the client&rsquo;s CSM (or to every CSM Manager when
               the client has no CSM), as well as the website team above.
             </span>
             <Button variant="primary" onClick={save} disabled={saving}>
