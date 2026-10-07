@@ -261,14 +261,18 @@ export function isOldScriptAnswer(data: any): boolean {
 
 /** A short line for the admin: "Access is up to date", "Added 2, removed 1", or the warning. */
 export function describeDriveSync(result: DriveSyncResult): string {
-  if (result.warnings.length > 0) return result.warnings.join(' ');
-  if (result.skipped) return 'There are no Google files to share yet.';
+  if (result.skipped && result.warnings.length === 0) return 'There are no Google files to share yet.';
   const parts: string[] = [];
   if (result.added > 0) parts.push(`added ${result.added}`);
   if (result.removed > 0) parts.push(`removed ${result.removed}`);
-  if (parts.length === 0) return 'Access is up to date';
   const line = parts.join(', ');
-  return line.charAt(0).toUpperCase() + line.slice(1);
+  const summary = parts.length === 0 ? '' : `${line.charAt(0).toUpperCase()}${line.slice(1)}.`;
+  if (result.warnings.length === 0) return summary ? summary.slice(0, -1) : 'Access is up to date';
+  // What worked is said first, so one refused address does not hide that everyone else is fine.
+  // Only when the warnings are about single people: a sync that could not run at all has nothing to add.
+  const perPerson = result.warnings.every((w) => /^Google (Drive could not share|would not remove)/.test(w));
+  const lead = summary || (perPerson ? 'Everyone else is up to date.' : '');
+  return [lead, ...result.warnings].filter(Boolean).join(' ');
 }
 
 /** The text to send along with an API answer when the sync needs a person's attention, else undefined. */
@@ -479,7 +483,7 @@ async function runSync(tenantIds: string[], clientOnly: boolean, options: DriveS
     result.warnings.push(
       change.role === 'none'
         ? `Google would not remove ${change.email} from ${TARGET_LABEL[change.target]}. Remove them by hand in Google Drive if they should not have access. (Google said: ${change.error})`
-        : `Google would not give ${change.email} access to ${TARGET_LABEL[change.target]}. Check that ${change.email} is a Google account, and that the Google account running the script owns it or is allowed to share it. (Google said: ${change.error})`
+        : `Google Drive could not share ${TARGET_LABEL[change.target]} with ${change.email}. The usual reason is that ${change.email} is not a Google account. (Google said: ${change.error})`
     );
   }
   if (failed.length > 5) result.warnings.push(`...and ${failed.length - 5} more.`);

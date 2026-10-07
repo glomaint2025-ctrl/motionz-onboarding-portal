@@ -383,7 +383,7 @@ async function run() {
     assert.strictEqual(result.ok, false);
     assert.strictEqual(result.removed, 1);
     assert.strictEqual(result.added, 0);
-    assert.deepStrictEqual(result.warnings, ['Google would not give sarah@abcroofing.com access to the calculator. Check that sarah@abcroofing.com is a Google account, and that the Google account running the script owns it or is allowed to share it. (Google said: Invalid argument: not a Google account)']);
+    assert.deepStrictEqual(result.warnings, ['Google Drive could not share the calculator with sarah@abcroofing.com. The usual reason is that sarah@abcroofing.com is not a Google account. (Google said: Invalid argument: not a Google account)']);
     assert.ok(!drive.get('demo_tracking_0123456789')!.editors.has('stranger@gmail.com'));
     failEmail = '';
     result = await syncClientDriveAccess(demo);
