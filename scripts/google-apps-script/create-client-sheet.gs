@@ -476,7 +476,36 @@ function isUnderParent_(item, parentId) {
     }
     level = next;
   }
-  return false;
+  // Google does not always report the parents of an item when the parent folder belongs to another
+  // account (or is reached through a link). Fall back to looking through the parent folder itself.
+  if (idsUnderParent_(parentId)[item.getId()] === true) return true;
+  // The item may have been created earlier in this same run: look once more with a fresh list.
+  UNDER_PARENT_CACHE_[parentId] = null;
+  return idsUnderParent_(parentId)[item.getId()] === true;
+}
+
+var UNDER_PARENT_CACHE_ = {};
+
+/** Ids of every client folder in the parent folder and of the files directly inside them. Built once per run. */
+function idsUnderParent_(parentId) {
+  if (UNDER_PARENT_CACHE_[parentId]) return UNDER_PARENT_CACHE_[parentId];
+  var ids = {};
+  try {
+    var parent = DriveApp.getFolderById(parentId);
+    var looseFiles = parent.getFiles();
+    while (looseFiles.hasNext()) ids[looseFiles.next().getId()] = true;
+    var folders = parent.getFolders();
+    while (folders.hasNext()) {
+      var folder = folders.next();
+      ids[folder.getId()] = true;
+      var files = folder.getFiles();
+      while (files.hasNext()) ids[files.next().getId()] = true;
+    }
+  } catch (err) {
+    // Leave the list empty: nothing is treated as inside a folder we cannot read.
+  }
+  UNDER_PARENT_CACHE_[parentId] = ids;
+  return ids;
 }
 
 /** Lower-cased email addresses of a list of Drive users. People whose address Google hides are left out. */
