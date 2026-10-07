@@ -88,6 +88,8 @@ Every client gets a Drive folder with their tracking sheet, their Money Leak Cal
 **Good to know**
 - When someone is added to the portal, Google emails them a "shared with you" notice from this account. Admins get all client folders, a CSM gets their own clients' folders, a client gets their own files.
 - When someone is removed from the portal, their Drive access is removed too.
+- **Google can only share with Google accounts.** Each staff email you add to the portal (for example `admin@motionz.ai`) must be a Google Workspace or Google account, otherwise that person cannot open client folders or sheets. Today `admin@motionz.ai` is not one. The same goes for clients: a client whose email is not a Google account sees the portal normally but cannot open their sheets or an uploaded contract.
+- Keep the main folder's sharing on **Restricted** (not "Anyone with the link"), and tick **Editors can change permissions and share** if the script runs under a different account than the folder's owner.
 
 ## 6. Google Cloud key (roof measurement)
 
