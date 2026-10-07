@@ -3,6 +3,8 @@ import { getSessionFromRequest } from '@/lib/auth/guard';
 import { userRepository } from '@/lib/db/repositories/users.repository';
 import { getAvatarUrl } from '@/lib/storage/avatars';
 import { SESSION_COOKIE_NAME } from '@/lib/auth/session';
+import { staffRoleLabel } from '@/lib/account/role-labels';
+import { resolveStaffTitle } from '@/lib/db/repositories/app-settings.repository';
 
 export const dynamic = 'force-dynamic';
 
@@ -32,10 +34,15 @@ export async function GET(request: NextRequest) {
       return gone;
     }
 
+    // "Tech" is a name only: the role stays admin.
+    const title = session.role === 'admin' ? await resolveStaffTitle(user?.id) : null;
+
     return NextResponse.json(
       {
         email: session.email,
         role: session.role,
+        title,
+        roleLabel: staffRoleLabel(session.role, title),
         fullName: user?.full_name || '',
         // Short-lived signed link to their profile picture; null when they have none.
         avatarUrl: user ? await getAvatarUrl(user.id, user.avatar_path) : null,

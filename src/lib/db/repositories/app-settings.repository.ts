@@ -62,6 +62,51 @@ export async function resolveBookingCalendarId(csmUserId?: string | null): Promi
 }
 // ───────────────────────── end csm_calendars ─────────────────────────
 
+// ───────────────────────── staff_titles (CSM Manager or Tech) ─────────────────────────
+// Self-contained block: stored under the `staff_titles` key through the generic get/set below.
+// A title only changes the name people read. A Tech person has the role `admin`.
+
+export const STAFF_TITLES_KEY = 'staff_titles';
+/** Staff user id → title. No entry = no title (an admin reads as "CSM Manager"). */
+export type StaffTitles = Record<string, 'tech'>;
+
+/** Reads the titles, dropping anything that is not a known title. */
+export async function getStaffTitles(): Promise<StaffTitles> {
+  const raw = (await (appSettingsRepository as any).get(STAFF_TITLES_KEY)) as unknown;
+  const titles: StaffTitles = {};
+  if (raw && typeof raw === 'object' && !Array.isArray(raw)) {
+    for (const [userId, title] of Object.entries(raw as Record<string, unknown>)) {
+      if (title === 'tech') titles[userId] = 'tech';
+    }
+  }
+  return titles;
+}
+
+/** Sets or (with null) removes one person's title. Returns whether anything changed. */
+export async function setStaffTitle(userId: string, title: 'tech' | null, updatedBy: string): Promise<boolean> {
+  const titles = await getStaffTitles();
+  if ((titles[userId] || null) === title) return false;
+  if (title) titles[userId] = title;
+  else delete titles[userId];
+  await (appSettingsRepository as any).set(STAFF_TITLES_KEY, titles, updatedBy);
+  return true;
+}
+
+/**
+ * One person's title, for showing their role name. Never throws: if the setting cannot be read
+ * the person simply reads as "CSM Manager"; their access does not depend on it.
+ */
+export async function resolveStaffTitle(userId?: string | null): Promise<'tech' | null> {
+  if (!userId) return null;
+  try {
+    return (await getStaffTitles())[userId] || null;
+  } catch (err: any) {
+    console.error(`[staff-titles] Could not read staff titles: ${err?.message}`);
+    return null;
+  }
+}
+// ───────────────────────── end staff_titles ─────────────────────────
+
 /** Known platform settings and their defaults. */
 export interface NotificationSettings {
   /** Who is emailed when a client submits the onboarding form (e.g. the media buyer). */

@@ -21,6 +21,8 @@ interface StaffMember {
   email: string;
   name?: string;
   role: 'admin' | 'csm';
+  /** 'tech' for an admin who is named "Tech"; the permissions are the same as a CSM Manager's. */
+  title?: 'tech' | null;
   status: string;
   assignedClients: number | null;
   /** The CSM's own GHL booking calendar; null = the default calendar. */
@@ -28,6 +30,13 @@ interface StaffMember {
   /** True on the signed-in admin's own row. */
   self?: boolean;
 }
+
+/** What the Role dropdown offers. "Tech" is saved as role admin + title tech. */
+type RoleChoice = 'csm' | 'admin' | 'tech';
+const toRoleChoice = (value: string): RoleChoice => (value === 'admin' || value === 'tech' ? value : 'csm');
+const roleChoiceOf = (m: Pick<StaffMember, 'role' | 'title'>): RoleChoice => (m.role === 'csm' ? 'csm' : m.title === 'tech' ? 'tech' : 'admin');
+const roleChoiceBody = (choice: RoleChoice) => (choice === 'csm' ? { role: 'csm', title: null } : { role: 'admin', title: choice === 'tech' ? 'tech' : null });
+const ROLE_CHOICE_LABEL: Record<RoleChoice, string> = { csm: 'CSM', admin: 'CSM Manager', tech: 'Tech' };
 
 const CALENDAR_ID_PATTERN = /^[A-Za-z0-9_-]{10,40}$/;
 const CALENDAR_ID_ERROR = 'Use the id at the end of the booking link: letters, numbers, - and _ only (10 to 40 characters).';
@@ -37,7 +46,7 @@ export default function StaffPage() {
   const [loading, setLoading] = useState(true);
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
-  const [role, setRole] = useState<'csm' | 'admin'>('csm');
+  const [role, setRole] = useState<RoleChoice>('csm');
   const [busy, setBusy] = useState(false);
   // Each section keeps its own result message, shown inside that section.
   const [addMessage, setAddMessage] = useState<SectionMessage>(null);
@@ -52,7 +61,7 @@ export default function StaffPage() {
   const [deleteError, setDeleteError] = useState('');
   const [editName, setEditName] = useState('');
   const [editEmail, setEditEmail] = useState('');
-  const [editRole, setEditRole] = useState<'csm' | 'admin'>('csm');
+  const [editRole, setEditRole] = useState<RoleChoice>('csm');
   const [editBusy, setEditBusy] = useState(false);
   const [editError, setEditError] = useState('');
   const [editCalendar, setEditCalendar] = useState('');
@@ -90,7 +99,7 @@ export default function StaffPage() {
       const res = await fetch('/api/admin/staff', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name, email, role }),
+        body: JSON.stringify({ name, email, ...roleChoiceBody(role) }),
       });
       const data = await res.json();
       if (data.success) {
@@ -178,7 +187,7 @@ export default function StaffPage() {
     setEditing(member);
     setEditName(member.name || '');
     setEditEmail(member.email);
-    setEditRole(member.role);
+    setEditRole(roleChoiceOf(member));
     setEditCalendar(member.calendarId || '');
     setEditError('');
   };
@@ -235,7 +244,7 @@ export default function StaffPage() {
           name: editName,
           email: editEmail,
           // Your own role is locked; the server rejects it too.
-          ...(editing.self ? {} : { role: editRole }),
+          ...(editing.self ? {} : roleChoiceBody(editRole)),
           ...(editRole === 'csm' ? { calendar_id: calendar } : {}),
         }),
       });
@@ -268,7 +277,7 @@ export default function StaffPage() {
       <div style={{ marginBottom: 'var(--space-6)' }}>
         <h1 style={{ marginBottom: 'var(--space-1)' }}>Staff</h1>
         <p style={{ color: 'var(--color-text-secondary)' }}>
-          Motionz team members who can sign in. CSMs see only the clients assigned to them; CSM Managers see everything.
+          Motionz team members who can sign in. CSMs see only the clients assigned to them; CSM Managers and Tech see everything.
         </p>
       </div>
 
@@ -300,12 +309,13 @@ export default function StaffPage() {
             label="Role"
             value={role}
             onChange={(e) => {
-              setRole(e.target.value === 'admin' ? 'admin' : 'csm');
+              setRole(toRoleChoice(e.target.value));
               clearAddError();
             }}
           >
             <option value="csm">CSM</option>
             <option value="admin">CSM Manager</option>
+            <option value="tech">Tech</option>
           </Select>
           <Button type="submit" variant="primary" disabled={busy}>
             {busy ? 'Adding...' : 'Add staff member'}
@@ -406,7 +416,7 @@ export default function StaffPage() {
                         </td>
                         <td data-label="Role">
                           <div className="ui-staff-badges">
-                            <StatusBadge status={m.role === 'admin' ? 'CSM Manager' : 'CSM'} variant="progress" dot={false} />
+                            <StatusBadge status={ROLE_CHOICE_LABEL[roleChoiceOf(m)]} variant="progress" dot={false} />
                             {m.self && <StatusBadge status="You" variant="pending" dot={false} />}
                           </div>
                         </td>
@@ -530,11 +540,12 @@ export default function StaffPage() {
               label="Role"
               value={editRole}
               disabled={editing.self}
-              onChange={(e) => setEditRole(e.target.value === 'admin' ? 'admin' : 'csm')}
+              onChange={(e) => setEditRole(toRoleChoice(e.target.value))}
               helperText={editing.self ? 'You cannot change your own role. Ask another CSM Manager.' : undefined}
             >
               <option value="csm">CSM</option>
               <option value="admin">CSM Manager</option>
+            <option value="tech">Tech</option>
             </Select>
             {editRole === 'csm' && (
               <Input

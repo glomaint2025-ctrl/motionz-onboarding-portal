@@ -13,7 +13,8 @@ import {
 import { userRepository } from '@/lib/db/repositories/users.repository';
 import { leadRepository } from '@/lib/db/repositories/leads.repository';
 import { csmAssignmentRepository } from '@/lib/db/repositories';
-import { resolveBookingCalendarId, resolveFormSettings } from '@/lib/db/repositories/app-settings.repository';
+import { resolveBookingCalendarId, resolveFormSettings, resolveStaffTitle } from '@/lib/db/repositories/app-settings.repository';
+import { staffRoleLabel } from '@/lib/account/role-labels';
 import { assertPortalAccess, handleAuthError } from '@/lib/auth/guard';
 import { hasPermission } from '@/lib/auth/permissions';
 import { PORTAL_MODULES } from '@/lib/portal-modules';
@@ -144,7 +145,13 @@ export async function GET(
       bookingCalendarId,
       forms,
       viewer: session
-        ? { email: session.email, role: session.role, full_name: viewerUser?.full_name || '' }
+        ? {
+            email: session.email,
+            role: session.role,
+            full_name: viewerUser?.full_name || '',
+            // Staff looking at a portal are named by their own role ("CSM Manager", "Tech").
+            role_label: staffRoleLabel(session.role, session.role === 'admin' ? await resolveStaffTitle(viewerUser?.id) : null),
+          }
         : null,
     });
   } catch (error: any) {

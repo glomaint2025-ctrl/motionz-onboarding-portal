@@ -10,7 +10,10 @@ import {
   getCsmCalendarSettings,
   setCsmCalendarSettings,
   GHL_CALENDAR_ID_PATTERN,
+  getStaffTitles,
+  setStaffTitle,
 } from '@/lib/db/repositories/app-settings.repository';
+import { staffRoleLabel, type StaffTitle } from '@/lib/account/role-labels';
 import type { User } from '@/lib/db/schema';
 import { requireAuth, handleAuthError } from '@/lib/auth/guard';
 import { isStaffEmail } from '@/lib/auth/staff';
@@ -23,9 +26,9 @@ import { driveSyncWarning, syncStaffDriveAccess } from '@/lib/integrations/sheet
 
 const SETUP_LINK_MINUTES = 72 * 60;
 
-function staffWelcomeEmail(to: string, name: string, role: string, url: string) {
+function staffWelcomeEmail(to: string, name: string, role: string, url: string, title: StaffTitle | null = null) {
   const esc = (v: string) => v.replace(/[&<>"']/g, (c) => `&#${c.charCodeAt(0)};`);
-  const roleLabel = role === 'admin' ? 'a CSM Manager' : 'a CSM';
+  const roleLabel = `a ${staffRoleLabel(role, title)}`;
   const text = `Hi ${name},\n\nYou have been added to the Motionz portal as ${roleLabel}.\nSet your password here (link valid for 72 hours): ${url}\n\nAfter that, sign in with ${to} and your password.`;
   const html = `<!doctype html><html><body style="font-family:Arial,Helvetica,sans-serif;background:#f9fafb;padding:24px;color:#111827">
 <div style="max-width:560px;margin:0 auto;background:#fff;border:1px solid #e5e7eb;border-radius:8px;padding:32px">
@@ -57,11 +60,26 @@ async function findAuthUserIdByEmail(supabase: ServiceClient, email: string): Pr
   return null;
 }
 
-const present = (u: User, calendarId: string | null = null) => ({
+const ROLE_ERROR = 'Role must be CSM, CSM Manager or Tech.';
+
+/**
+ * The `title` a request sends next to `role`: 'tech', or null / '' for none. undefined when
+ * the request does not mention it; 'invalid' for anything else.
+ */
+function parseTitleInput(value: unknown): StaffTitle | null | undefined | 'invalid' {
+  if (value === undefined) return undefined;
+  if (value === null || value === '') return null;
+  return value === 'tech' ? 'tech' : 'invalid';
+}
+
+const present = (u: User, calendarId: string | null = null, title: StaffTitle | null = null) => ({
   id: u.id,
   email: u.email,
   name: u.full_name,
   role: u.role,
+  // "Tech" is a name only: role admin, same permissions as a CSM Manager.
+  title: u.role === 'admin' ? title : null,
+  roleLabel: staffRoleLabel(u.role, u.role === 'admin' ? title : null),
   status: u.status || 'active',
   calendarId,
 });
@@ -111,7 +129,7 @@ async function updateStaff(body: any, target: User, session: SessionIdentity) {
 
   if (body.role !== undefined) {
     if (body.role !== 'admin' && body.role !== 'csm') {
-      return NextResponse.json({ error: 'Role must be CSM Manager or CSM.' }, { status: 400 });
+      return NextResponse.json({ error: ROLE_ERROR }, { status: 400 });
     }
     if (body.role !== target.role) {
       if (self) {
@@ -120,6 +138,24 @@ async function updateStaff(body: any, target: User, session: SessionIdentity) {
       updates.role = body.role;
       changed.push('role');
     }
+  }
+
+  // Title (CSM Manager or Tech). Kept in app settings, not on the users row; the role stays admin.
+  const titleInput = parseTitleInput(body.title);
+  if (titleInput === 'invalid') return NextResponse.json({ error: ROLE_ERROR }, { status: 400 });
+  const nextRole = updates.role || target.role;
+  if (titleInput === 'tech' && nextRole !== 'admin') {
+    return NextResponse.json({ error: 'Tech is a kind of CSM Manager. Choose CSM, CSM Manager or Tech.' }, { status: 400 });
+  }
+  const previousTitle: StaffTitle | null = (await getStaffTitles())[target.id] || null;
+  // Becoming a CSM clears the title; otherwise it only changes when the request says so.
+  const nextTitle: StaffTitle | null = nextRole !== 'admin' ? null : titleInput === undefined ? previousTitle : titleInput;
+  const titleChanged = nextTitle !== previousTitle;
+  if (titleChanged) {
+    if (self) {
+      return NextResponse.json({ error: 'You cannot change your own role. Ask another CSM Manager.' }, { status: 400 });
+    }
+    changed.push('title');
   }
 
   // Booking calendar (CSMs only). Kept in app settings, not on the users row.
@@ -152,7 +188,7 @@ async function updateStaff(body: any, target: User, session: SessionIdentity) {
   }
 
   if (changed.length === 0) {
-    return NextResponse.json({ success: true, staff: present(target, previousCalendarId || null), changed });
+    return NextResponse.json({ success: true, staff: present(target, previousCalendarId || null, previousTitle), changed });
   }
 
   // 1. Supabase Auth first (only when the sign-in email changes).
@@ -228,6 +264,22 @@ async function updateStaff(body: any, target: User, session: SessionIdentity) {
   }
   const savedCalendarId = calendarSaved ? nextCalendarId : previousCalendarId;
 
+  // 4. Then the title.
+  let titleSaved = true;
+  if (titleChanged) {
+    try {
+      await setStaffTitle(target.id, nextTitle, session.email);
+    } catch (err: any) {
+      console.error(`[staff] Title for ${target.id} could not be saved: ${err?.message}`);
+      titleSaved = false;
+      changed.splice(changed.indexOf('title'), 1);
+    }
+  }
+  if (!titleSaved && changed.length === 0) {
+    return NextResponse.json({ error: 'Could not save the role. Nothing was changed.' }, { status: 500 });
+  }
+  const savedTitle = titleSaved ? nextTitle : previousTitle;
+
   const updated = { ...before, ...updates } as User;
   await auditLogRepository.create({
     actor_email: session.email,
@@ -243,6 +295,9 @@ async function updateStaff(body: any, target: User, session: SessionIdentity) {
       ...(updates.role ? { previousRole: before.role, role: updates.role } : {}),
       ...(calendarChanged && calendarSaved
         ? { previousCalendarId: previousCalendarId || null, calendarId: nextCalendarId || null }
+        : {}),
+      ...(titleChanged && titleSaved
+        ? { previousTitle: staffRoleLabel('admin', previousTitle), title: staffRoleLabel('admin', nextTitle) }
         : {}),
     },
   });
@@ -265,9 +320,12 @@ async function updateStaff(body: any, target: User, session: SessionIdentity) {
       { status: 500 }
     );
   }
+  if (!titleSaved) {
+    return NextResponse.json({ error: 'The other changes were saved, but the role name could not be saved. Try again.' }, { status: 500 });
+  }
   return NextResponse.json({
     success: true,
-    staff: present(updated, savedCalendarId || null),
+    staff: present(updated, savedCalendarId || null, savedTitle),
     changed,
     ...(driveAccessWarning ? { driveAccessWarning } : {}),
   });
@@ -277,10 +335,11 @@ async function updateStaff(body: any, target: User, session: SessionIdentity) {
 export async function GET(request: Request) {
   try {
     const { session } = await requireAuth(request, { roles: ['admin'] });
-    const [admins, csms, calendars] = await Promise.all([
+    const [admins, csms, calendars, titles] = await Promise.all([
       userRepository.listAllByRole('admin'),
       userRepository.listAllByRole('csm'),
       getCsmCalendarSettings(),
+      getStaffTitles(),
     ]);
     const staff = await Promise.all(
       [...admins, ...csms].map(async (u) => ({
@@ -288,6 +347,9 @@ export async function GET(request: Request) {
         email: u.email,
         name: u.full_name,
         role: u.role,
+        // "Tech" is a name only: role admin, same permissions as a CSM Manager.
+        title: u.role === 'admin' ? titles[u.id] || null : null,
+        roleLabel: staffRoleLabel(u.role, u.role === 'admin' ? titles[u.id] : null),
         status: u.status || 'active',
         assignedClients: u.role === 'csm' ? (await csmAssignmentRepository.listByCsm(u.id)).length : null,
         // A CSM's own GHL booking calendar; null = their clients book on the default calendar.
@@ -318,7 +380,16 @@ export async function POST(request: Request) {
     } catch (e: any) {
       return NextResponse.json({ error: e.message }, { status: 400 });
     }
+    // A Tech is saved as role admin with the title "tech".
+    const titleInput = parseTitleInput(body.title);
+    if (titleInput === 'invalid' || (body.role !== undefined && body.role !== 'admin' && body.role !== 'csm')) {
+      return NextResponse.json({ error: ROLE_ERROR }, { status: 400 });
+    }
     const role = body.role === 'admin' ? 'admin' : 'csm';
+    if (titleInput === 'tech' && role !== 'admin') {
+      return NextResponse.json({ error: 'Tech is a kind of CSM Manager. Choose CSM, CSM Manager or Tech.' }, { status: 400 });
+    }
+    const title: StaffTitle | null = role === 'admin' ? titleInput || null : null;
 
     if (!isStaffEmail(email)) {
       return NextResponse.json({ error: 'Staff accounts must use an @motionz.ai email address.' }, { status: 400 });
@@ -339,11 +410,22 @@ export async function POST(request: Request) {
     }
 
     const user = await userRepository.create({ id: authUserId, email, full_name: fullName, role, status: 'active' } as any);
+    // Only the name depends on this, so a problem here never blocks adding the person.
+    let titleSaved = true;
+    if (title) {
+      try {
+        await setStaffTitle(user.id, title, session!.email);
+      } catch (err: any) {
+        console.error(`[staff] Title for ${user.id} could not be saved: ${err?.message}`);
+        titleSaved = false;
+      }
+    }
+    const savedTitle = titleSaved ? title : null;
 
     const rawToken = crypto.randomBytes(32).toString('hex');
     await passwordResetRepository.create(email, rawToken, SETUP_LINK_MINUTES);
     const setupUrl = `${resolveBaseUrl(request)}/auth/reset-password?token=${rawToken}`;
-    const delivery = await sendEmail(staffWelcomeEmail(email, fullName, role, setupUrl));
+    const delivery = await sendEmail(staffWelcomeEmail(email, fullName, role, setupUrl, savedTitle));
 
     await auditLogRepository.create({
       actor_email: session!.email,
@@ -351,7 +433,7 @@ export async function POST(request: Request) {
       action: 'staff.created',
       resource_type: 'user',
       resource_id: user.id,
-      details: { email, role, emailDelivered: delivery.delivered },
+      details: { email, role, ...(savedTitle ? { title: staffRoleLabel(role, savedTitle) } : {}), emailDelivered: delivery.delivered },
     });
 
     // A new admin can open every client's Google files (through the parent folder). A new CSM
@@ -363,7 +445,8 @@ export async function POST(request: Request) {
 
     return NextResponse.json({
       success: true,
-      staff: { id: user.id, email, name: fullName, role, status: 'active' },
+      staff: { id: user.id, email, name: fullName, role, title: savedTitle, roleLabel: staffRoleLabel(role, savedTitle), status: 'active' },
+      ...(title && !titleSaved ? { titleWarning: 'They were added as a CSM Manager, because the Tech name could not be saved. Edit them to set it.' } : {}),
       emailDelivered: delivery.delivered,
       ...(driveAccessWarning ? { driveAccessWarning } : {}),
       ...(canExposeDevLinks() ? { setupUrl } : {}),
@@ -557,6 +640,13 @@ export async function DELETE(request: Request) {
     }
 
     await removeAvatar(target.avatar_path);
+
+    // Their title entry goes with them. A leftover entry names nobody, so a problem is only logged.
+    try {
+      await setStaffTitle(target.id, null, session!.email);
+    } catch (err: any) {
+      console.error(`[staff] Title for ${target.id} could not be removed: ${err?.message}`);
+    }
 
     await auditLogRepository.create({
       actor_email: session!.email,

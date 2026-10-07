@@ -38,6 +38,7 @@ export default function ClientPortalLayout({
   const [companyName, setCompanyName] = useState<string>('');
   const [viewerRole, setViewerRole] = useState<string | null>(null);
   const [viewerName, setViewerName] = useState<string>('');
+  const [viewerRoleLabel, setViewerRoleLabel] = useState<string>('');
   const [featureToggles, setFeatureToggles] = useState<Record<string, boolean>>({});
   const [isLoading, setIsLoading] = useState(true);
   const [loadError, setLoadError] = useState('');
@@ -82,6 +83,7 @@ export default function ClientPortalLayout({
         setCompanyName(data.tenant?.name || '');
         setViewerRole(data.viewer?.role || null);
         setViewerName(typeof data.viewer?.full_name === 'string' ? data.viewer.full_name : '');
+        setViewerRoleLabel(typeof data.viewer?.role_label === 'string' ? data.viewer.role_label : '');
         setFeatureToggles(data.featureToggles || {});
       } catch {
         if (isMounted) setLoadError('We could not reach the server. Check your connection and try again.');
@@ -160,7 +162,7 @@ export default function ClientPortalLayout({
 
   const isStaffViewer = viewerRole === 'admin' || viewerRole === 'csm';
   // The header shows the signed-in person (staff stay themselves while viewing a client).
-  const shellViewer = viewerRole ? { name: viewerName, role: viewerRole } : null;
+  const shellViewer = viewerRole ? { name: viewerName, role: viewerRole, roleLabel: viewerRoleLabel || null } : null;
 
   const staffBar = isStaffViewer ? (
     <div

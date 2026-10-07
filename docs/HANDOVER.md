@@ -395,3 +395,4 @@ The portal keeps only the form ID and shows the form straight away:
 4. Verify the email domain in Resend; set `EMAIL_FROM_ADDRESS`.
 5. Update the `secret` value in all GHL workflows (and the snapshot) to the new `GHL_WEBHOOK_SECRET`, and the URL if the domain changes.
 6. Create real admin/CSM accounts via Admin → Staff; remove test accounts.
+   Staff roles as people read them: **CSM**, **CSM Manager** (the role key is still `admin`; URLs stay `/admin`) and **Tech** (also role `admin`, same permissions as a CSM Manager; the name is a per-person title kept in app setting `staff_titles`, no database migration). Audit Logs show "(CSM Manager)" for both.

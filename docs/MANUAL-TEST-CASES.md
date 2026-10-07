@@ -476,6 +476,7 @@ Before this: accept the TC Roofing Test invite from Gmail (case 4.6) and set a p
 | 16.21 | **My profile** | "You are signed in as CSM Manager." Under Sign-in email: "To change it, ask another CSM Manager." (a CSM sees "ask a CSM Manager") |
 | 16.22 | **Staff** | Role badge **CSM Manager**; the Role dropdown offers **CSM** and **CSM Manager**; the intro says "CSM Managers see everything" |
 | 16.23 | **Audit Logs** | Entries made by you show "(CSM Manager)" after your email |
+| 16.25 | Staff > add a staff member with Role **Tech** (or Edit a CSM Manager > Role **Tech**) > sign in as that person | The Role dropdown offers CSM, CSM Manager and Tech. Their badge on Staff, the header account menu and My profile say **Tech**; they see and can do everything a CSM Manager can. Changing them back to CSM Manager only changes the name. (In Audit Logs their entries still read "(CSM Manager)") |
 | 16.24 | Staff > add a staff member with Role **CSM Manager**, with a throwaway @motionz.ai address | The welcome email says "you have been added as a CSM Manager" |
 
 ---
