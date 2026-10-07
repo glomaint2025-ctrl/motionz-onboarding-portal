@@ -1,0 +1,120 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Motionz Portal: go-live checklist</title>
+<style>
+  @page { size: A4; margin: 16mm 15mm; }
+  * { box-sizing: border-box; }
+  body { font-family: "Segoe UI", Arial, sans-serif; color: #1c1917; font-size: 10.5pt; line-height: 1.45; margin: 0; }
+  h1 { font-size: 20pt; margin: 0 0 2mm; }
+  h2 { font-size: 12.5pt; margin: 7mm 0 2.5mm; color: #b45309; }
+  p { margin: 0 0 2.5mm; }
+  .lead { color: #44403c; }
+  .box { border: 1px solid #e7e5e4; background: #fafaf9; border-radius: 6px; padding: 3mm 4mm; margin: 3mm 0; }
+  table { width: 100%; border-collapse: collapse; margin: 2mm 0; }
+  th, td { border: 1px solid #d6d3d1; padding: 2mm 2.5mm; vertical-align: top; text-align: left; }
+  th { background: #f5f5f4; font-size: 9.5pt; }
+  td { font-size: 9.5pt; }
+  td.n { width: 6mm; text-align: center; font-weight: 700; color: #b45309; }
+  td.w { width: 34mm; font-weight: 600; }
+  ol, ul { margin: 0 0 2mm; padding-left: 5mm; }
+  li { margin-bottom: 1mm; }
+  code { font-family: Consolas, monospace; font-size: 9.5pt; background: #f5f5f4; padding: 0 1mm; border-radius: 3px; }
+  .muted { color: #57534e; font-size: 9pt; }
+  tr, .box, li { page-break-inside: avoid; }
+  h2 { page-break-after: avoid; }
+</style>
+</head>
+<body>
+
+<h1>Motionz Portal: go-live checklist</h1>
+<p class="lead">The portal runs on my test accounts today. To go live it needs accounts that Motionz owns, so you control your data, emails and files.</p>
+
+<div class="box">
+  <strong>How it works.</strong> For each item choose <strong>A</strong> (invite me and I set it up) or <strong>B</strong> (you do it and send me the result).
+  Never send a password; A is always an invitation you can remove later.
+  My email for invitations: <strong>__________________________</strong>. Your time with option A: about 30–45 minutes.
+</div>
+
+<h2>The 8 items</h2>
+<table>
+  <tr><th></th><th>What and why</th><th>A: invite me</th><th>B: do it yourself</th></tr>
+  <tr>
+    <td class="n">1</td>
+    <td class="w">Portal address<br><span class="muted">where clients sign in</span></td>
+    <td colspan="2">Tell me the address you want, for example <code>portal.motionz.ai</code>. I then send you one DNS record to add where your domain is managed.</td>
+  </tr>
+  <tr>
+    <td class="n">2</td>
+    <td class="w">Vercel<br><span class="muted">runs the portal</span></td>
+    <td>Sign up at vercel.com with a Motionz email. Settings → Members → invite me.</td>
+    <td>Sign up. Account Settings → Tokens → create a token (7-day expiry). Send it to me privately.</td>
+  </tr>
+  <tr>
+    <td class="n">3</td>
+    <td class="w">Supabase<br><span class="muted">database and uploaded files</span></td>
+    <td>Sign up at supabase.com. Create an organization "Motionz". Team → invite me as Developer.</td>
+    <td>Create a project (region: East US). Project Settings → API: send me the Project URL and both keys privately. I send you one SQL file to run.</td>
+  </tr>
+  <tr>
+    <td class="n">4</td>
+    <td class="w">Resend<br><span class="muted">sends portal emails from no-reply@mail.motionz.ai</span></td>
+    <td>Sign up at resend.com. Settings → Team → invite me. I send you 3–4 DNS records to add.</td>
+    <td>Domains → add <code>mail.motionz.ai</code> and add the DNS records shown. API Keys → create a "Sending" key. Send it to me privately.</td>
+  </tr>
+  <tr>
+    <td class="n">5</td>
+    <td class="w">Google Drive<br><span class="muted">each client's folder, sheets and contract</span></td>
+    <td>Tell me which Google account will own the client files. 15-minute screen share: we create the main folder and install a small script in that account.</td>
+    <td>Same steps alone, from a written guide I send you.</td>
+  </tr>
+  <tr>
+    <td class="n">6</td>
+    <td class="w">Google Cloud key<br><span class="muted">roof measurement tool</span></td>
+    <td>console.cloud.google.com → new project "Motionz Portal" → add billing (card needed) → IAM → add me as Editor.</td>
+    <td>Create the project, add billing, enable <em>Solar API</em> and <em>Geocoding API</em>, create an API key restricted to those two. Send it to me privately.</td>
+  </tr>
+  <tr>
+    <td class="n">7</td>
+    <td class="w">GoHighLevel<br><span class="muted">sends leads and booked calls to the portal</span></td>
+    <td colspan="2">Create an empty test sub-account ("Portal Test"), push the "Portal workflows" snapshot into it, and make sure my GHL user can see it. On go-live day, with your OK, I point the workflows at the live address and add one trigger so a lead marked <strong>Lost</strong> leaves the portal. The portal never changes anything in GHL.</td>
+  </tr>
+  <tr>
+    <td class="n">8</td>
+    <td class="w">Slack<br><span class="muted">lead form requests to #reviews-team</span></td>
+    <td colspan="2">The test connection was made from my Slack user. For go-live: Slack → Apps → "Incoming WebHooks" → Add to Slack → pick the channel → copy the link → paste it in the portal under Admin → Settings &amp; Integrations → Slack messages.</td>
+  </tr>
+</table>
+<p class="muted">Costs (approximate, check each provider): Vercel free to start, Pro about $20/month. Supabase free to start, Pro about $25/month (recommended for backups). Resend free up to 3,000 emails/month. Google Cloud pay per use, small. Drive, GHL and Slack: nothing extra.</p>
+
+<h2>Good to know</h2>
+<ul>
+  <li><strong>Google only shares with Google accounts.</strong> Every staff email you add to the portal must be a Google account (Workspace, or a free Google account created on that email), or that person cannot open client folders and sheets. Today <code>admin@motionz.ai</code> is not one. Same for a client who wants to open their sheets or an uploaded contract.</li>
+  <li><strong>Drive access follows the portal.</strong> Admins get every client folder, a CSM gets their own clients, a client gets their own files. Google emails each person a "shared with you" notice. Removing someone from the portal removes their Drive access.</li>
+  <li><strong>The live portal starts empty.</strong> No test clients, leads or staff are carried over.</li>
+</ul>
+
+<h2>On go-live day, inside the portal (about 15 minutes)</h2>
+<ol>
+  <li>Change the admin password (the current one is a shared test password).</li>
+  <li>Admin → Staff: add your real admins and CSMs (<code>@motionz.ai</code> emails). Set each CSM's booking calendar under Edit.</li>
+  <li>Admin → Settings &amp; Integrations → Notification emails: who gets onboarding forms, website requests and lead forms.</li>
+  <li>Admin → Settings &amp; Integrations → Staff sign-in security: emailed sign-in code on or off.</li>
+  <li>Admin → Portal Templates and Video Scripts: check the wording new clients will see.</li>
+  <li>Add your first real client, then paste their GHL Location ID in Admin → GHL Connect.</li>
+</ol>
+
+<div class="box">
+  <strong>Please reply with</strong>
+  <ol>
+    <li>A or B for items 2, 3, 4, 5 and 6</li>
+    <li>The portal address you want</li>
+    <li>The Google account that will own the client files</li>
+    <li>Is the test GHL sub-account ready?</li>
+    <li>Are your @motionz.ai emails Google accounts?</li>
+  </ol>
+</div>
+
+</body>
+</html>
