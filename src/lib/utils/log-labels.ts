@@ -81,6 +81,7 @@ export const AUDIT_ACTION_LABELS: Record<string, string> = {
   'settings.security_updated': 'Staff sign-in security updated',
   'settings.automation_updated': 'Automation link updated',
   'settings.slack_updated': 'Slack webhook link updated',
+  'settings.leads_updated': 'Lead rule updated (when a contact counts as a lead)',
   'team.invite_sent': 'Team member invited',
   'team.invite_revoked': 'Team invite cancelled',
   'team.member_suspended': 'Team member disabled',
@@ -145,6 +146,7 @@ export function auditActionLabel(action: string, details?: Record<string, unknow
     const reason = typeof details?.reason === 'string' ? details.reason.trim() : '';
     return reason ? `${AUDIT_ACTION_LABELS[action]}: ${reason}` : AUDIT_ACTION_LABELS[action];
   }
+  if (action === 'ghl.webhook.lead_removed' && details?.reason === 'tag removed') return 'Lead removed (tag taken off in GoHighLevel)';
   if (AUDIT_ACTION_LABELS[action]) return AUDIT_ACTION_LABELS[action];
   if (action.startsWith('security.')) return securityEventLabel(action.slice('security.'.length));
   if (action.startsWith('ghl.webhook.')) return `Message from GoHighLevel: ${titleCaseKey(action.slice('ghl.webhook.'.length)).toLowerCase()}`;
@@ -175,6 +177,8 @@ const DETAIL_LABELS: Record<string, string> = {
   ip_address: 'IP',
   eventType: 'Event',
   location: 'Location ID',
+  required_tag: 'Lead tag',
+  previous_tag: 'Lead tag before',
   start_time: 'Booked for',
   emailDelivered: 'Email delivered',
   missingCapability: 'Missing permission',

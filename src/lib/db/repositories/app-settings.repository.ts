@@ -186,3 +186,34 @@ export async function resolveFormSettings(): Promise<FormSettings> {
     return { ...FORM_SETTING_DEFAULTS };
   }
 }
+
+// ───────────────────────── leads (when a GoHighLevel contact counts as a lead) ─────────────────────────
+// Self-contained block: stored under the `leads` key through the generic get/set above.
+
+/** The rule the GoHighLevel webhook applies before it creates a lead. */
+export interface LeadSettings {
+  /**
+   * Empty (the default): every opportunity GoHighLevel sends becomes a lead.
+   * Set: a contact becomes a lead only once it carries this tag in GoHighLevel.
+   */
+  required_tag: string;
+}
+
+export const LEADS_KEY = 'leads';
+export const LEAD_TAG_MAX_LENGTH = 60;
+
+/** A tag name as it is stored: trimmed, inner spaces collapsed, at most 60 characters. */
+export function cleanLeadTag(value: unknown): string {
+  return typeof value === 'string' ? value.trim().replace(/\s+/g, ' ').slice(0, LEAD_TAG_MAX_LENGTH).trim() : '';
+}
+
+/** Reads the lead rule. Anything that is not a usable tag name reads as "no tag needed". */
+export async function getLeadSettings(): Promise<LeadSettings> {
+  const raw = (await (appSettingsRepository as any).get(LEADS_KEY)) as Partial<LeadSettings>;
+  return { required_tag: cleanLeadTag(raw?.required_tag) };
+}
+
+export async function setLeadSettings(value: LeadSettings, updatedBy: string): Promise<void> {
+  await (appSettingsRepository as any).set(LEADS_KEY, { required_tag: cleanLeadTag(value.required_tag) }, updatedBy);
+}
+// ───────────────────────── end leads ─────────────────────────

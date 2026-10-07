@@ -177,6 +177,171 @@ function Section({ title, subtitle, clients, empty, onSaved }: { title: string; 
   );
 }
 
+type LeadRuleMode = 'opportunity' | 'tag';
+
+/** Platform-wide rule: every opportunity is a lead, or only contacts carrying one GoHighLevel tag. */
+function LeadRuleCard() {
+  const [loading, setLoading] = useState(true);
+  const [mode, setMode] = useState<LeadRuleMode>('opportunity');
+  const [tag, setTag] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [fieldError, setFieldError] = useState('');
+  const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+
+  useEffect(() => {
+    (async () => {
+      try {
+        const res = await fetch('/api/admin/settings/leads');
+        const body = await res.json().catch(() => ({}));
+        if (res.ok && body.success) {
+          const saved = typeof body.leads?.required_tag === 'string' ? body.leads.required_tag : '';
+          setMode(saved ? 'tag' : 'opportunity');
+          setTag(saved);
+        } else {
+          setMessage({ type: 'error', text: body.error || 'Could not load this setting.' });
+        }
+      } catch {
+        setMessage({ type: 'error', text: 'Could not reach the server. Check your connection and reload the page.' });
+      } finally {
+        setLoading(false);
+      }
+    })();
+  }, []);
+
+  const save = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setMessage(null);
+    if (mode === 'tag' && !tag.trim()) {
+      setFieldError('Type the tag name.');
+      return;
+    }
+    setBusy(true);
+    setFieldError('');
+    try {
+      const res = await fetch('/api/admin/settings/leads', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ mode, required_tag: mode === 'tag' ? tag : '' }),
+      });
+      const body = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        if (body.field === 'required_tag') setFieldError(body.error);
+        else setMessage({ type: 'error', text: body.error || 'Could not save. Nothing was changed.' });
+        return;
+      }
+      const saved = body.leads?.required_tag || '';
+      setTag(saved);
+      setMessage({
+        type: 'success',
+        text: saved
+          ? `Saved. From now on a contact counts as a lead only when it has the tag "${saved}". Leads already in the portal stay.`
+          : 'Saved. Every new opportunity counts as a lead.',
+      });
+    } catch {
+      setMessage({ type: 'error', text: 'Could not reach the server. Nothing was saved.' });
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const optionStyle: React.CSSProperties = { display: 'flex', alignItems: 'flex-start', gap: 'var(--space-2)', fontSize: 'var(--font-size-sm)' };
+
+  return (
+    <Card style={{ marginBottom: 'var(--space-5)' }}>
+      <CardHeader title="When does a contact count as a lead?" subtitle="Decides which GoHighLevel contacts appear on a client’s Leads page" />
+      {loading ? (
+        <Skeleton height="96px" />
+      ) : (
+        <form onSubmit={save}>
+          <fieldset style={{ border: 'none', padding: 0, margin: '0 0 var(--space-3)' }}>
+            <legend className="sr-only">When does a contact count as a lead?</legend>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-2)' }}>
+              <label style={optionStyle}>
+                <input
+                  type="radio"
+                  name="lead-rule"
+                  checked={mode === 'opportunity'}
+                  onChange={() => {
+                    setMode('opportunity');
+                    setFieldError('');
+                    setMessage(null);
+                  }}
+                  style={{ marginTop: 3 }}
+                />
+                <span>As soon as an opportunity is created (default)</span>
+              </label>
+              <label style={optionStyle}>
+                <input
+                  type="radio"
+                  name="lead-rule"
+                  checked={mode === 'tag'}
+                  onChange={() => {
+                    setMode('tag');
+                    setMessage(null);
+                  }}
+                  style={{ marginTop: 3 }}
+                />
+                <span>Only when the contact has this tag</span>
+              </label>
+            </div>
+          </fieldset>
+
+          {mode === 'tag' && (
+            <div style={{ margin: '0 0 var(--space-3)', maxWidth: 320 }}>
+              <label htmlFor="lead-rule-tag" className="ui-label">
+                Tag name in GoHighLevel
+              </label>
+              <input
+                id="lead-rule-tag"
+                className={`ui-input ${fieldError ? 'ui-input-error' : ''}`.trim()}
+                placeholder="Qualified"
+                maxLength={60}
+                value={tag}
+                onChange={(e) => {
+                  setTag(e.target.value);
+                  setFieldError('');
+                  setMessage(null);
+                }}
+                aria-invalid={fieldError ? true : undefined}
+                aria-describedby={fieldError ? 'lead-rule-tag-error' : undefined}
+                autoComplete="off"
+                spellCheck={false}
+              />
+              {fieldError && (
+                <span className="ui-error-text" id="lead-rule-tag-error" role="alert">
+                  {fieldError}
+                </span>
+              )}
+            </div>
+          )}
+
+          <p className="ui-helper-text" style={{ margin: '0 0 var(--space-3)' }}>
+            Applies to every client. Contacts tagged later appear as soon as GoHighLevel sends their next update — add the Contact Tag
+            trigger to the workflow so that happens immediately (see the setup guide).
+          </p>
+
+          {message && (
+            <p
+              role={message.type === 'error' ? 'alert' : 'status'}
+              style={{
+                margin: '0 0 var(--space-3)',
+                fontSize: 'var(--font-size-sm)',
+                color: message.type === 'error' ? 'var(--color-status-danger-text)' : 'var(--color-status-done-text)',
+              }}
+            >
+              {message.text}
+            </p>
+          )}
+
+          <Button type="submit" variant="primary" disabled={busy}>
+            {busy ? 'Saving...' : 'Save'}
+          </Button>
+        </form>
+      )}
+    </Card>
+  );
+}
+
 export default function GhlConnectPage() {
   const [data, setData] = useState<GhlData | null>(null);
   const [error, setError] = useState('');
@@ -228,6 +393,8 @@ export default function GhlConnectPage() {
           {notice}
         </Notice>
       )}
+
+      <LeadRuleCard />
 
       {error && (
         <Notice onRetry={load} style={{ marginBottom: 'var(--space-5)' }}>

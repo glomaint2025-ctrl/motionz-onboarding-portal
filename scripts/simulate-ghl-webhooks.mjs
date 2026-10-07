@@ -2,11 +2,15 @@
 // Same shape as the real workflows: secret + event in customData. Test data only (ids start with "sim-").
 //
 // Usage:
-//   node scripts/simulate-ghl-webhooks.mjs <secret|leads|stage|call|form> --location=<id> --email=<address> [baseUrl]
+//   node scripts/simulate-ghl-webhooks.mjs <secret|leads|stage|untag|call|form> --location=<id> --email=<address> [--tags="Qualified"] [baseUrl]
 //
 //   --location=<id>      GoHighLevel Location ID of the TEST client that should receive the leads
 //                        (or env SIM_GHL_LOCATION_ID). Never a real client's sub-account.
 //   --email=<address>    Sign-in email of the TEST client the call / form belongs to (or env SIM_CLIENT_EMAIL).
+//   --tags="Qualified"   Optional. Adds these contact tags to the simulated leads (leads, stage), and "leads"
+//                        also sends one extra contact with no tags, to test the lead tag rule
+//                        (Admin > GHL Connect > "When does a contact count as a lead?").
+//                        "untag" sends the tag-removed event for simulated lead 1.
 //   baseUrl              Portal to send to. Default http://localhost:3001.
 //   --yes-this-is-staging  Required when baseUrl is not localhost.
 //
@@ -15,9 +19,10 @@
 // Clean up afterwards with: node scripts/clear-simulated-ghl-data.mjs
 import { readFileSync } from 'node:fs';
 
-const USAGE = `Usage: node scripts/simulate-ghl-webhooks.mjs <secret|leads|stage|call|form> --location=<id> --email=<address> [baseUrl] [--yes-this-is-staging]
+const USAGE = `Usage: node scripts/simulate-ghl-webhooks.mjs <secret|leads|stage|untag|call|form> --location=<id> --email=<address> [--tags="Qualified"] [baseUrl] [--yes-this-is-staging]
   --location   Location ID of a TEST client (or env SIM_GHL_LOCATION_ID)
   --email      sign-in email of a TEST client (or env SIM_CLIENT_EMAIL)
+  --tags       optional contact tags for the simulated leads; "leads" then also sends one untagged contact
   baseUrl      default http://localhost:3001; anything that is not localhost also needs --yes-this-is-staging`;
 
 function fail(message) {
@@ -34,7 +39,11 @@ const baseUrl = (positional[1] || 'http://localhost:3001').replace(/\/+$/, '');
 const LOCATION = flag('location') || (process.env.SIM_GHL_LOCATION_ID || '').trim();
 const EMAIL = (flag('email') || (process.env.SIM_CLIENT_EMAIL || '').trim()).toLowerCase();
 
-if (!['secret', 'leads', 'stage', 'call', 'form'].includes(what)) fail('Choose what to send: secret, leads, stage, call or form.');
+// Optional: the contact tags GoHighLevel would send, e.g. --tags="Qualified" or --tags="hot, Qualified".
+const TAGS = flag('tags').replace(/^["']|["']$/g, '').trim();
+const withTags = TAGS ? { tags: TAGS } : {};
+
+if (!['secret', 'leads', 'stage', 'untag', 'call', 'form'].includes(what)) fail('Choose what to send: secret, leads, stage, untag, call or form.');
 if (!LOCATION) fail('Missing --location=<id>: the Location ID of the test client that should receive the leads.');
 if (!/^[A-Za-z0-9_-]{6,64}$/.test(LOCATION)) fail(`"${LOCATION}" does not look like a GoHighLevel Location ID.`);
 if (!EMAIL) fail('Missing --email=<address>: the sign-in email of the test client the call and form belong to.');
@@ -81,14 +90,34 @@ if (what === 'leads') {
       phone: `+1 337 555 01${String(10 + i)}`,
       opportunity_source: i % 2 ? 'Facebook' : 'Website',
       location: { id: LOCATION },
+      ...withTags,
       customData: { event: 'lead', secret: SECRET, stage },
+    });
+  }
+  if (TAGS) {
+    // A contact without the tag. With that tag set under Admin > GHL Connect the portal answers
+    // "ignored" and creates nothing; with no tag set there it becomes a lead like the others.
+    await post('untagged lead (New Lead)', {
+      contact_id: 'sim-contact-untagged',
+      first_name: 'Sim',
+      last_name: 'Untagged',
+      email: 'sim.untagged@example.com',
+      location: { id: LOCATION },
+      tags: '',
+      customData: { event: 'lead', secret: SECRET, stage: 'New Lead' },
     });
   }
 }
 if (what === 'stage') {
   await post('lead 1 -> Contacted', {
     contact_id: 'sim-contact-1', first_name: 'Sim', last_name: 'Lead 1', email: 'sim.lead1@example.com',
-    location: { id: LOCATION }, customData: { event: 'lead', secret: SECRET, stage: 'Contacted' },
+    location: { id: LOCATION }, ...withTags, customData: { event: 'lead', secret: SECRET, stage: 'Contacted' },
+  });
+}
+if (what === 'untag') {
+  // The tag was taken off lead 1 in GoHighLevel (only does something while a lead tag is set).
+  await post('lead 1 tag removed', {
+    contact_id: 'sim-contact-1', location: { id: LOCATION }, customData: { event: 'lead_unqualified', secret: SECRET },
   });
 }
 if (what === 'call') {

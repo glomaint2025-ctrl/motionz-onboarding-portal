@@ -11,7 +11,7 @@ Every webhook action needs these **Custom Data** entries (GHL's standard Webhook
 | Key | Value |
 |---|---|
 | `secret` | the `GHL_WEBHOOK_SECRET` value |
-| `event` | `lead`, `lead_lost`, `csm_call` or `onboarding_form` (see below) |
+| `event` | `lead`, `lead_lost`, `lead_unqualified`, `csm_call` or `onboarding_form` (see below) |
 
 Requests with a missing or wrong secret are rejected with 401 and recorded under **Admin → Security Events**. Events the portal cannot place (unknown sub-account, unknown email) return 200 and are ignored, so GHL does not retry them forever; each one is recorded under **Admin → Audit Logs** as "GoHighLevel event ignored" with the reason.
 
@@ -74,6 +74,57 @@ The portal also treats an ordinary `lead` event as "lost" when it carries an opp
 `lost` or `abandoned` (Custom Data `status`, or the standard `status` / opportunity status fields),
 or when the pipeline stage is named exactly **Lost** or **Abandoned**. A stage that only contains
 the word, such as "Lost Contact Attempt", is a normal stage and the lead stays.
+
+### Option: only tagged contacts count as leads
+
+By default a contact counts as a lead **as soon as its opportunity is created**. If the team wants
+to decide by hand who counts, the portal can wait for a tag instead: a contact becomes a lead only
+once it carries a chosen tag in GoHighLevel, for example **Qualified**. One setting covers every client.
+
+**What the client sees:** a contact appears on the client's **Leads** page the moment it is tagged,
+with its current pipeline stage if GoHighLevel includes one in the event, otherwise as **New**. Until
+then the client sees nothing of that contact. Clients are not told about the tag.
+
+Set it up in this order (GoHighLevel first, so nothing is missed):
+
+1. **In `Portal: sync leads`** (each client sub-account, and the snapshot): **Add Trigger → Contact
+   Tag**, filter **Tag Added = Qualified**. Keep **Opportunity Created** and **Pipeline Stage
+   Changed**. All three triggers go to the **same Webhook action** with `event` = `lead` (and
+   `stage` = the Pipeline Stage merge field, as before). **Save → Publish.**
+   - Keep the two opportunity triggers so stage changes keep flowing. The portal ignores them for
+     contacts that are not tagged yet, and uses them for contacts that already are leads.
+   - GoHighLevel's Webhook action normally sends the contact's tags by itself (the `tags` field of
+     its standard data), so nothing should be needed in Custom Data. **Check this on the first
+     test** (not yet confirmed against a live workflow): if a tagged contact is answered with
+     "not tagged", add a Custom Data entry `tags` = the contact's **Tags** merge field.
+2. **Optional, to remove a lead when the tag is taken off:** a second small workflow
+   `Portal: lead tag removed` with the trigger **Contact Tag**, filter **Tag Removed = Qualified**,
+   and one **Webhook** action (`POST`, the same URL) with Custom Data `secret` = the secret and
+   `event` = `lead_unqualified`. **Save → Publish.** Without this workflow a lead stays in the portal
+   after its tag is removed.
+3. **In the portal:** **Admin → GHL Connect → "When does a contact count as a lead?"** → choose
+   **Only when the contact has this tag**, type `Qualified`, **Save**. The name must match the tag in
+   GoHighLevel; capital letters and spaces around it do not matter.
+4. **Update the snapshot** so new sub-accounts get the new trigger (and the second workflow).
+
+What the portal does with it:
+
+- **Tagged contact** (`lead` event whose tags include the tag): the lead is created or updated as usual.
+- **Untagged contact that is not a lead yet:** nothing is stored. GoHighLevel gets the answer
+  `ignored: Contact is not tagged "Qualified" yet.` This is normal and is **not** written to the
+  Audit Logs, because every untagged contact in every sub-account would fill them.
+- **A contact that already is a lead** keeps updating (stage, name, phone) even when a later event
+  no longer carries the tag. A lead is never removed just because the tag is missing from an event.
+- **`lead_unqualified`:** the lead is removed. Audit Logs: "Lead removed (tag taken off in
+  GoHighLevel)" with the lead's name and the client. If the portal does not have that lead, the event
+  is ignored and recorded. While no tag is set in the portal this event does nothing.
+- **Lost / Abandoned** works exactly as described above and always wins, tagged or not.
+- **Leads already in the portal stay** when the tag rule is switched on. They are not checked again.
+- **Switching back:** choose "As soon as an opportunity is created (default)" and save. Contacts
+  that were ignored while the rule was on appear with their next stage change.
+
+The portal reads the tags from `tags` (a comma-separated list such as `hot, Qualified`, or a list of
+names), from `contact.tags`, and from Custom Data `tags`.
 
 ## 2. CSM calls: in Motionz's own sub-account (the one with the CSM booking calendar)
 
@@ -145,6 +196,7 @@ Saved the answers to the client's portal and emailed the notification list (clie
 GHL workflows have a **Test Workflow** button. After running it:
 - **Leads:** the lead appears on that client's Leads page.
 - **Lost lead:** mark a test opportunity Lost; within about a minute the lead is gone from that client's Leads page and Audit Logs shows "Lead removed (marked lost in GoHighLevel)".
+- **Lead tag (only when a tag is set under Admin → GHL Connect):** create a test opportunity without the tag: it does not appear. Add the tag to the contact: within about a minute it appears on that client's Leads page. With the optional second workflow, removing the tag removes the lead again.
 - **CSM call:** the date appears on the client's home page.
 - **Onboarding form (old workflow only, see section 3):** the answers appear on Admin → Clients → (client) and the notification email arrives.
 
@@ -160,6 +212,10 @@ The portal only stores what a workflow sends it. It never reads from GHL and nev
 - **A lead marked Lost before the Lost trigger was published stays.** Only status changes made after the trigger is live reach the portal.
 - **Contact edits arrive late.** A changed name, email or phone reaches the portal only with that lead's next stage change, because the workflow fires on Opportunity Created and Pipeline Stage Changed, not on contact edits.
 - **Older leads are not imported.** Leads that existed before the workflow was published appear only once their stage changes.
+- **With a lead tag set, untagged contacts are not stored at all**, and these ignored events are not listed in the Audit Logs. A contact tagged later appears only when GoHighLevel sends its next event: straight away if the workflow has the **Contact Tag (Tag Added)** trigger, otherwise not until its next stage change.
+- **Contacts tagged before the Contact Tag trigger was published are not picked up.** They appear with their next stage change (or take the tag off and add it again).
+- **Removing the tag does not remove the lead by itself.** That needs the optional `lead_unqualified` workflow (see "Option: only tagged contacts count as leads"); without it, mark the opportunity Lost.
+- **Changing or switching on the tag does not re-check existing leads.** Leads already in the portal stay until they are marked Lost or their tag-removed event arrives.
 - **A booking under a different email is ignored.** A CSM call is matched by the booking email. If it matches no portal user and no client's primary email, nothing is shown to the client; the booking email and start time are recorded under **Admin → Audit Logs** ("GoHighLevel event ignored: No client matches this contact email.").
 - **A sub-account with no Location ID in the portal is ignored.** Its leads are recorded in the Audit Logs as ignored (with the Location ID) until an admin connects it; they are not replayed afterwards.
 - **The portal never writes to GHL.** Nothing changed in the portal (client details, team, setup steps) is sent to GHL, and lead stages cannot be changed from the portal.
