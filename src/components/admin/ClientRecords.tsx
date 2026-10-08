@@ -349,7 +349,7 @@ export const ClientRecords: React.FC<{ clientId: string; clientName?: string }> 
               helperText="For example a DocuSign link."
             />
           )}
-          <Input label="Signed on" type="date" max={todayIso()} value={contractSigned} onChange={(e) => setContractSigned(e.target.value)} />
+          <Input key={`signed-on-${fileInputKey}-${mode}`} label="Signed on" type="date" max={todayIso()} value={contractSigned} onChange={(e) => setContractSigned(e.target.value)} />
         </div>
 
         <p style={{ margin: 'var(--space-2) 0 var(--space-3) 0', fontSize: 'var(--font-size-xs)', color: 'var(--color-text-muted)' }}>
@@ -381,6 +381,11 @@ export const ClientRecords: React.FC<{ clientId: string; clientName?: string }> 
               onClick={async () => {
                 if (!removeTarget) return;
                 const removed = await send('DELETE', undefined, `?kind=contract&recordId=${encodeURIComponent(removeTarget.id)}`);
+                if (removed) {
+                  // A removed contract must not leave its date behind in the form for the next one.
+                  setContractSigned('');
+                  setFileInputKey((k) => k + 1);
+                }
                 if (removed?.driveWarning) setNotice(removed.driveWarning);
                 setRemoveTarget(null);
               }}
