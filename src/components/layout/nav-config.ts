@@ -40,6 +40,7 @@ export function getNavGroups(
         items: [
           { label: 'Portal Templates', shortLabel: 'Templates', href: '/admin/templates', icon: 'template' },
           { label: 'Video Scripts', shortLabel: 'Scripts', href: '/admin/templates/scripts', icon: 'video' },
+          { label: 'CSM Training', shortLabel: 'Training', href: '/admin/training', icon: 'checklist' },
           { label: 'Settings & Integrations', shortLabel: 'Settings', href: '/admin/integrations', icon: 'settings' },
         ],
       },
@@ -57,6 +58,7 @@ export function getNavGroups(
         label: 'Workspace',
         items: [
           { label: 'My Clients', shortLabel: 'Clients', href: '/csm/clients', icon: 'clients' },
+          { label: 'Training', href: '/csm/training', icon: 'video' },
         ],
       },
     ];
@@ -124,7 +126,7 @@ export function getBottomBarItems(
       ? [`/portal/${clientId}`, `/portal/${clientId}/onboarding`, `/portal/${clientId}/leads`, `/portal/${clientId}/tracking`]
       : role === 'admin'
         ? ['/admin', '/admin/clients', '/admin/templates']
-        : ['/csm/clients'];
+        : ['/csm/clients', '/csm/training'];
   return wanted
     .map((href) => all.find((item) => item.href === href))
     .filter((item): item is NavConfigItem => Boolean(item));

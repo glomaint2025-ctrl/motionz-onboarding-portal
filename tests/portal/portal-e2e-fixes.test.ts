@@ -167,9 +167,9 @@ async function run() {
   assert.strictEqual((await meGet(req('/api/auth/me', 'GET'))).status, 401);
   console.log(' PASS: the signed-in person is reported for the greeting and the header.');
 
-  // 6. CSM navigation is "My Clients" only.
+  // 6. CSM navigation is "My Clients" and, under it, "Training" (added 8 Oct 2026). No Dashboard.
   const csmItems = getNavGroups('csm', 'demo').flatMap((g) => g.items);
-  assert.deepStrictEqual(csmItems.map((i) => i.label), ['My Clients']);
+  assert.deepStrictEqual(csmItems.map((i) => i.label), ['My Clients', 'Training']);
   assert.strictEqual(roleHomeHref('csm', 'demo'), '/csm/clients');
   console.log(' PASS: CSM navigation has no Dashboard entry.');
 

@@ -74,7 +74,10 @@ export default function ClientPortalLayout({
           setIsNoAccess(res.status === 403 || res.status === 404);
           setLoadError(
             res.status === 403
-              ? 'You do not have access to this portal.'
+              ? // A CSM who still has training to finish is told so, instead of a bare "no access".
+                data?.code === 'TRAINING_REQUIRED' && typeof data.error === 'string'
+                ? data.error
+                : 'You do not have access to this portal.'
               : res.status === 404
                 ? 'We could not find this portal.'
                 : 'Your portal could not be loaded.'

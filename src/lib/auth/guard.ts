@@ -6,6 +6,7 @@ import { securityEventRepository, auditLogRepository, userRepository, tenantRepo
 import { AppError } from '../errors';
 import { PERSONAL_ACCESS_OFF_MESSAGE, PORTAL_ARCHIVED_MESSAGE, isTenantArchived } from './edge-session';
 import type { User, Tenant, CsmAssignment } from '../db/schema';
+import { isCsmTrainingBlocked, TRAINING_REQUIRED_MESSAGE } from '../training';
 
 /**
  * Per-request memo. One HTTP request runs several checks in a row (requireAuth, assertPortalAccess,
@@ -21,6 +22,7 @@ interface RequestLookups {
   userById?: Promise<User | null>;
   tenant?: Promise<Tenant | null>;
   assignments: Map<string, Promise<CsmAssignment | null>>;
+  trainingBlocked?: Promise<boolean>;
 }
 const sessionByRequest = new WeakMap<object, { session: SessionPayload | null }>();
 const lookupsBySession = new WeakMap<SessionPayload, RequestLookups>();
@@ -67,10 +69,30 @@ export function isPublicDemoRead(method?: string): boolean {
 }
 
 /**
+ * When "CSMs must finish training" is on, a CSM with unfinished lessons cannot use client pages.
+ * Called from the two places a CSM reaches clients (one client: assertCsmAssigned; the list:
+ * getVisibleTenantIds), so every CSM client route and the staff view of a portal are covered.
+ * Read once per request. CSM Managers and Tech (role admin) are never stopped.
+ */
+export async function assertCsmTrainingDone(session: SessionPayload | null): Promise<void> {
+  if (!session || session.role !== 'csm') return;
+  const memo = memoFor(session);
+  let lookup = memo?.trainingBlocked;
+  if (!lookup) {
+    lookup = isCsmTrainingBlocked(session.userId);
+    if (memo) memo.trainingBlocked = lookup;
+  }
+  if (await lookup) {
+    throw new AppError(TRAINING_REQUIRED_MESSAGE, 403, 'TRAINING_REQUIRED');
+  }
+}
+
+/**
  * CSMs may only work on clients assigned to them. Admins (the CSM manager role) see everything.
  */
 export async function assertCsmAssigned(session: SessionPayload | null, tenantId: string): Promise<void> {
   if (!session || session.role !== 'csm') return;
+  await assertCsmTrainingDone(session);
   const memo = memoFor(session);
   let lookup = memo?.assignments.get(tenantId);
   if (!lookup) {
@@ -88,6 +110,7 @@ export async function assertCsmAssigned(session: SessionPayload | null, tenantId
  */
 export async function getVisibleTenantIds(session: SessionPayload): Promise<Set<string> | null> {
   if (session.role !== 'csm') return null;
+  await assertCsmTrainingDone(session);
   const assignments = await csmAssignmentRepository.listByCsm(session.userId);
   return new Set(assignments.map((a) => a.tenant_id));
 }
