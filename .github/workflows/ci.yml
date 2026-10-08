@@ -29,3 +29,5 @@ jobs:
 
       - name: Run Test Suite
         run: npm test
+        env:
+          NEXTAUTH_URL: http://localhost:3000
