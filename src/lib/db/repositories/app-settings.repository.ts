@@ -262,3 +262,33 @@ export async function setLeadSettings(value: LeadSettings, updatedBy: string): P
   await (appSettingsRepository as any).set(LEADS_KEY, { required_tag: cleanLeadTag(value.required_tag) }, updatedBy);
 }
 // ───────────────────────── end leads ─────────────────────────
+
+// ───────────────────────── training (CSM training) ─────────────────────────
+// Self-contained block: stored under the `training` key through the generic get/set above.
+
+export interface TrainingSettings {
+  /** On: a CSM must finish every lesson before they can open their clients. Off by default. */
+  required_for_csms: boolean;
+  /** CSMs a CSM Manager has let skip the training. */
+  exempt_user_ids: string[];
+}
+
+export const TRAINING_KEY = 'training';
+
+/** Reads the training settings. Anything that is not a clear "on" reads as off. */
+export async function getTrainingSettings(): Promise<TrainingSettings> {
+  const raw = (await (appSettingsRepository as any).get(TRAINING_KEY)) as Partial<TrainingSettings>;
+  const exempt = Array.isArray(raw?.exempt_user_ids)
+    ? raw.exempt_user_ids.filter((id): id is string => typeof id === 'string' && Boolean(id))
+    : [];
+  return { required_for_csms: raw?.required_for_csms === true, exempt_user_ids: Array.from(new Set(exempt)) };
+}
+
+export async function setTrainingSettings(value: TrainingSettings, updatedBy: string): Promise<void> {
+  await (appSettingsRepository as any).set(
+    TRAINING_KEY,
+    { required_for_csms: value.required_for_csms === true, exempt_user_ids: Array.from(new Set(value.exempt_user_ids)) },
+    updatedBy
+  );
+}
+// ───────────────────────── end training ─────────────────────────

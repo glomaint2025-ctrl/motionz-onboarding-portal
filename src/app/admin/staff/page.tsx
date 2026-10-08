@@ -91,6 +91,20 @@ export default function StaffPage() {
     load();
   }, []);
 
+  // A small "Training: 3/8" line under each CSM. Loaded on its own, so the staff list never waits for it.
+  const [trainingByCsm, setTrainingByCsm] = useState<Record<string, string>>({});
+  useEffect(() => {
+    fetch('/api/admin/training')
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data) => {
+        if (!data?.available || !data.activeLessons) return;
+        const lines: Record<string, string> = {};
+        for (const csm of data.progress || []) lines[csm.id] = csm.exempt ? 'Training: exempt' : `Training: ${csm.finished}/${csm.total}`;
+        setTrainingByCsm(lines);
+      })
+      .catch(() => undefined);
+  }, []);
+
   const addStaff = async (e: React.FormEvent) => {
     e.preventDefault();
     setBusy(true);
@@ -412,6 +426,7 @@ export default function StaffPage() {
                                 {m.calendarId ? `Calendar: ${m.calendarId}` : 'Default calendar'}
                               </span>
                             )}
+                            {m.role === 'csm' && trainingByCsm[m.id] && <span className="ui-company-sub">{trainingByCsm[m.id]}</span>}
                           </div>
                         </td>
                         <td data-label="Role">

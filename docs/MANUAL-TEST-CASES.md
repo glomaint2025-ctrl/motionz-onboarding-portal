@@ -519,3 +519,66 @@ Expected: no sideways scrolling, bottom bar works (**More** opens the rest), tab
 ## 19. Emails you should have received (Gmail, `from:no-reply@mail.motionz.ai`)
 
 Client invitation · team invitation (+ sent again) · password reset · staff sign-in code · website change request (with and without attachment) · onboarding form submitted (you + CSM) · lead replacement request (Approved, Needs review) · unresponsive lead. Each: correct name, buttons open the **staging** site, nothing broken.
+
+---
+
+## 20. CSM Training (needs the database step `20261008000002_csm_training.sql`; see `docs/HANDOVER.md`)
+
+Use two browsers: the CSM Manager in one, the test CSM in an Incognito window.
+
+### 20a. Before the database step is run
+
+| # | Steps | Expected |
+|---|---|---|
+| 20.1 | CSM Manager: sidebar > Configuration > **CSM Training** | Grey notice that the database step is still pending. No lesson list, nothing crashes |
+| 20.2 | CSM: sidebar > **Training** (directly under My Clients) | "Training is not set up yet." |
+| 20.3 | CSM: **My Clients** | The client list as usual. Nobody is locked out before the database step |
+
+### 20b. CSM Manager: lessons (after the database step)
+
+| # | Steps | Expected |
+|---|---|---|
+| 20.4 | **CSM Training** | Three cards: Requirement (box unticked), Lessons ("No lessons yet…"), CSM progress (every CSM, 0 / 0, Not started) |
+| 20.5 | **Add lesson** > Add lesson with everything empty | "Give the lesson a title." Nothing is added |
+| 20.6 | Title `Welcome`, Video link `youtube.com/watch?v=…` (no https) > Add lesson | "The video link must be a full link that starts with https://" |
+| 20.7 | Paste a real YouTube link | Under the box: "YouTube video: plays inside the Training page." Save: green "…was added as the last lesson." |
+| 20.8 | Add a second lesson with a **Loom** share link, a third with a **Vimeo** link, a fourth with a **Google Drive** file link (shared so "anyone with the link" can view) and a fifth with any other https link (e.g. the Notion page) | Lessons 1 to 5 in that order. The fifth says "Opens in a new tab…" |
+| 20.9 | **Edit** lesson 1 > change the title and add a description > Save lesson | Saved; the list shows the new title and description |
+| 20.10 | **Move down** on lesson 1, then **Move up** on it | It swaps places and back. "Move up" is greyed out on the first lesson, "Move down" on the last |
+| 20.11 | **Hide** on lesson 5 | "Hidden" badge; green message says it no longer counts. **Show** brings it back. Leave it hidden |
+| 20.12 | **Preview as a CSM** | New tab with the Training page; grey note that nothing is locked for a CSM Manager; 4 lessons (the hidden one is not there) |
+| 20.13 | Audit Logs, search `training` | "Training lesson added", "Training lesson edited", "Training lessons reordered" |
+
+### 20c. CSM: taking the training
+
+| # | Steps | Expected |
+|---|---|---|
+| 20.14 | CSM: **Training** | "0 of 4 lessons finished" with an empty bar. Lesson 1 is open with the video playing inside the page and a **Finish** button. Lessons 2 to 4 are greyed: "Locked", "Finish the previous lesson first", no video |
+| 20.15 | Play the lesson 1 video | Plays inside the page (YouTube). "Video not showing? Open it in a new tab" works |
+| 20.16 | **Finish** on lesson 1 | "1 of 4 lessons finished"; lesson 1 shows "Finished on <today>" and a **Watch again** button; lesson 2 opens with its video (Loom) |
+| 20.17 | Reload the page | Same state. There is no way to un-finish a lesson |
+| 20.18 | **Watch again** on lesson 1 | The video shows again; still "Finished on…" |
+| 20.19 | Finish lessons 2 and 3 (check the Vimeo and Drive videos play inside the page) | Each one unlocks the next |
+| 20.20 | Finish lesson 4 | Green **Training complete** card with "4 of 4 lessons finished" and **Go to My Clients** |
+| 20.21 | CSM Manager: **CSM Training** > CSM progress | The test CSM: 4 / 4, last activity just now, **Complete** |
+| 20.22 | CSM Manager: **Staff** | Small grey "Training: 4/4" under the test CSM's name |
+
+### 20d. The lock ("CSMs must finish training before they can open their clients")
+
+| # | Steps | Expected |
+|---|---|---|
+| 20.23 | CSM Manager: **Reset progress** on the test CSM > confirm | 0 / 4, Not started |
+| 20.24 | CSM: **My Clients** (requirement still unticked) | The client list as usual |
+| 20.25 | CSM Manager: tick **CSMs must finish training before they can open their clients** | Green "Saved. CSMs now have to finish the training…" |
+| 20.26 | CSM: **My Clients** | Full-page notice "Finish your training to unlock your clients", the progress bar (0 of 4) and a **Start training** button. No client list |
+| 20.27 | CSM: paste a client link directly (`…/csm/clients/<id>/setup`, then `…/portal/<id>`) | Neither shows client data: the page says "Finish your training to unlock your clients." |
+| 20.28 | CSM: **My profile** and **Training** | Both still work |
+| 20.29 | CSM: finish lesson 1, then **My Clients** | Still locked; the bar says 1 of 4 and the button says **Continue training** |
+| 20.30 | CSM: finish the other lessons, then **My Clients** | The client list is back |
+| 20.31 | CSM Manager: **Show** on the hidden lesson 5 | The test CSM is now 4 / 5, In progress; their My Clients is locked again until they finish it |
+| 20.32 | CSM Manager: **Mark exempt** on the test CSM | Status **Exempt**; the CSM's My Clients opens without finishing. **Remove exemption** locks it again |
+| 20.33 | CSM Manager: open **Clients**, a client's portal, My Clients | Never locked (CSM Managers and Tech are not affected) |
+| 20.34 | CSM Manager: **Delete** on lesson 5 | Dialog says everyone's progress for the lesson is removed and suggests Hide instead. Confirm: the lesson is gone; the test CSM is 4 / 4, Complete |
+| 20.35 | CSM Manager: hide every lesson (requirement still ticked) | Note under the tick box: "There are no visible lessons yet, so nobody is locked out." The CSM's My Clients opens |
+| 20.36 | Audit Logs, search `training` | Also "Training lesson finished" (by the CSM), "Training requirement for CSMs changed", "CSM's training progress reset", "CSM training exemption changed", "Training lesson deleted" |
+| 20.37 | Clean up: untick the requirement unless the client wants it on; delete the test lessons | |

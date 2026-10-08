@@ -21,6 +21,8 @@ import {
   OnboardingSubmission,
   LeadRequest,
   AppSetting,
+  TrainingLesson,
+  TrainingProgress,
 } from './schema';
 import { AD_SCRIPT_LIBRARY } from '../scripts/ad-script-library';
 
@@ -33,6 +35,8 @@ export interface DatabaseStore {
   onboardingSubmissions: OnboardingSubmission[];
   leadRequests: LeadRequest[];
   appSettings: AppSetting[];
+  trainingLessons: TrainingLesson[];
+  trainingProgress: TrainingProgress[];
   portalTemplates: PortalTemplate[];
   templateSteps: TemplateStep[];
   clientSetupSteps: ClientSetupStep[];
@@ -221,6 +225,8 @@ export const createInitialStore = (): DatabaseStore => {
     onboardingSubmissions: [],
     leadRequests: [],
     appSettings: [],
+    trainingLessons: [],
+    trainingProgress: [],
 
     clientSetupSteps: [
       {

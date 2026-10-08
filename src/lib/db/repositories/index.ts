@@ -18,3 +18,4 @@ export * from './password-reset.repository';
 export * from './onboarding-submissions.repository';
 export * from './lead-requests.repository';
 export * from './app-settings.repository';
+export * from './training.repository';

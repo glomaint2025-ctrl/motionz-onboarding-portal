@@ -290,3 +290,24 @@ export interface SecurityEvent {
   resolved_by?: string;
   created_at: string;
 }
+
+/** One lesson of the CSM training (Admin > CSM Training). */
+export interface TrainingLesson {
+  id: string;
+  title: string;
+  description: string | null;
+  video_url: string;
+  sort_order: number;
+  /** Hidden lessons are not shown to CSMs and do not count towards their progress. */
+  is_active: boolean;
+  created_at: string;
+  updated_at: string;
+  created_by: string | null;
+}
+
+/** A CSM clicked "Finish" on a lesson. One row per person and lesson. */
+export interface TrainingProgress {
+  lesson_id: string;
+  user_id: string;
+  completed_at: string;
+}

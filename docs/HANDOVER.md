@@ -16,6 +16,7 @@ Read this first, then `docs/FINAL-REPORT.md` (what the portal does), `docs/CLIEN
 - **Contract reminder (staff only):** while a client has no contract, admins see a notice on the client's Contract card, a "No contract attached" dashboard card and a "No contract" tag in the Clients list; CSMs see the tag and an "ask an admin" notice on the setup page (`hasContract` in the staff APIs, one query via `contractRepository.listTenantIdsWithContract()`; never sent to clients).
 - **Notification emails per team:** the `notifications` setting has three lists (onboarding form, `website_request_recipients`, `lead_form_recipients`) edited on Settings & Integrations; website change requests go to the CSM (or all admins if none) plus the website list; the lead list (`leadFormRecipients()` in `src/lib/onboarding/submissions.ts`) is emailed every Lead Replacement and Unresponsive Lead form.
 - **Lead Replacement and Unresponsive Lead forms are built into the portal (7 Oct)**, on the client's Leads page; see the section "Lead Replacement and Unresponsive Lead forms" below. **The database owner must run `supabase/migrations/20261007000004_lead_requests.sql` first**; until then the forms say "This form is not available yet. Please tell your CSM." and staff lists are empty (nothing crashes). The dropdown options and the instant decision use **the client's own wording (confirmed 7 Oct)**; no new SQL was needed for that.
+- **CSM Training (8 Oct):** a "Training" page for CSMs (directly under My Clients) and a "CSM Training" page for CSM Managers; see the section "CSM Training" below. **The database owner must run `supabase/migrations/20261008000002_csm_training.sql` first**; until then both pages say training is not set up and nobody is locked out. **The lessons are empty: a CSM Manager has to add them** (title + video link) from the client's Notion training page, which we could not read.
 - **Slack messages for lead forms (7 Oct):** Settings & Integrations → "Slack messages". The owner pastes a Slack Incoming Webhook link; every saved Lead Replacement / Unresponsive Lead form is then posted to that channel. **Nothing is posted until a link is saved.** No SQL, no env var.
 - **A lead marked Lost in GoHighLevel leaves the portal (7 Oct):** the webhook accepts `event = lead_lost`. **The GHL side is not set up yet**: the `Portal: sync leads` workflow needs the extra trigger described in `docs/07-integrations/ghl-workflows.md` ("Removing a lead: mark the opportunity Lost"), once a test sub-account exists. No SQL.
 - **Optional lead tag rule (7 Oct):** Admin → GHL Connect → "When does a contact count as a lead?" (app setting `leads.required_tag`, empty by default = every opportunity is a lead as before). With a tag set, `handleLead` creates a lead only for contacts carrying that tag, keeps updating leads it already has, and removes one on `event = lead_unqualified`. **Off until an admin saves a tag, and the GHL side is not set up yet** (Contact Tag trigger; see `docs/07-integrations/ghl-workflows.md`, "Option: only tagged contacts count as leads"). The real shape of GoHighLevel's `tags` field has not been confirmed against a live workflow. No SQL, no env var.
@@ -291,6 +292,125 @@ CSM.", "Your requests" is hidden, and the staff cards and the dashboard card are
   has those keys is simply ignored.
 - **Tests:** `tests/portal/lead-requests.test.ts` (in `npm test`). Manual cases: 10c, 13b and 13b-2
   in `docs/MANUAL-TEST-CASES.md`.
+
+## CSM Training (built 8 Oct 2026)
+The client asked that a new CSM goes through the training videos before they handle clients:
+"a Training section where they have to watch each video and click Finish on every video before
+they can move on", in the CSM sidebar directly under My Clients.
+
+**To switch it on, run this SQL once** (Supabase → SQL editor; it is the whole of
+`supabase/migrations/20261008000002_csm_training.sql` and is safe to run twice):
+
+```sql
+-- CSM training: the lessons a CSM Manager sets up, and which CSM has finished which lesson.
+-- Safe to run more than once.
+CREATE TABLE IF NOT EXISTS training_lessons (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    title TEXT NOT NULL,
+    description TEXT,
+    video_url TEXT NOT NULL,
+    sort_order INT NOT NULL DEFAULT 0,
+    is_active BOOLEAN NOT NULL DEFAULT TRUE,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    created_by UUID NULL REFERENCES users(id) ON DELETE SET NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_training_lessons_order ON training_lessons (sort_order, created_at);
+
+CREATE TABLE IF NOT EXISTS training_progress (
+    lesson_id UUID NOT NULL REFERENCES training_lessons(id) ON DELETE CASCADE,
+    user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    completed_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    PRIMARY KEY (lesson_id, user_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_training_progress_user ON training_progress (user_id);
+
+ALTER TABLE training_lessons ENABLE ROW LEVEL SECURITY;
+ALTER TABLE training_progress ENABLE ROW LEVEL SECURITY;
+
+-- Same style as the other staff tables (20260922000002_rls_policies.sql). Staff only: clients
+-- get no policy, so they can read nothing. The portal itself reads and writes with the service role.
+DROP POLICY IF EXISTS admin_training_lessons_all ON training_lessons;
+CREATE POLICY admin_training_lessons_all ON training_lessons
+    FOR ALL
+    TO authenticated
+    USING (current_user_role() = 'admin');
+
+DROP POLICY IF EXISTS csm_training_lessons_select ON training_lessons;
+CREATE POLICY csm_training_lessons_select ON training_lessons
+    FOR SELECT
+    TO authenticated
+    USING (current_user_role() = 'csm' AND is_active);
+
+DROP POLICY IF EXISTS admin_training_progress_all ON training_progress;
+CREATE POLICY admin_training_progress_all ON training_progress
+    FOR ALL
+    TO authenticated
+    USING (current_user_role() = 'admin');
+
+DROP POLICY IF EXISTS csm_training_progress_select_own ON training_progress;
+CREATE POLICY csm_training_progress_select_own ON training_progress
+    FOR SELECT
+    TO authenticated
+    USING (current_user_role() = 'csm' AND user_id = auth.uid());
+```
+
+Until it is run nothing breaks: the CSM page says "Training is not set up yet.", the CSM Manager
+page shows a notice that the database step is pending, and **no CSM is locked out**, even if the
+requirement was somehow switched on.
+
+**After the SQL, a CSM Manager must enter the lessons.** The training content lives in the
+client's Notion page, which we could not read, so the lesson list starts empty. Admin → Configuration
+→ **CSM Training** → Add lesson (title, video link, optional description), one per video, in the
+order CSMs should watch them.
+
+- **CSM side** (`/csm/training`, nav item "Training" under My Clients): a progress bar ("3 of 8
+  lessons finished") and the lessons in order. Each has its number, title, description, the video
+  and a **Finish** button. Lesson N+1 is locked ("Finish the previous lesson first") until lesson N
+  is finished; a locked lesson's video link is not even sent to the browser. A finished lesson shows
+  "Finished on <date>" and can be watched again; a CSM cannot un-finish. All done → "Training
+  complete". A CSM Manager can open the same page to preview (nothing is locked for them).
+- **Videos:** YouTube (`watch?v=`, `youtu.be`, shorts, live), Loom share links, Vimeo (also
+  unlisted links with a hash) and Google Drive file links are turned into their embed address and
+  play inside the page (`src/lib/training/embed.ts`). Any other https link is an "Open video" button
+  that opens a new tab. `next.config.js` `frame-src` now also allows `www.youtube.com`,
+  `www.youtube-nocookie.com`, `www.loom.com`, `player.vimeo.com` and `drive.google.com`. A Drive
+  video must be shared so the CSMs can view it ("anyone with the link", or with their accounts).
+  "Finish" is a button the CSM clicks: the portal does not measure how much of a video was watched.
+- **The lock** (off by default): CSM Training → "CSMs must finish training before they can open
+  their clients" (`required_for_csms` in the `training` app setting; no SQL). While it is on, a CSM
+  with at least one unfinished **visible** lesson gets `403 { code: 'TRAINING_REQUIRED' }` from every
+  `/api/csm/clients/**` route and from `/api/portal/**` (the staff view of a client portal). The
+  check is `assertCsmTrainingDone()` in `src/lib/auth/guard.ts`, called from `assertCsmAssigned()`
+  (one client) and `getVisibleTenantIds()` (the client list), and remembered for the rest of the
+  request. Cost: one settings read when the lock is off; when it is on, two more small reads
+  (visible lessons, that CSM's progress). `/csm/clients` then shows "Finish your training to unlock
+  your clients" with the progress and a button to Training; My profile and Training keep working.
+  Nobody is locked when the lock is off, when there are no visible lessons, or when the tables are
+  missing. CSM Managers and Tech (role `admin`) are never locked.
+- **Exemptions:** "Mark exempt" in the progress table lets one CSM skip the training
+  (`exempt_user_ids` in the same setting), e.g. CSMs who were already working before this existed.
+  **Before ticking the requirement, mark the existing CSMs exempt or let them finish**, otherwise
+  they lose access to their clients the moment it is ticked.
+- **CSM Manager side** (`/admin/training`): add / edit / reorder (Move up, Move down) / hide or show
+  / delete lessons, the requirement tick box, and a progress table (each CSM: finished / total, last
+  activity, Not started / In progress / Complete / Exempt, "Mark exempt" and "Reset progress").
+  Hidden lessons are not shown to CSMs and not counted. Deleting a lesson removes everyone's
+  progress for it (`ON DELETE CASCADE`); hiding keeps it. Adding a new visible lesson makes
+  everyone who had finished "In progress" again (and locked, if the lock is on) until they finish it.
+  The Staff page shows a small "Training: 3/8" line under each CSM.
+- **API:** `GET/POST /api/csm/training` (own lessons and progress; `POST { lessonId }` finishes the
+  next unlocked lesson, twice is harmless) and `GET/POST/PATCH/DELETE /api/admin/training` (admin
+  only). Audit actions: `training.lesson_finished`, `training.lesson_created`,
+  `training.lesson_updated`, `training.lesson_deleted`, `training.lesson_reordered`,
+  `training.settings_updated`, `training.progress_reset`, `training.exemption_changed`.
+- **Code:** `src/lib/training/` (rules + link conversion), `src/lib/db/repositories/training.repository.ts`,
+  the `training` block at the end of `app-settings.repository.ts`, `src/app/csm/training/page.tsx`,
+  `src/app/admin/training/page.tsx`, `src/components/training/LessonVideo.tsx`.
+- **Tests:** `tests/csm/training.test.ts` (in `npm test`). Manual cases: section 20 in
+  `docs/MANUAL-TEST-CASES.md`.
 
 ## Earlier decision (still true for the texting form only): forms stay in GHL
 The Texting registration form stays a **GHL form embedded in the portal** (iframe, email/name pre-filled via URL

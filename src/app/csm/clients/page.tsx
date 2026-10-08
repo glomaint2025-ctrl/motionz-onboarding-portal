@@ -4,6 +4,8 @@ import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { Select, TableSkeleton, Pagination, buttonClasses } from '@/components/ui';
 import { Notice, clientStatusLabel } from '@/components/admin/Notice';
+import { Icon } from '@/components/brand/Icon';
+import { TrainingProgressBar } from '@/components/training/LessonVideo';
 
 interface AssignedClient {
   id: string;
@@ -42,6 +44,8 @@ export default function CSMClientsPage() {
   const [clients, setClients] = useState<AssignedClient[]>([]);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState('');
+  // Set when the server says this CSM must finish their training before opening clients.
+  const [trainingGate, setTrainingGate] = useState<{ finished: number; total: number } | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [debouncedSearch, setDebouncedSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
@@ -92,6 +96,12 @@ export default function CSMClientsPage() {
         setClients(data.tenants);
         if (data.pagination) setPaginationMeta(data.pagination);
         if (data.stats) setGlobalStats((prev) => ({ ...prev, ...data.stats }));
+      } else if (res.status === 403 && data.code === 'TRAINING_REQUIRED') {
+        // Clients stay locked until the training is finished: show where they are instead of the list.
+        const training = await fetch('/api/csm/training')
+          .then((r) => r.json())
+          .catch(() => null);
+        setTrainingGate({ finished: Number(training?.finished) || 0, total: Number(training?.total) || 0 });
       } else {
         setLoadError(data.error || 'Could not load your clients.');
       }
@@ -113,6 +123,45 @@ export default function CSMClientsPage() {
   const avgProgress = globalStats.avgProgress;
 
   const displayClients = clients;
+
+  if (trainingGate) {
+    return (
+      <div>
+        <div className="ui-breadcrumb">
+          <span className="ui-breadcrumb-current">My Clients</span>
+        </div>
+        <div
+          style={{
+            maxWidth: '560px',
+            margin: 'var(--space-12) auto',
+            padding: 'var(--space-8) var(--space-6)',
+            textAlign: 'center',
+            backgroundColor: 'var(--color-bg-card)',
+            border: '1px solid var(--color-border-subtle)',
+            borderRadius: 'var(--radius-lg)',
+          }}
+        >
+          <span style={{ display: 'inline-flex', color: 'var(--color-primary-text)', marginBottom: 'var(--space-3)' }}>
+            <Icon name="lock" size={32} />
+          </span>
+          <h1 style={{ fontSize: 'var(--font-size-2xl)', fontWeight: 700, color: 'var(--color-text-primary)', marginBottom: 'var(--space-2)', letterSpacing: '-0.02em' }}>
+            Finish your training to unlock your clients
+          </h1>
+          <p style={{ color: 'var(--color-text-secondary)', fontSize: 'var(--font-size-sm)', margin: '0 0 var(--space-6)' }}>
+            Watch each training video and click Finish. Once every lesson is finished, your clients appear here.
+          </p>
+          {trainingGate.total > 0 && (
+            <div style={{ textAlign: 'left', marginBottom: 'var(--space-6)' }}>
+              <TrainingProgressBar finished={trainingGate.finished} total={trainingGate.total} />
+            </div>
+          )}
+          <Link href="/csm/training" className={buttonClasses({ variant: 'primary' })}>
+            {trainingGate.finished > 0 ? 'Continue training' : 'Start training'}
+          </Link>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div>
