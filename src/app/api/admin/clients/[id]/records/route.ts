@@ -152,6 +152,54 @@ export async function POST(request: Request, { params }: { params: { id: string 
   }
 }
 
+/**
+ * PATCH { contractId, action: 'set_signed', signedAt }: mark an attached contract as signed on a date,
+ * change that date, or (signedAt: null) mark it as not signed. For contracts signed outside the portal.
+ */
+export async function PATCH(request: Request, { params }: { params: { id: string } }) {
+  try {
+    const { session } = await requireAuth(request, { roles: ['admin'] });
+    const parsed = await request.json().catch(() => null);
+    const body: Record<string, any> = parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed : {};
+
+    if (body.action !== 'set_signed') return NextResponse.json({ error: 'Unknown action.' }, { status: 400 });
+    const contractId = typeof body.contractId === 'string' ? body.contractId : '';
+    if (!contractId) return NextResponse.json({ error: 'Choose a contract first.' }, { status: 400 });
+
+    let signedAt: string | null = null;
+    if (body.signedAt !== null && body.signedAt !== undefined && body.signedAt !== '') {
+      const date = typeof body.signedAt === 'string' ? new Date(body.signedAt) : new Date(NaN);
+      if (isNaN(date.getTime())) {
+        return NextResponse.json({ error: 'Signed date is not a valid date.' }, { status: 400 });
+      }
+      // One day of leeway covers admins whose local date is ahead of the server's.
+      if (date.getTime() > Date.now() + 24 * 60 * 60 * 1000) {
+        return NextResponse.json({ error: 'The signed date cannot be in the future.' }, { status: 400 });
+      }
+      signedAt = date.toISOString();
+    }
+
+    const existing = (await contractRepository.listByTenant(params.id)).find((c) => c.id === contractId);
+    if (!existing) return NextResponse.json({ error: 'Contract not found.' }, { status: 404 });
+    const previous = existing.signed_at || null;
+
+    const saved = await contractRepository.setSignedAt(params.id, contractId, signedAt);
+    if (!saved) return NextResponse.json({ error: 'Contract not found.' }, { status: 404 });
+
+    const sameDay = (a: string | null, b: string | null) => (a ? a.slice(0, 10) : null) === (b ? b.slice(0, 10) : null);
+    if (!sameDay(previous, signedAt)) {
+      await audit(session!.email, params.id, 'contract.signed_changed', contractId, {
+        title: existing.title,
+        previousSignedOn: previous ? previous.slice(0, 10) : 'Not signed',
+        signedOn: signedAt ? signedAt.slice(0, 10) : 'Not signed',
+      });
+    }
+    return NextResponse.json({ success: true, contract: present(saved) });
+  } catch (err: any) {
+    return errorResponse(err);
+  }
+}
+
 export async function DELETE(request: Request, { params }: { params: { id: string } }) {
   try {
     const { session } = await requireAuth(request, { roles: ['admin'] });

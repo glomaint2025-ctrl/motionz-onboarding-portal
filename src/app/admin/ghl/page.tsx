@@ -179,11 +179,100 @@ function Section({ title, subtitle, clients, empty, onSaved }: { title: string; 
 
 type LeadRuleMode = 'opportunity' | 'tag';
 
+interface LeadEvent {
+  id: string;
+  at: string;
+  kind: 'received' | 'ignored' | 'removed' | 'rejected';
+  summary: string;
+  client: string;
+  location: string;
+}
+
+/** The last few lead messages GoHighLevel sent, so an admin can see whether the tag is arriving. */
+function LastLeadEvents({ tag }: { tag: string }) {
+  const [events, setEvents] = useState<LeadEvent[] | null>(null);
+  const [error, setError] = useState('');
+  const [busy, setBusy] = useState(false);
+
+  const load = useCallback(async () => {
+    setBusy(true);
+    try {
+      const res = await fetch('/api/admin/ghl/recent-events', { cache: 'no-store' });
+      const body = await res.json().catch(() => ({}));
+      if (res.ok && body.success) {
+        setEvents(Array.isArray(body.events) ? body.events : []);
+        setError('');
+      } else {
+        setError(body.error || 'Could not load the last events.');
+      }
+    } catch {
+      setError('Could not reach the server.');
+    } finally {
+      setBusy(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    load();
+  }, [load, tag]);
+
+  const kindColor: Record<LeadEvent['kind'], string> = {
+    received: 'var(--color-status-done-text)',
+    ignored: 'var(--color-status-warning-text)',
+    removed: 'var(--color-text-secondary)',
+    rejected: 'var(--color-status-danger-text)',
+  };
+
+  return (
+    <section
+      aria-label="Last events from GoHighLevel"
+      style={{ marginTop: 'var(--space-4)', paddingTop: 'var(--space-3)', borderTop: '1px solid var(--color-border-subtle)' }}
+    >
+      <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 'var(--space-3)', flexWrap: 'wrap', marginBottom: 'var(--space-2)' }}>
+        <h3 style={{ margin: 0, fontSize: 'var(--font-size-sm)', fontWeight: 'var(--font-weight-semibold)' }}>Last events</h3>
+        <Button type="button" variant="ghost" size="sm" onClick={load} disabled={busy}>
+          {busy ? 'Refreshing...' : 'Refresh'}
+        </Button>
+      </div>
+      {error ? (
+        <p role="alert" style={{ margin: 0, fontSize: 'var(--font-size-sm)', color: 'var(--color-status-danger-text)' }}>
+          {error}
+        </p>
+      ) : events === null ? (
+        <Skeleton height="48px" />
+      ) : events.length === 0 ? (
+        <p style={{ margin: 0, fontSize: 'var(--font-size-sm)', color: 'var(--color-text-secondary)' }}>
+          Nothing received yet since the rule was turned on — check the workflow has the Contact Tag trigger.
+        </p>
+      ) : (
+        <ul style={{ listStyle: 'none', margin: 0, padding: 0, display: 'flex', flexDirection: 'column', gap: 'var(--space-2)' }}>
+          {events.map((event) => (
+            <li key={event.id} style={{ fontSize: 'var(--font-size-sm)', minWidth: 0 }}>
+              <div style={{ color: kindColor[event.kind], overflowWrap: 'anywhere' }}>{event.summary}</div>
+              <div style={{ color: 'var(--color-text-muted)', fontSize: 'var(--font-size-xs)', overflowWrap: 'anywhere' }}>
+                {[formatDateTime(event.at), event.client || (event.location ? `Location ${event.location}` : 'Unknown location')]
+                  .filter(Boolean)
+                  .join(' · ')}
+              </div>
+            </li>
+          ))}
+        </ul>
+      )}
+      <p className="ui-helper-text" style={{ margin: 'var(--space-2) 0 0' }}>
+        Contacts without the tag are listed at most 3 times an hour per client. The full history is under{' '}
+        <Link href="/admin/audit-logs">Audit Logs</Link>.
+      </p>
+    </section>
+  );
+}
+
 /** Platform-wide rule: every opportunity is a lead, or only contacts carrying one GoHighLevel tag. */
 function LeadRuleCard() {
   const [loading, setLoading] = useState(true);
   const [mode, setMode] = useState<LeadRuleMode>('opportunity');
   const [tag, setTag] = useState('');
+  // The tag the rule is saved with right now ('' = the rule is off), as opposed to what is typed.
+  const [savedTag, setSavedTag] = useState('');
   const [busy, setBusy] = useState(false);
   const [fieldError, setFieldError] = useState('');
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
@@ -197,6 +286,7 @@ function LeadRuleCard() {
           const saved = typeof body.leads?.required_tag === 'string' ? body.leads.required_tag : '';
           setMode(saved ? 'tag' : 'opportunity');
           setTag(saved);
+          setSavedTag(saved);
         } else {
           setMessage({ type: 'error', text: body.error || 'Could not load this setting.' });
         }
@@ -231,6 +321,7 @@ function LeadRuleCard() {
       }
       const saved = body.leads?.required_tag || '';
       setTag(saved);
+      setSavedTag(saved);
       setMessage({
         type: 'success',
         text: saved
@@ -336,6 +427,8 @@ function LeadRuleCard() {
           <Button type="submit" variant="primary" disabled={busy}>
             {busy ? 'Saving...' : 'Save'}
           </Button>
+
+          {savedTag && mode === 'tag' && <LastLeadEvents tag={savedTag} />}
         </form>
       )}
     </Card>

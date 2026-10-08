@@ -75,6 +75,30 @@ export class ContractRepository {
     return newRecord;
   }
 
+  /**
+   * Sets or clears the signed date of one of a client's contracts (null = not signed).
+   * Returns the saved contract, or null when this client has no such contract.
+   */
+  async setSignedAt(tenantId: string, id: string, signedAt: string | null): Promise<Contract | null> {
+    const supabase = getSupabaseServiceClient();
+    if (supabase) {
+      const { data, error } = await supabase
+        .from('contracts')
+        .update({ signed_at: signedAt })
+        .eq('id', id)
+        .eq('tenant_id', tenantId)
+        .select('*')
+        .maybeSingle();
+      if (error) throw new DatabaseError(`Failed to update contract: ${error.message}`, error);
+      return (data as Contract) || null;
+    }
+    const contract = getStore().contracts.find((c) => c.id === id && c.tenant_id === tenantId);
+    if (!contract) return null;
+    if (signedAt) contract.signed_at = signedAt;
+    else delete contract.signed_at;
+    return contract;
+  }
+
   async remove(tenantId: string, id: string): Promise<boolean> {
     const supabase = getSupabaseServiceClient();
     if (supabase) {

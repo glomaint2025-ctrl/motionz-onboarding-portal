@@ -29,7 +29,8 @@ import type { Tenant } from '@/lib/db/schema';
  * - csm_call        Call booked with a CSM on the Motionz calendar. Routed by the client's email.
  * - onboarding_form Onboarding form submitted in GoHighLevel. Routed by the submitter's email.
  *                   (Clients now fill the form in inside the portal; this stays for an old workflow.)
- * - ContactCreate / ContactUpdate (marketplace format). Other marketplace events are ignored.
+ * - ContactCreate / ContactUpdate (marketplace format). The lead tag rule applies here too.
+ *                   Other marketplace events are ignored.
  *
  * Authentication: the shared secret GHL_WEBHOOK_SECRET, sent either as the
  * `x-motionz-webhook-secret` header or as `customData.secret` (GHL's standard Webhook action
@@ -37,7 +38,8 @@ import type { Tenant } from '@/lib/db/schema';
  *
  * Nothing is dropped silently: an event the portal cannot place is recorded in the audit log as
  * `ghl.webhook.ignored` (answered 200), a malformed one as `ghl.webhook.rejected` (answered 400),
- * and a wrong secret as a security event. Those records hold the event type, the reason and the
+ * and a wrong secret as a security event. A contact ignored for lacking the lead tag is recorded
+ * with the tags that arrived (`tagsSeen`), at most 3 times per location per hour. Those records hold the event type, the reason and the
  * location id or contact email; never the secret and never the full payload.
  */
 
@@ -46,8 +48,11 @@ type Payload = Record<string, any>;
 interface HandlerResult {
   tenant?: Tenant;
   ignored?: string;
-  /** With `ignored`: an everyday case that is answered but not written to the audit log. */
-  quiet?: boolean;
+  /**
+   * With `ignored`: an everyday case that would bury the audit log if every event were written.
+   * Only this many entries are written per key in the window; the rest are answered but not recorded.
+   */
+  auditLimit?: { key: string; maxRequests: number; windowMs: number };
   error?: string;
   notified?: number;
   /** Audit action to record instead of `ghl.webhook.<event>`, with extra facts for that entry. */
@@ -58,6 +63,9 @@ interface HandlerResult {
 }
 
 const TEN_MINUTES = 10 * 60 * 1000;
+const ONE_HOUR = 60 * 60 * 1000;
+/** Audit entries per location per hour for contacts ignored because they lack the lead tag. */
+const UNTAGGED_AUDIT_LIMIT = 3;
 
 const str = (value: unknown): string | undefined =>
   typeof value === 'string' && value.trim() ? value.trim() : typeof value === 'number' ? String(value) : undefined;
@@ -118,17 +126,92 @@ function isLostOpportunity(event: string, p: Payload, stage: string | undefined)
 
 const normalizeTag = (tag: string): string => tag.trim().replace(/\s+/g, ' ').toLowerCase();
 
-/** A tags field as GoHighLevel may send it: "a, Qualified, b" or ["a", "Qualified", "b"]. */
-function tagsIn(value: unknown): string[] {
-  if (Array.isArray(value)) return value.flatMap(tagsIn);
+/** The keys an object may hold a tag's name under, e.g. { name: "Qualified" }. */
+const TAG_NAME_KEYS = ['name', 'tag', 'label', 'value'];
+
+/**
+ * The tag names in a tags field, as written, in any shape GoHighLevel may send:
+ * "a, Qualified; b | c", ["a", "Qualified"], [{ name: "Qualified" }, { tag: "a" }], or a list
+ * written as JSON text ('["a","Qualified"]').
+ */
+function tagNamesIn(value: unknown, depth = 0): string[] {
+  if (depth > 3 || value === null || value === undefined) return [];
+  if (Array.isArray(value)) return value.slice(0, 200).flatMap((item) => tagNamesIn(item, depth + 1));
+  if (typeof value === 'object') {
+    const named = TAG_NAME_KEYS.map((key) => (value as Payload)[key]).find((v) => typeof v === 'string' && v.trim());
+    return named ? [String(named).trim().replace(/\s+/g, ' ')] : [];
+  }
   if (typeof value !== 'string') return [];
-  return value.split(',').map(normalizeTag).filter(Boolean);
+  const text = value.trim();
+  if (!text) return [];
+  if (text.startsWith('[') && text.endsWith(']')) {
+    try {
+      const parsed = JSON.parse(text);
+      if (Array.isArray(parsed)) return tagNamesIn(parsed, depth + 1);
+    } catch {
+      // Not JSON: read it as a plain list below.
+    }
+  }
+  // Commas, semicolons and pipes all separate tags. The comma-only split is kept as well, so a
+  // tag whose own name holds a semicolon or pipe still matches.
+  const pieces = [...text.split(/[,;|]/), ...text.split(',')].map((piece) => piece.trim().replace(/\s+/g, ' ')).filter(Boolean);
+  return Array.from(new Set(pieces));
 }
 
-/** True when the contact carries the tag (any letter case), in `tags`, `contact.tags` or `customData.tags`. */
+/** Every place a contact's tags may arrive in. */
+const tagFieldsOf = (p: Payload): unknown[] => [p.tags, p.contact?.tags, p.customData?.tags, p.contact_tags, p.contactTags];
+
+/** True when the contact carries the tag (any letter case or spacing) in any of the tag fields. */
 function hasTag(p: Payload, tag: string): boolean {
   const wanted = normalizeTag(tag);
-  return [p.tags, p.contact?.tags, p.customData?.tags].some((field) => tagsIn(field).includes(wanted));
+  return tagFieldsOf(p).some((field) => tagNamesIn(field).some((name) => normalizeTag(name) === wanted));
+}
+
+/**
+ * The tags that arrived, for the audit log: "hot, new", "(none sent)" when the event has no tag
+ * field at all, "(empty)" when a field came with nothing in it. At most 200 characters.
+ */
+function tagsSeen(p: Payload): string {
+  const fields = tagFieldsOf(p).filter((field) => field !== undefined && field !== null);
+  if (fields.length === 0) return '(none sent)';
+  const names = Array.from(new Set(fields.flatMap((field) => tagNamesIn(field))));
+  if (names.length > 0) return clip(names.join(', '), 200)!;
+  const blank = fields.every((field) => (typeof field === 'string' && !field.trim()) || (Array.isArray(field) && field.length === 0));
+  if (blank) return '(empty)';
+  // Something arrived that the portal cannot read as tags: show a little of it.
+  let raw = '';
+  try {
+    raw = JSON.stringify(fields.length === 1 ? fields[0] : fields) || '';
+  } catch {
+    raw = '';
+  }
+  return clip(`(not readable as tags) ${raw.replace(/\s+/g, ' ')}`, 200)!;
+}
+
+const fullName = (first: unknown, last: unknown): string | undefined =>
+  clip(`${str(first) || ''} ${str(last) || ''}`.trim() || undefined, 200);
+
+/**
+ * The answer for a contact that lacks the lead tag and is not a lead yet. Every untagged contact in
+ * every sub-account ends up here, so only a few entries per location per hour reach the audit log:
+ * enough for staff to see what GoHighLevel is sending, never enough to bury the log.
+ */
+function untaggedResult(tenant: Tenant, p: Payload, requiredTag: string, contactName: string | undefined): HandlerResult {
+  return {
+    tenant,
+    ignored: `Contact is not tagged "${requiredTag}" yet.`,
+    auditLimit: { key: `ghl_webhook_untagged:${locationOf(p) || tenant.id}`, maxRequests: UNTAGGED_AUDIT_LIMIT, windowMs: ONE_HOUR },
+    info: { contact: contactName, client: clip(tenant.name, 200), tagsSeen: tagsSeen(p) },
+  };
+}
+
+/** Facts for the audit entry of a stored lead: who it was and, with the tag rule on, the tags that came with it. */
+function acceptedDetails(tenant: Tenant, p: Payload, requiredTag: string, contactName: string | undefined) {
+  return {
+    ...(contactName ? { leadName: contactName } : {}),
+    client: clip(tenant.name, 200),
+    ...(requiredTag ? { tagsSeen: tagsSeen(p) } : {}),
+  };
 }
 
 /** Removes the client's lead for that contact; `reason` is added to the audit entry when given. */
@@ -173,11 +256,12 @@ async function handleLead(p: Payload, event: string): Promise<HandlerResult> {
     return removeLead(tenant, contactId, 'Tag removed, but the lead is not in the portal.', 'tag removed');
   }
 
-  // Not tagged and not a lead yet: nothing to do, and nothing to record. Every untagged contact in
-  // every sub-account ends up here, so an audit entry per event would bury the log.
+  const contactName = fullName(p.first_name ?? p.contact?.first_name, p.last_name ?? p.contact?.last_name) || clip(str(p.full_name), 200);
+
+  // Not tagged and not a lead yet: no lead is made. (Recorded a few times an hour per location.)
   // A lead the portal already has is still updated: only `lead_unqualified` or Lost removes it.
   if (requiredTag && !hasTag(p, requiredTag) && !(await leadRepository.existsByGhlContactId(tenant.id, contactId))) {
-    return { tenant, ignored: `Contact is not tagged "${requiredTag}" yet.`, quiet: true };
+    return untaggedResult(tenant, p, requiredTag, contactName);
   }
 
   await leadRepository.upsertByGhlContactId(tenant.id, contactId, {
@@ -188,7 +272,7 @@ async function handleLead(p: Payload, event: string): Promise<HandlerResult> {
     source: str(p.opportunity_source) || str(p.contact_source) || str(p.source),
     ...(stage ? { status: stage } : {}),
   });
-  return { tenant };
+  return { tenant, auditDetails: acceptedDetails(tenant, p, requiredTag, contactName) };
 }
 
 async function handleCsmCall(p: Payload): Promise<HandlerResult> {
@@ -252,6 +336,15 @@ async function handleMarketplaceEvent(type: string, p: Payload): Promise<Handler
     const contact = p.contact || p;
     const contactId = str(contact?.id);
     if (!contactId) return { error: 'Contact id is required.' };
+
+    // The same optional rule as workflow `lead` events: with a lead tag set, a contact without it
+    // creates nothing, and a lead the portal already has is still updated.
+    const requiredTag = (await getLeadSettings()).required_tag;
+    const contactName = fullName(contact.firstName, contact.lastName) || clip(str(contact.name), 200);
+    if (requiredTag && !hasTag(p, requiredTag) && !(await leadRepository.existsByGhlContactId(tenant.id, contactId))) {
+      return untaggedResult(tenant, p, requiredTag, contactName);
+    }
+
     await leadRepository.upsertByGhlContactId(tenant.id, contactId, {
       first_name: str(contact.firstName),
       last_name: str(contact.lastName),
@@ -260,6 +353,7 @@ async function handleMarketplaceEvent(type: string, p: Payload): Promise<Handler
       source: str(contact.source),
       ...(str(contact.status) ? { status: str(contact.status)! } : {}),
     });
+    return { tenant, auditDetails: acceptedDetails(tenant, p, requiredTag, contactName) };
   } else {
     // Appointments in a client's own sub-account are homeowner bookings, not CSM calls (client answer 2.1).
     // CSM calls arrive as `csm_call` events from Motionz's own calendar.
@@ -305,7 +399,9 @@ async function recordNotStored(kind: 'ignored' | 'rejected', event: string, payl
   try {
     const location = locationOf(payload);
     const sender = result.info?.email || location || 'none';
-    const limit = await enforceRateLimit(`ghl_webhook_${kind}:${event}:${sender}`, { maxRequests: 20, windowMs: TEN_MINUTES });
+    const limit = result.auditLimit
+      ? await enforceRateLimit(result.auditLimit.key, result.auditLimit)
+      : await enforceRateLimit(`ghl_webhook_${kind}:${event}:${sender}`, { maxRequests: 20, windowMs: TEN_MINUTES });
     if (!limit.allowed) return;
 
     await logAuditEvent({
@@ -350,7 +446,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: result.error }, { status: 400 });
     }
     if (result.ignored) {
-      if (!result.quiet) await recordNotStored('ignored', event, payload, result);
+      await recordNotStored('ignored', event, payload, result);
       // 200 so GHL does not retry an event we will never be able to place.
       return NextResponse.json({ received: true, ignored: true, reason: result.ignored });
     }

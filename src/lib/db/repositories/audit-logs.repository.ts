@@ -68,6 +68,37 @@ export class AuditLogRepository {
     return { rows: matches.slice(offset, offset + limit), total: matches.length };
   }
 
+  /** The newest entries whose action starts with `prefix` (e.g. "ghl.webhook"), optionally since a time. */
+  async listByActionPrefix(prefix: string, options: { from?: string; limit?: number } = {}): Promise<AuditLog[]> {
+    const limit = options.limit ?? 50;
+    const safePrefix = prefix.replace(/[^\w.]/g, '');
+    if (!safePrefix) return [];
+
+    const supabase = getSupabaseServiceClient();
+    if (supabase) {
+      let query = supabase
+        .from('audit_logs')
+        .select('*')
+        // "_" is a wildcard in LIKE; action names use it as a plain character.
+        .like('action', `${safePrefix.replace(/_/g, '\\_')}%`)
+        .order('created_at', { ascending: false })
+        .limit(limit);
+      if (options.from) query = query.gte('created_at', options.from);
+      const { data, error } = await query;
+      if (error) throw new DatabaseError(`Failed to fetch audit logs: ${error.message}`, error);
+      return (data || []) as AuditLog[];
+    }
+
+    const fromMs = options.from ? new Date(options.from).getTime() : -Infinity;
+    return getStore()
+      .auditLogs.map((log, index) => ({ log, index }))
+      .filter(({ log }) => log.action.startsWith(safePrefix) && new Date(log.created_at).getTime() >= fromMs)
+      // Newest first; entries written in the same millisecond keep the store's newest-first order.
+      .sort((a, b) => new Date(b.log.created_at).getTime() - new Date(a.log.created_at).getTime() || a.index - b.index)
+      .slice(0, limit)
+      .map(({ log }) => log);
+  }
+
   async list(tenantId?: string, limit = 100, offset = 0): Promise<AuditLog[]> {
     const supabase = getSupabaseServiceClient();
     if (supabase) {

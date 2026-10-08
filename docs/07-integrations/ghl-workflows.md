@@ -111,8 +111,10 @@ What the portal does with it:
 
 - **Tagged contact** (`lead` event whose tags include the tag): the lead is created or updated as usual.
 - **Untagged contact that is not a lead yet:** nothing is stored. GoHighLevel gets the answer
-  `ignored: Contact is not tagged "Qualified" yet.` This is normal and is **not** written to the
-  Audit Logs, because every untagged contact in every sub-account would fill them.
+  `ignored: Contact is not tagged "Qualified" yet.` This is normal. To let you see what GoHighLevel
+  is sending, the first **3 per client per hour** are written to the Audit Logs as "GoHighLevel event
+  ignored", with the contact's name and the tags that arrived ("tags seen"). The rest are not
+  recorded, because every untagged contact in every sub-account would fill the log.
 - **A contact that already is a lead** keeps updating (stage, name, phone) even when a later event
   no longer carries the tag. A lead is never removed just because the tag is missing from an event.
 - **`lead_unqualified`:** the lead is removed. Audit Logs: "Lead removed (tag taken off in
@@ -123,8 +125,26 @@ What the portal does with it:
 - **Switching back:** choose "As soon as an opportunity is created (default)" and save. Contacts
   that were ignored while the rule was on appear with their next stage change.
 
-The portal reads the tags from `tags` (a comma-separated list such as `hot, Qualified`, or a list of
-names), from `contact.tags`, and from Custom Data `tags`.
+The portal reads the tags from `tags`, `contact.tags`, Custom Data `tags`, `contact_tags` and
+`contactTags`. Each may be a list written as text (`hot, Qualified`, also with `;` or `|` between the
+names), a list of names, or a list of objects (`[{ "name": "Qualified" }]`; `tag`, `label` and `value`
+are read the same way). Letter case and extra spaces do not matter.
+
+The same rule applies to marketplace `ContactCreate` / `ContactUpdate` events.
+
+#### If tagged contacts do not appear
+
+1. **The workflow.** `Portal: sync leads` must have the **Contact Tag** trigger (Tag Added = your
+   tag) and be **Published**, and the snapshot must have been pushed to that client's sub-account.
+2. **The Location ID.** The client's Location ID must be saved under **Admin → GHL Connect**.
+   Without it the portal cannot tell whose lead it is.
+3. **Look at what arrived.** **Admin → GHL Connect → Last events** (or **Audit Logs**) shows the most
+   recent lead messages. Look for a line such as "Ignored (no Qualified tag) · tags seen: hot, new":
+   the message arrived, but the tag was not in it. If there are no lines at all, GoHighLevel sent
+   nothing, so go back to step 1.
+4. **If tags seen is "(none sent)".** GoHighLevel did not include the contact's tags. In the Webhook
+   action add a **Custom Data** row: key `tags`, value = the contact **Tags** merge field
+   (`{{contact.tags}}`). Save, Publish, and tag a test contact again.
 
 ## 2. CSM calls: in Motionz's own sub-account (the one with the CSM booking calendar)
 

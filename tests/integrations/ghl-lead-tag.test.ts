@@ -127,8 +127,10 @@ async function run() {
     ['other tags only', { tags: 'hot, facebook, not qualified' }, {}],
     ['a tag that only contains the word', { tags: ['Qualified Later', 'Unqualified'] }, {}],
     ['other tags on the contact', { contact: { tags: ['new'] } }, {}],
-    ['a tags value that is not text', { tags: { name: 'Qualified' } }, {}],
+    ['a tags value that is not a tag', { tags: 42 }, {}],
+    ['a tag object without a name', { tags: [{ id: 'Qualified' }] }, {}],
   ];
+  const auditsBeforeUntagged = auditCount();
   for (const [index, [what, body, custom]] of Array.from(untaggedShapes.entries())) {
     const contactId = `tag-untagged-${index}`;
     const before = auditCount();
@@ -136,9 +138,11 @@ async function run() {
     assert.strictEqual(res.status, 200, what);
     assert.deepStrictEqual(res.json, { received: true, ignored: true, reason: 'Contact is not tagged "Qualified" yet.' }, what);
     assert.strictEqual(leadsFor(contactId).length, 0, `${what}: no lead is created`);
-    assert.strictEqual(auditCount(), before, `${what}: nothing is written to the audit log`);
+    // Only the first 3 per location per hour are written (see ghl-lead-tag-diagnostics.test.ts).
+    assert.strictEqual(auditCount(), before + (index < 3 ? 1 : 0), `${what}: the audit log is not flooded`);
   }
-  console.log(' PASS: with a tag set, an untagged new contact is ignored with no lead and no audit entry.');
+  assert.strictEqual(auditCount(), auditsBeforeUntagged + 3, 'eight untagged contacts leave three audit entries');
+  console.log(' PASS: with a tag set, an untagged new contact is ignored with no lead, and at most 3 audit entries an hour.');
 
   // ───────────── 4. Tagged contacts become leads, in every shape GoHighLevel may send ─────────────
   const taggedShapes: [string, Record<string, any>, Record<string, any>][] = [
@@ -152,6 +156,17 @@ async function run() {
     ['a different letter case', { tags: 'hot, QUALIFIED' }, {}],
     ['extra spaces around the tag', { tags: ['  qualified  '] }, {}],
     ['the tag only on the contact while the top-level list has others', { tags: 'hot', contact: { tags: ['qualified'] } }, {}],
+    ['a list of objects with name', { tags: [{ name: 'hot' }, { name: 'Qualified' }] }, {}],
+    ['a list of objects with tag', { tags: [{ tag: 'Qualified' }] }, {}],
+    ['a list of objects with label', { contact: { tags: [{ id: 7, label: ' qualified ' }] } }, {}],
+    ['a list of objects with value', {}, { tags: [{ value: 'QUALIFIED' }] }],
+    ['a single tag object', { tags: { name: 'Qualified' } }, {}],
+    ['top-level contact_tags', { contact_tags: 'hot, Qualified' }, {}],
+    ['top-level contactTags', { contactTags: ['Qualified'] }, {}],
+    ['a string separated by semicolons', { tags: 'hot; Qualified; facebook' }, {}],
+    ['a string separated by pipes', { tags: 'hot|Qualified|facebook' }, {}],
+    ['a string with mixed separators', { tags: 'hot, new; Qualified | facebook' }, {}],
+    ['a list written as JSON text', {}, { tags: '["hot","Qualified"]' }],
   ];
   for (const [index, [what, body, custom]] of Array.from(taggedShapes.entries())) {
     const contactId = `tag-tagged-${index}`;

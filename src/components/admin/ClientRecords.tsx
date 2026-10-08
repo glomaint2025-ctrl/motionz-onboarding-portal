@@ -44,6 +44,8 @@ export const ClientRecords: React.FC<{ clientId: string; clientName?: string }> 
   // A file input cannot be cleared from code; a new key gives a fresh, empty one.
   const [fileInputKey, setFileInputKey] = useState(0);
   const [contractSigned, setContractSigned] = useState('');
+  // The contract whose signed date is being set by hand, with the date typed so far.
+  const [signEdit, setSignEdit] = useState<{ id: string; date: string } | null>(null);
 
   const api = `/api/admin/clients/${clientId}/records`;
 
@@ -158,6 +160,35 @@ export const ClientRecords: React.FC<{ clientId: string; clientName?: string }> 
     }
   };
 
+  const openSignEdit = (c: ContractRow) => {
+    setError('');
+    setNotice('');
+    setSignEdit({ id: c.id, date: c.signed_at ? c.signed_at.slice(0, 10) : todayIso() });
+  };
+
+  /** Marks a contract as signed on a date, or as not signed (null). */
+  const saveSigned = async (c: ContractRow, date: string | null) => {
+    if (date !== null) {
+      if (!date) {
+        setError('Choose the date the contract was signed.');
+        return;
+      }
+      if (date > todayIso()) {
+        setError('The signed date cannot be in the future.');
+        return;
+      }
+    }
+    const saved = await send('PATCH', { contractId: c.id, action: 'set_signed', signedAt: date });
+    if (saved) {
+      setSignEdit(null);
+      setNotice(
+        date
+          ? `“${c.title}” is marked as signed. ${clientName || 'The client'} now sees it as Signed on their Contract page.`
+          : `“${c.title}” is marked as not signed. ${clientName || 'The client'} now sees it as Awaiting signature.`
+      );
+    }
+  };
+
   const rowStyle: React.CSSProperties = {
     display: 'flex',
     justifyContent: 'space-between',
@@ -207,7 +238,7 @@ export const ClientRecords: React.FC<{ clientId: string; clientName?: string }> 
             <div>
               <div style={{ fontWeight: 'var(--font-weight-medium)' }}>{c.title}</div>
               <div style={{ fontSize: 'var(--font-size-xs)', color: 'var(--color-text-muted)' }}>
-                {c.signed_at ? `Signed ${formatDate(c.signed_at)}` : 'Not signed yet'}
+                {c.signed_at ? `Signed on ${formatDate(c.signed_at)}` : 'Not signed yet'}
                 {' · '}
                 {c.drive_file_id ? 'Uploaded file in Google Drive' : c.document_url ? 'Link' : 'No document'}
                 {c.document_url && (
@@ -221,9 +252,58 @@ export const ClientRecords: React.FC<{ clientId: string; clientName?: string }> 
                 )}
               </div>
             </div>
-            <Button type="button" variant="outline" size="sm" disabled={busy} onClick={() => setRemoveTarget(c)}>
-              Remove
-            </Button>
+            <div style={{ display: 'flex', gap: 'var(--space-2)', flexWrap: 'wrap', alignItems: 'center' }}>
+              {c.signed_at ? (
+                <>
+                  <Button type="button" variant="ghost" size="sm" disabled={busy} onClick={() => openSignEdit(c)}>
+                    Change<span className="sr-only"> the signed date of {c.title}</span>
+                  </Button>
+                  <Button type="button" variant="ghost" size="sm" disabled={busy} onClick={() => saveSigned(c, null)}>
+                    Mark as not signed
+                  </Button>
+                </>
+              ) : (
+                <Button type="button" variant="secondary" size="sm" disabled={busy} onClick={() => openSignEdit(c)}>
+                  Mark as signed
+                </Button>
+              )}
+              <Button type="button" variant="outline" size="sm" disabled={busy} onClick={() => setRemoveTarget(c)}>
+                Remove
+              </Button>
+            </div>
+            {signEdit?.id === c.id && (
+              <div
+                role="group"
+                aria-label={`Signed date for ${c.title}`}
+                style={{ flexBasis: '100%', display: 'flex', gap: 'var(--space-2)', flexWrap: 'wrap', alignItems: 'flex-end' }}
+              >
+                <div style={{ flex: '0 1 200px', minWidth: 0 }}>
+                  <Input
+                    id={`contract-signed-${c.id}`}
+                    label="Signed on"
+                    type="date"
+                    max={todayIso()}
+                    value={signEdit.date}
+                    onChange={(e) => setSignEdit({ id: c.id, date: e.target.value })}
+                    onKeyDown={(e) => {
+                      // This panel can sit inside a larger form: Enter saves the date only.
+                      if (e.key === 'Enter') {
+                        e.preventDefault();
+                        saveSigned(c, signEdit.date);
+                      }
+                    }}
+                  />
+                </div>
+                <div style={{ display: 'flex', gap: 'var(--space-2)', marginBottom: 'var(--space-4)' }}>
+                  <Button type="button" variant="primary" size="sm" disabled={busy} onClick={() => saveSigned(c, signEdit.date)}>
+                    {busy ? 'Saving...' : 'Save'}
+                  </Button>
+                  <Button type="button" variant="ghost" size="sm" disabled={busy} onClick={() => setSignEdit(null)}>
+                    Cancel
+                  </Button>
+                </div>
+              </div>
+            )}
           </div>
         ))}
       </div>

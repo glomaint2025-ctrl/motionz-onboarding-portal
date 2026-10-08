@@ -12,6 +12,27 @@ import { AppError } from '../errors';
 import { getAvatarUrl } from '../storage/avatars';
 import { staffRoleLabel } from './role-labels';
 import { resolveStaffTitle } from '../db/repositories/app-settings.repository';
+import { getSupabaseBrowserClient } from '../db/supabase-client';
+
+export const PASSWORD_MIN_LENGTH = 8;
+export const PASSWORD_MAX_LENGTH = 200;
+
+/**
+ * Checks a person's current password the same way sign-in does (staff and clients alike): against
+ * Supabase Auth when it is configured. Nothing else happens here: no sign-in is logged, no session
+ * is issued and no account is created. Without Supabase (tests / local mock store) the mock rule
+ * of the sign-in route applies.
+ */
+export async function verifyCurrentPassword(email: string, password: string): Promise<'ok' | 'wrong' | 'unavailable'> {
+  if (!password) return 'wrong';
+  const supabaseAnon = getSupabaseBrowserClient();
+  if (supabaseAnon) {
+    const { data, error } = await supabaseAnon.auth.signInWithPassword({ email: email.trim().toLowerCase(), password });
+    return error || !data.user ? 'wrong' : 'ok';
+  }
+  if (process.env.NODE_ENV === 'production') return 'unavailable';
+  return password === 'WrongPassword123!' || password === 'wrong' ? 'wrong' : 'ok';
+}
 
 /**
  * The signed-in, active person behind this request. Suspended people and suspended or archived

@@ -10,7 +10,10 @@ export const PROFILE_UPDATED_EVENT = 'motionz:profile-updated';
 const MAX_PICTURE_BYTES = 2 * 1024 * 1024;
 const PICTURE_TYPES = ['image/png', 'image/jpeg', 'image/webp'];
 const PICTURE_RULES = 'PNG, JPG or WEBP, up to 2 MB.';
-const OFFLINE = 'Could not reach the server. Check your connection and try again.';
+// The same limits the server enforces (src/lib/account/profile.ts).
+const PASSWORD_MIN = 8;
+const PASSWORD_MAX = 200;
+const OFFLINE ='Could not reach the server. Check your connection and try again.';
 
 interface Profile {
   fullName: string;
@@ -66,6 +69,14 @@ export function MyProfile() {
   const [phone, setPhone] = useState('');
   const [detailsBusy, setDetailsBusy] = useState(false);
   const [detailsMessage, setDetailsMessage] = useState<Message>(null);
+
+  // Password
+  const [currentPassword, setCurrentPassword] = useState('');
+  const [newPassword, setNewPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
+  const [passwordBusy, setPasswordBusy] = useState(false);
+  const [passwordMessage, setPasswordMessage] = useState<Message>(null);
+  const clearPasswordError = () => setPasswordMessage((prev) => (prev?.type === 'error' ? null : prev));
 
   useEffect(() => {
     let isMounted = true;
@@ -189,6 +200,51 @@ export function MyProfile() {
       setDetailsMessage({ type: 'error', text: 'Could not reach the server. Your changes were not saved.' });
     } finally {
       setDetailsBusy(false);
+    }
+  };
+
+  const handlePasswordSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const problem = !currentPassword
+      ? 'Please enter your current password.'
+      : newPassword.length < PASSWORD_MIN
+        ? `Your new password must be at least ${PASSWORD_MIN} characters long.`
+        : newPassword.length > PASSWORD_MAX
+          ? `Your new password must be ${PASSWORD_MAX} characters or fewer.`
+          : newPassword === currentPassword
+            ? 'Your new password must be different from your current password.'
+            : newPassword !== confirmPassword
+              ? 'The two new passwords do not match. Please type them again.'
+              : '';
+    if (problem) {
+      setPasswordMessage({ type: 'error', text: problem });
+      return;
+    }
+    setPasswordBusy(true);
+    setPasswordMessage(null);
+    try {
+      const res = await fetch('/api/account/profile/password', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ currentPassword, newPassword }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (res.status === 401) {
+        window.location.href = '/auth/login';
+        return;
+      }
+      if (!res.ok) {
+        setPasswordMessage({ type: 'error', text: data.error || 'Your password could not be changed. Please try again.' });
+        return;
+      }
+      setCurrentPassword('');
+      setNewPassword('');
+      setConfirmPassword('');
+      setPasswordMessage({ type: 'ok', text: 'Your password was changed. Use the new one next time you sign in.' });
+    } catch {
+      setPasswordMessage({ type: 'error', text: 'Could not reach the server. Your password was not changed.' });
+    } finally {
+      setPasswordBusy(false);
     }
   };
 
@@ -319,6 +375,66 @@ export function MyProfile() {
               <p style={{ margin: 0, color: 'var(--color-text-secondary)', fontSize: 'var(--font-size-sm)' }}>
                 This is the email you sign in with. To change it, ask {profile.role === 'admin' ? 'another CSM Manager' : isStaff ? 'a CSM Manager' : 'your Motionz contact'}.
               </p>
+            </Card>
+
+            {/* Password */}
+            <Card>
+              <CardHeader
+                title="Password"
+                subtitle={`Use ${PASSWORD_MIN} to ${PASSWORD_MAX} characters, and make it different from your current password.`}
+              />
+              <form onSubmit={handlePasswordSubmit} style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-4)' }}>
+                <Input
+                  id="my-profile-current-password"
+                  label="Current password"
+                  type="password"
+                  value={currentPassword}
+                  onChange={(e) => {
+                    setCurrentPassword(e.target.value);
+                    clearPasswordError();
+                  }}
+                  maxLength={PASSWORD_MAX}
+                  autoComplete="current-password"
+                  required
+                />
+                <Input
+                  id="my-profile-new-password"
+                  label="New password"
+                  type="password"
+                  value={newPassword}
+                  onChange={(e) => {
+                    setNewPassword(e.target.value);
+                    clearPasswordError();
+                  }}
+                  minLength={PASSWORD_MIN}
+                  maxLength={PASSWORD_MAX}
+                  autoComplete="new-password"
+                  helperText={`At least ${PASSWORD_MIN} characters.`}
+                  required
+                />
+                <Input
+                  id="my-profile-confirm-password"
+                  label="Confirm new password"
+                  type="password"
+                  value={confirmPassword}
+                  onChange={(e) => {
+                    setConfirmPassword(e.target.value);
+                    clearPasswordError();
+                  }}
+                  maxLength={PASSWORD_MAX}
+                  autoComplete="new-password"
+                  required
+                />
+                <SectionMessage message={passwordMessage} />
+                <div>
+                  <Button type="submit" variant="primary" disabled={passwordBusy}>
+                    {passwordBusy ? 'Changing...' : 'Change password'}
+                  </Button>
+                </div>
+                <p style={{ margin: 0, color: 'var(--color-text-secondary)', fontSize: 'var(--font-size-xs)' }}>
+                  You stay signed in on this device after changing it.
+                </p>
+              </form>
             </Card>
           </>
         )}
