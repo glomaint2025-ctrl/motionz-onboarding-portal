@@ -297,6 +297,8 @@ export interface TrainingLesson {
   title: string;
   description: string | null;
   video_url: string;
+  /** Optional link to a document (for example a Google Doc). Null when there is none. */
+  document_url?: string | null;
   sort_order: number;
   /** Hidden lessons are not shown to CSMs and do not count towards their progress. */
   is_active: boolean;

@@ -10,6 +10,7 @@ import { parseHttpsUrl } from './embed';
 
 export const LESSON_TITLE_MAX = 200;
 export const LESSON_VIDEO_URL_MAX = 500;
+export const LESSON_DOCUMENT_URL_MAX = 2000;
 export const LESSON_DESCRIPTION_MAX = 2000;
 
 /** What a CSM reads when the access check stops them. */
@@ -19,6 +20,8 @@ export interface LessonFields {
   title?: string;
   description?: string | null;
   video_url?: string;
+  /** null clears the document link. */
+  document_url?: string | null;
 }
 
 /**
@@ -43,6 +46,18 @@ export function validateLessonFields(input: Record<string, unknown>, options: { 
     fields.video_url = link;
   }
 
+  if (input.document_url !== undefined) {
+    if (input.document_url !== null && typeof input.document_url !== 'string') {
+      throw new ValidationError('The document link must be text.');
+    }
+    const link = (input.document_url || '').trim();
+    if (link.length > LESSON_DOCUMENT_URL_MAX) {
+      throw new ValidationError(`The document link is too long (${LESSON_DOCUMENT_URL_MAX} characters at most).`);
+    }
+    if (link && !parseHttpsUrl(link)) throw new ValidationError('The document link must be a full link that starts with https://');
+    fields.document_url = link || null;
+  }
+
   if (input.description !== undefined) {
     if (input.description !== null && typeof input.description !== 'string') {
       throw new ValidationError('The description must be text.');
@@ -65,6 +80,8 @@ export interface LessonView {
   description: string | null;
   /** Not sent while the lesson is still locked. */
   video_url: string | null;
+  /** Not sent while the lesson is still locked. */
+  document_url: string | null;
   finished_at: string | null;
   locked: boolean;
 }
@@ -130,6 +147,7 @@ export async function getTrainingOverview(userId: string, options: { preview?: b
       title: lesson.title,
       description: lesson.description || null,
       video_url: locked ? null : lesson.video_url,
+      document_url: locked ? null : lesson.document_url || null,
       finished_at: finished,
       locked,
     };

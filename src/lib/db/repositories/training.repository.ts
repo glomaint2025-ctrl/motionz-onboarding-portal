@@ -52,8 +52,8 @@ function mockProgress(): TrainingProgress[] {
 const inOrder = (a: TrainingLesson, b: TrainingLesson) =>
   a.sort_order - b.sort_order || new Date(a.created_at).getTime() - new Date(b.created_at).getTime();
 
-export type NewTrainingLesson = Pick<TrainingLesson, 'title' | 'description' | 'video_url' | 'created_by'>;
-export type TrainingLessonChanges = Partial<Pick<TrainingLesson, 'title' | 'description' | 'video_url' | 'is_active'>>;
+export type NewTrainingLesson = Pick<TrainingLesson, 'title' | 'description' | 'video_url' | 'created_by'> & { document_url?: string | null };
+export type TrainingLessonChanges = Partial<Pick<TrainingLesson, 'title' | 'description' | 'video_url' | 'document_url' | 'is_active'>>;
 
 export class TrainingRepository {
   /** Lessons in the order CSMs take them. Hidden lessons are included unless `activeOnly` is set. */
@@ -91,6 +91,7 @@ export class TrainingRepository {
       title: lesson.title,
       description: lesson.description,
       video_url: lesson.video_url,
+      document_url: lesson.document_url ?? null,
       sort_order: existing.reduce((max, l) => Math.max(max, l.sort_order), 0) + 1,
       is_active: true,
       created_at: now,
@@ -101,9 +102,12 @@ export class TrainingRepository {
     const supabase = getSupabaseServiceClient();
     if (supabase) {
       // created_by is a foreign key: an id that is not a real user id is stored as "unknown".
+      // A lesson without a document does not send document_url, so adding lessons keeps working
+      // until migration 20261009000001_training_lesson_document.sql has been run.
+      const { document_url, ...columns } = record;
       const { data, error } = await supabase
         .from('training_lessons')
-        .insert({ ...record, created_by: uuidOrNull(record.created_by) })
+        .insert({ ...columns, ...(document_url ? { document_url } : {}), created_by: uuidOrNull(record.created_by) })
         .select('*')
         .single();
       if (error) fail('save the training lesson', error);

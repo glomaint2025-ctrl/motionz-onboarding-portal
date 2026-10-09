@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { Button, Card, CardHeader, CardSkeleton, Input, Modal, StatusBadge, buttonClasses, type StatusVariant } from '@/components/ui';
 import { Notice, useRevealOnMessage } from '@/components/admin/Notice';
 import { describeVideoLink } from '@/components/training/LessonVideo';
+import { LinkedText } from '@/components/training/LinkedText';
 import { formatDateTime } from '@/lib/utils/format';
 import '@/styles/staff-tables.css';
 
@@ -13,6 +14,7 @@ interface Lesson {
   title: string;
   description: string;
   video_url: string;
+  document_url: string;
   is_active: boolean;
 }
 
@@ -41,6 +43,7 @@ interface TrainingPage {
 
 const TITLE_MAX = 200;
 const LINK_MAX = 500;
+const DOCUMENT_LINK_MAX = 2000;
 const DESCRIPTION_MAX = 2000;
 
 const STATUS_LABELS: Record<TrainingStatus, { label: string; variant: StatusVariant }> = {
@@ -66,6 +69,7 @@ export default function AdminTrainingPage() {
   const [editing, setEditing] = useState<Lesson | null>(null);
   const [title, setTitle] = useState('');
   const [link, setLink] = useState('');
+  const [documentLink, setDocumentLink] = useState('');
   const [description, setDescription] = useState('');
   const [formError, setFormError] = useState('');
 
@@ -125,6 +129,7 @@ export default function AdminTrainingPage() {
     setEditing(null);
     setTitle('');
     setLink('');
+    setDocumentLink('');
     setDescription('');
     setFormError('');
     setFormOpen(true);
@@ -134,6 +139,7 @@ export default function AdminTrainingPage() {
     setEditing(lesson);
     setTitle(lesson.title);
     setLink(lesson.video_url);
+    setDocumentLink(lesson.document_url || '');
     setDescription(lesson.description || '');
     setFormError('');
     setFormOpen(true);
@@ -143,8 +149,11 @@ export default function AdminTrainingPage() {
     e.preventDefault();
     if (!title.trim()) return setFormError('Give the lesson a title.');
     if (!/^https:\/\/\S+$/i.test(link.trim())) return setFormError('The video link must be a full link that starts with https://');
+    if (documentLink.trim() && !/^https:\/\/\S+$/i.test(documentLink.trim())) {
+      return setFormError('The document link must be a full link that starts with https://');
+    }
     setFormError('');
-    const fields = { title: title.trim(), video_url: link.trim(), description: description.trim() };
+    const fields = { title: title.trim(), video_url: link.trim(), document_url: documentLink.trim(), description: description.trim() };
     const result = editing
       ? await send('PATCH', { action: 'update_lesson', id: editing.id, ...fields })
       : await send('POST', fields);
@@ -287,7 +296,7 @@ export default function AdminTrainingPage() {
                       </div>
                       {lesson.description && (
                         <p style={{ margin: 'var(--space-1) 0 0', color: 'var(--color-text-secondary)', fontSize: 'var(--font-size-sm)', whiteSpace: 'pre-wrap', overflowWrap: 'anywhere' }}>
-                          {lesson.description}
+                          <LinkedText text={lesson.description} />
                         </p>
                       )}
                       <a
@@ -299,6 +308,14 @@ export default function AdminTrainingPage() {
                         {lesson.video_url}
                       </a>
                       <span style={{ ...mutedStyle, display: 'block', marginTop: 'var(--space-1)' }}>{describeVideoLink(lesson.video_url)}</span>
+                      {lesson.document_url && (
+                        <span style={{ ...mutedStyle, display: 'block', marginTop: 'var(--space-1)', overflowWrap: 'anywhere' }}>
+                          Document:{' '}
+                          <a href={lesson.document_url} target="_blank" rel="noopener noreferrer">
+                            {lesson.document_url}
+                          </a>
+                        </span>
+                      )}
                     </div>
                     <div style={{ display: 'flex', gap: 'var(--space-2)', flexWrap: 'wrap' }}>
                       <Button variant="outline" size="sm" onClick={() => move(index, -1)} disabled={busy || index === 0} aria-label={`Move "${lesson.title}" up`}>
@@ -442,6 +459,17 @@ export default function AdminTrainingPage() {
             onChange={(e) => setLink(e.target.value)}
             helperText={linkHint}
             required
+          />
+          <Input
+            id="training-lesson-document"
+            label="Document link (Google Doc, optional)"
+            type="url"
+            inputMode="url"
+            placeholder="https://"
+            value={documentLink}
+            maxLength={DOCUMENT_LINK_MAX}
+            onChange={(e) => setDocumentLink(e.target.value)}
+            helperText="Paste the link. CSMs get an Open document button."
           />
           <div className="ui-form-group">
             <label htmlFor="training-lesson-description" className="ui-label">

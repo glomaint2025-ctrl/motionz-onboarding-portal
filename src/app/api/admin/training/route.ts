@@ -19,6 +19,7 @@ const presentLesson = (lesson: TrainingLesson) => ({
   title: lesson.title,
   description: lesson.description || '',
   video_url: lesson.video_url,
+  document_url: lesson.document_url || '',
   sort_order: lesson.sort_order,
   is_active: lesson.is_active,
   updated_at: lesson.updated_at,
@@ -123,7 +124,7 @@ export async function GET(request: Request) {
   }
 }
 
-/** Add a lesson: { title, video_url, description? }. It goes to the end of the list. */
+/** Add a lesson: { title, video_url, document_url?, description? }. It goes to the end of the list. */
 export async function POST(request: Request) {
   try {
     const { session } = await requireAuth(request, { roles: ['admin'] });
@@ -133,6 +134,7 @@ export async function POST(request: Request) {
     const lesson = await trainingRepository.createLesson({
       title: fields.title!,
       video_url: fields.video_url!,
+      document_url: fields.document_url ?? null,
       description: fields.description ?? null,
       created_by: session.userId,
     });
@@ -146,7 +148,7 @@ export async function POST(request: Request) {
 
 /**
  * Everything that changes something, chosen by `action`:
- *  - update_lesson   { id, title?, video_url?, description?, is_active? }
+ *  - update_lesson   { id, title?, video_url?, document_url?, description?, is_active? }
  *  - reorder         { ids }  every lesson id, in the new order
  *  - update_settings { required_for_csms }
  *  - set_exempt      { userId, exempt }

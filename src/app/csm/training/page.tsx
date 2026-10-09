@@ -6,6 +6,7 @@ import { Button, Card, CardSkeleton, StatusBadge, buttonClasses } from '@/compon
 import { Icon } from '@/components/brand/Icon';
 import { Notice } from '@/components/admin/Notice';
 import { LessonVideo, TrainingProgressBar } from '@/components/training/LessonVideo';
+import { LinkedText } from '@/components/training/LinkedText';
 import { formatDate } from '@/lib/utils/format';
 
 interface Lesson {
@@ -14,6 +15,7 @@ interface Lesson {
   title: string;
   description: string | null;
   video_url: string | null;
+  document_url: string | null;
   finished_at: string | null;
   locked: boolean;
 }
@@ -213,7 +215,7 @@ export default function CsmTrainingPage() {
 
                     {lesson.description && (
                       <p style={{ margin: 'var(--space-2) 0 0', color: 'var(--color-text-secondary)', fontSize: 'var(--font-size-sm)', whiteSpace: 'pre-wrap', overflowWrap: 'anywhere' }}>
-                        {lesson.description}
+                        <LinkedText text={lesson.description} />
                       </p>
                     )}
 
@@ -236,6 +238,17 @@ export default function CsmTrainingPage() {
                               >
                                 {done ? 'Watch again' : 'Show video'}
                               </Button>
+                            )}
+                            {lesson.document_url && (
+                              <a
+                                href={lesson.document_url}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className={buttonClasses({ variant: 'outline', size: 'sm' })}
+                              >
+                                Open document
+                                <span className="sr-only"> (opens in a new tab)</span>
+                              </a>
                             )}
                             {!done && (
                               <Button type="button" variant="primary" onClick={() => finish(lesson)} disabled={Boolean(busyId)}>

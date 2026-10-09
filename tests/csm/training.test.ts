@@ -186,6 +186,57 @@ async function run() {
   assert.strictEqual(store.trainingLessons.find((l) => l.id === l1)!.title, 'Welcome to Motionz', 'rejected edits change nothing');
   console.log(' PASS: lessons can be added and edited; changes are audit-logged.');
 
+  // ---------------------------------------------------------------- document link
+  const DOC = 'https://docs.google.com/document/d/1AbCdEfGhIjKlMnOpQrStUvWxYz012345/edit';
+  assert.strictEqual(page.lessons[0].document_url, '', 'a lesson starts without a document');
+  for (const [label, value] of [
+    ['http link', 'http://docs.google.com/document/d/abc/edit'],
+    ['javascript link', 'javascript:alert(1)'],
+    ['not a link', 'the Google Doc in Drive'],
+    ['link too long', `https://docs.google.com/${'a'.repeat(2000)}`],
+    ['not text', 42],
+  ] as [string, unknown][]) {
+    res = await admin.patch({ action: 'update_lesson', id: l1, document_url: value });
+    assert.strictEqual(res.status, 400, `document ${label} is rejected`);
+    assert.ok((await res.json()).error, `document ${label} explains itself`);
+    assert.strictEqual((await admin.post({ ...lessonBody, document_url: value })).status, 400, `document ${label} is rejected when adding`);
+  }
+  assert.strictEqual(store.trainingLessons.length, 3, 'rejected document links create nothing');
+  assert.ok(!store.trainingLessons.find((l) => l.id === l1)!.document_url, 'rejected edits change nothing');
+
+  res = await admin.patch({ action: 'update_lesson', id: l1, document_url: `  ${DOC}  ` });
+  assert.strictEqual(res.status, 200);
+  page = await res.json();
+  assert.deepStrictEqual(page.changed, ['document_url']);
+  assert.strictEqual(page.lessons[0].document_url, DOC, 'the document link is saved, trimmed');
+  assert.strictEqual(page.lessons[0].title, 'Welcome to Motionz', 'other fields are kept');
+  res = await admin.patch({ action: 'update_lesson', id: l2, document_url: DOC });
+  assert.strictEqual(res.status, 200);
+  mine = await myTraining();
+  assert.strictEqual(mine.lessons[0].document_url, DOC, 'an open lesson shows its document link');
+  assert.strictEqual(mine.lessons[1].locked, true);
+  assert.strictEqual(mine.lessons[1].document_url, null, 'a locked lesson does not give away its document link');
+  assert.strictEqual(mine.lessons[2].document_url, null, 'a lesson without a document has none');
+
+  // Clearing: an empty value or null removes it.
+  page = await (await admin.patch({ action: 'update_lesson', id: l1, document_url: '   ' })).json();
+  assert.deepStrictEqual(page.changed, ['document_url']);
+  assert.strictEqual(page.lessons[0].document_url, '');
+  assert.strictEqual(store.trainingLessons.find((l) => l.id === l1)!.document_url, null, 'cleared means null');
+  page = await (await admin.patch({ action: 'update_lesson', id: l2, document_url: null })).json();
+  assert.strictEqual(page.lessons[1].document_url, '');
+  assert.strictEqual((await myTraining()).lessons[0].document_url, null);
+
+  // Adding a lesson with a document in one go.
+  res = await admin.post({ title: 'Reading list', video_url: 'https://vimeo.com/123456789', document_url: DOC });
+  assert.strictEqual(res.status, 201);
+  const withDoc = (await res.json()).lesson;
+  assert.strictEqual(withDoc.document_url, DOC);
+  // Take it out again so the later steps (and their audit counts) see the same three lessons.
+  store.trainingLessons.splice(store.trainingLessons.findIndex((l) => l.id === withDoc.id), 1);
+  assert.strictEqual(store.trainingLessons.length, 3);
+  console.log(' PASS: a lesson can have an optional https document link; it can be cleared and stays hidden while locked.');
+
   // ---------------------------------------------------------------- what a CSM sees, unlock order
   mine = await myTraining();
   assert.strictEqual(mine.total, 3);
